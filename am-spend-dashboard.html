@@ -55,6 +55,37 @@
   .filter-bar select:focus, .filter-bar input:focus { border-color: var(--accent); }
   .filter-group { display: flex; flex-direction: column; gap: 4px; }
 
+  .multi-select { position: relative; min-width: 140px; }
+  .multi-select .ms-trigger {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 8px 12px; font-size: 13px; cursor: pointer;
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    user-select: none; white-space: nowrap;
+  }
+  .multi-select .ms-trigger:hover { border-color: var(--accent); }
+  .multi-select.open .ms-trigger { border-color: var(--accent); }
+  .multi-select .ms-trigger::after { content: '▾'; font-size: 11px; color: var(--text-dim); }
+  .multi-select .ms-dropdown {
+    display: none; position: absolute; top: calc(100% + 4px); left: 0; min-width: 100%;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 6px 0; z-index: 100; max-height: 260px; overflow-y: auto;
+    box-shadow: 0 8px 24px rgba(0,0,0,.4);
+  }
+  .multi-select.open .ms-dropdown { display: block; }
+  .multi-select .ms-option {
+    display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+    font-size: 13px; cursor: pointer; white-space: nowrap;
+  }
+  .multi-select .ms-option:hover { background: var(--surface); }
+  .multi-select .ms-option input[type="checkbox"] {
+    accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer;
+  }
+  .multi-select .ms-divider { height: 1px; background: var(--border); margin: 4px 0; }
+  .ms-badge {
+    background: var(--accent); color: #fff; font-size: 10px; font-weight: 700;
+    padding: 1px 6px; border-radius: 10px; margin-left: 2px;
+  }
+
   .summary-cards {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 16px; padding: 24px 32px;
@@ -203,21 +234,24 @@
 <div class="filter-bar">
   <div class="filter-group">
     <label>Week</label>
-    <select id="filterWeek" onchange="refresh()">
-      <option value="all">All Weeks</option>
-    </select>
+    <div class="multi-select" id="filterWeek">
+      <div class="ms-trigger" onclick="toggleMS(this)">All Weeks</div>
+      <div class="ms-dropdown"></div>
+    </div>
   </div>
   <div class="filter-group">
     <label>Campaign Type</label>
-    <select id="filterType" onchange="refresh()">
-      <option value="all">All Types</option>
-    </select>
+    <div class="multi-select" id="filterType">
+      <div class="ms-trigger" onclick="toggleMS(this)">All Types</div>
+      <div class="ms-dropdown"></div>
+    </div>
   </div>
   <div class="filter-group">
     <label>Investment Reason</label>
-    <select id="filterReason" onchange="refresh()">
-      <option value="all">All Reasons</option>
-    </select>
+    <div class="multi-select" id="filterReason">
+      <div class="ms-trigger" onclick="toggleMS(this)">All Reasons</div>
+      <div class="ms-dropdown"></div>
+    </div>
   </div>
   <div class="filter-group">
     <label>Cost Bearer</label>
@@ -306,6 +340,71 @@ const AVG_DELIVERY_FEE = 2.80;
 const FULL_DELIVERY_FEE = 5.00;
 const ORDER_VALUE_CV = 0.45;
 const ITEM_DISCOUNT_BASKET_SHARE = 0.30;
+
+// ─── Multi-select dropdown helpers ───
+function toggleMS(trigger) {
+  const ms = trigger.closest('.multi-select');
+  document.querySelectorAll('.multi-select.open').forEach(el => { if (el !== ms) el.classList.remove('open'); });
+  ms.classList.toggle('open');
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('.multi-select')) document.querySelectorAll('.multi-select.open').forEach(el => el.classList.remove('open'));
+});
+
+function populateMS(id, items, allLabel) {
+  const ms = document.getElementById(id);
+  const dd = ms.querySelector('.ms-dropdown');
+  dd.innerHTML = '';
+  const allOpt = document.createElement('div');
+  allOpt.className = 'ms-option';
+  allOpt.innerHTML = `<input type="checkbox" checked data-value="__all__"><span>${allLabel}</span>`;
+  allOpt.querySelector('input').addEventListener('change', function() {
+    const boxes = dd.querySelectorAll('input[type="checkbox"]:not([data-value="__all__"])');
+    boxes.forEach(b => b.checked = this.checked);
+    updateMSTrigger(id, allLabel);
+    refresh();
+  });
+  dd.appendChild(allOpt);
+  dd.appendChild(Object.assign(document.createElement('div'), { className: 'ms-divider' }));
+  items.forEach(item => {
+    const opt = document.createElement('div');
+    opt.className = 'ms-option';
+    opt.innerHTML = `<input type="checkbox" checked data-value="${item.value}"><span>${item.label}</span>`;
+    opt.querySelector('input').addEventListener('change', function() {
+      const boxes = dd.querySelectorAll('input[type="checkbox"]:not([data-value="__all__"])');
+      const allBox = dd.querySelector('input[data-value="__all__"]');
+      const allChecked = [...boxes].every(b => b.checked);
+      const noneChecked = [...boxes].every(b => !b.checked);
+      allBox.checked = allChecked;
+      if (noneChecked) { allBox.checked = true; boxes.forEach(b => b.checked = true); }
+      updateMSTrigger(id, allLabel);
+      refresh();
+    });
+    dd.appendChild(opt);
+  });
+}
+
+function updateMSTrigger(id, allLabel) {
+  const ms = document.getElementById(id);
+  const trigger = ms.querySelector('.ms-trigger');
+  const boxes = ms.querySelectorAll('.ms-dropdown input[type="checkbox"]:not([data-value="__all__"])');
+  const checked = [...boxes].filter(b => b.checked);
+  if (checked.length === 0 || checked.length === boxes.length) {
+    trigger.innerHTML = allLabel;
+  } else if (checked.length === 1) {
+    trigger.innerHTML = checked[0].nextElementSibling.textContent;
+  } else {
+    trigger.innerHTML = `${checked.length} selected<span class="ms-badge">${checked.length}</span>`;
+  }
+}
+
+function getMSValues(id) {
+  const ms = document.getElementById(id);
+  const allBox = ms.querySelector('input[data-value="__all__"]');
+  if (allBox && allBox.checked) return null;
+  const boxes = ms.querySelectorAll('.ms-dropdown input[type="checkbox"]:not([data-value="__all__"])');
+  return [...boxes].filter(b => b.checked).map(b => b.dataset.value);
+}
 
 function normCdf(x) {
   const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741;
@@ -422,16 +521,16 @@ function setView(v) {
 }
 
 function getFiltered() {
-  const week = document.getElementById('filterWeek').value;
-  const type = document.getElementById('filterType').value;
-  const reason = document.getElementById('filterReason').value;
+  const weeks = getMSValues('filterWeek');
+  const types = getMSValues('filterType');
+  const reasons = getMSValues('filterReason');
   const bearer = document.getElementById('filterBearer').value;
   const search = document.getElementById('filterSearch').value.toLowerCase().trim();
 
   return _OPS_CAMPAIGNS.filter(c => {
-    if (week !== 'all' && c[0] !== parseInt(week)) return false;
-    if (type !== 'all' && c[4] !== type) return false;
-    if (reason !== 'all' && c[10] !== reason) return false;
+    if (weeks && !weeks.includes(String(c[0]))) return false;
+    if (types && !types.includes(c[4])) return false;
+    if (reasons && !reasons.includes(c[10])) return false;
     if (bearer === 'bolt' && c[6] !== 0) return false;
     if (bearer === 'provider' && c[6] !== 100) return false;
     if (bearer === 'shared' && (c[6] === 0 || c[6] === 100)) return false;
@@ -558,26 +657,15 @@ function initFilters() {
     if (c[10]) reasons.add(c[10]);
   });
 
-  const wkSel = document.getElementById('filterWeek');
-  [...weeks].sort((a,b) => a - b).forEach(w => {
-    const o = document.createElement('option');
-    o.value = w; o.textContent = 'Week ' + w;
-    wkSel.appendChild(o);
-  });
-
-  const tSel = document.getElementById('filterType');
-  [...types].sort().forEach(t => {
-    const o = document.createElement('option');
-    o.value = t; o.textContent = t;
-    tSel.appendChild(o);
-  });
-
-  const rSel = document.getElementById('filterReason');
-  [...reasons].sort().forEach(r => {
-    const o = document.createElement('option');
-    o.value = r; o.textContent = r;
-    rSel.appendChild(o);
-  });
+  populateMS('filterWeek',
+    [...weeks].sort((a,b) => a - b).map(w => ({ value: String(w), label: 'Week ' + w })),
+    'All Weeks');
+  populateMS('filterType',
+    [...types].sort().map(t => ({ value: t, label: t })),
+    'All Types');
+  populateMS('filterReason',
+    [...reasons].sort().map(r => ({ value: r, label: r })),
+    'All Reasons');
 }
 
 // ─── Provider Lookup (from merchant-level overview) ───
@@ -3355,12 +3443,10 @@ async function loadLiveData() {
 }
 
 function resetFilters() {
-  const wkSel = document.getElementById('filterWeek');
-  const tSel = document.getElementById('filterType');
-  const rSel = document.getElementById('filterReason');
-  wkSel.innerHTML = '<option value="all">All Weeks</option>';
-  tSel.innerHTML = '<option value="all">All Types</option>';
-  rSel.innerHTML = '<option value="all">All Reasons</option>';
+  ['filterWeek','filterType','filterReason'].forEach(id => {
+    const dd = document.getElementById(id).querySelector('.ms-dropdown');
+    if (dd) dd.innerHTML = '';
+  });
 }
 
 loadLiveData();
