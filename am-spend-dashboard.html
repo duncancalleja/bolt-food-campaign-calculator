@@ -304,6 +304,33 @@ const UPLIFT = { 5:.03, 10:.06, 15:.10, 20:.14, 25:.19, 30:.24, 35:.28, 40:.32, 
 const UPLIFT_FD = 0.12;
 const AVG_DELIVERY_FEE = 2.80;
 const FULL_DELIVERY_FEE = 5.00;
+const ORDER_VALUE_CV = 0.45;
+const ITEM_DISCOUNT_BASKET_SHARE = 0.30;
+
+function normCdf(x) {
+  const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741;
+  const a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
+  const sign = x < 0 ? -1 : 1;
+  x = Math.abs(x) / Math.SQRT2;
+  const t = 1.0 / (1.0 + p * x);
+  const y = 1.0 - (((((a5*t + a4)*t) + a3)*t + a2)*t + a1)*t * Math.exp(-x*x);
+  return 0.5 * (1.0 + sign * y);
+}
+
+function logNormParams(mean, cv) {
+  const sigma2 = Math.log(1 + cv * cv);
+  return { mu: Math.log(mean) - sigma2 / 2, sigma: Math.sqrt(sigma2) };
+}
+
+function movQualifyingRate(aov, mov, cv) {
+  if (mov <= 0 || aov <= 0) return { rate: 1.0, condMean: aov };
+  const { mu, sigma } = logNormParams(aov, cv);
+  const z = (Math.log(mov) - mu) / sigma;
+  const rate = Math.max(0.01, 1 - normCdf(z));
+  const zAdj = (Math.log(mov) - mu - sigma * sigma) / sigma;
+  const condMean = rate > 0.001 ? aov * (1 - normCdf(zAdj)) / rate : mov;
+  return { rate, condMean };
+}
 
 function getUplift(d) {
   if (d <= 0) return 0;
@@ -325,8 +352,12 @@ function estimateCampaignCost(c) {
   const bonusPct = c[5];
   const costSharePct = c[6];
   const discountCap = c[8];
+  const mov = c[9] || 0;
 
   if (weeklyOrders <= 0) return { total: 0, bolt: 0, prov: 0 };
+
+  const { rate: qualifyingRate, condMean: effectiveAov } =
+    mov > 0 ? movQualifyingRate(aov, mov, ORDER_VALUE_CV) : { rate: 1.0, condMean: aov };
 
   let total = 0;
 
@@ -334,7 +365,7 @@ function estimateCampaignCost(c) {
     const uplift = UPLIFT_FD;
     const redemption = REDEMPTION.free_delivery;
     const upliftedOrders = weeklyOrders * (1 + uplift);
-    const dOrders = upliftedOrders * redemption;
+    const dOrders = upliftedOrders * redemption * qualifyingRate;
 
     let avgSave;
     if (campType === 'Free Full Delivery') {
@@ -350,16 +381,16 @@ function estimateCampaignCost(c) {
     const uplift = getUplift(disc);
     const redemption = REDEMPTION.menu_discount;
     const upliftedOrders = weeklyOrders * (1 + uplift);
-    const dOrders = upliftedOrders * redemption;
-    const dpo = aov * (disc / 100);
+    const dOrders = upliftedOrders * redemption * qualifyingRate;
+    const dpo = effectiveAov * (disc / 100);
     total = dOrders * dpo;
   } else if (campType === 'Item Discount') {
     const disc = bonusPct;
     const uplift = getUplift(disc);
     const redemption = REDEMPTION.item_discount;
     const upliftedOrders = weeklyOrders * (1 + uplift);
-    const dOrders = upliftedOrders * redemption;
-    const dpo = aov * (disc / 100);
+    const dOrders = upliftedOrders * redemption * qualifyingRate;
+    const dpo = effectiveAov * ITEM_DISCOUNT_BASKET_SHARE * (disc / 100);
     total = dOrders * dpo;
   }
 
