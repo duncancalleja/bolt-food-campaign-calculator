@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Campaign Spend by Account Manager</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #242735;
+    --border: #2e3144;
+    --text: #e4e6f0;
+    --text-dim: #8b8fa3;
+    --accent: #34d399;
+    --accent-dim: rgba(52,211,153,.12);
+    --bolt: #6366f1;
+    --bolt-dim: rgba(99,102,241,.12);
+    --provider: #f59e0b;
+    --provider-dim: rgba(245,158,11,.12);
+    --danger: #ef4444;
+    --danger-dim: rgba(239,68,68,.12);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg); color: var(--text); min-height: 100vh;
+  }
+  .header {
+    padding: 18px 32px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .header h1 { font-size: 20px; font-weight: 600; }
+  .header .badge {
+    font-size: 11px; padding: 3px 8px; border-radius: 4px;
+    background: var(--bolt-dim); color: var(--bolt);
+    font-weight: 600; text-transform: uppercase; letter-spacing: .5px;
+  }
+  .header .nav-link {
+    margin-left: auto; font-size: 13px; color: var(--accent);
+    text-decoration: none; display: flex; align-items: center; gap: 4px;
+  }
+  .header .nav-link:hover { text-decoration: underline; }
+
+  .filter-bar {
+    padding: 14px 32px; background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .filter-bar label { font-size: 12px; color: var(--text-dim); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+  .filter-bar select, .filter-bar input {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 8px 12px; font-size: 13px; outline: none;
+  }
+  .filter-bar select:focus, .filter-bar input:focus { border-color: var(--accent); }
+  .filter-group { display: flex; flex-direction: column; gap: 4px; }
+
+  .summary-cards {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px; padding: 24px 32px;
+  }
+  .s-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px;
+  }
+  .s-card .s-label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
+  .s-card .s-value { font-size: 28px; font-weight: 700; }
+  .s-card .s-sub { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+  .s-card.bolt .s-value { color: var(--bolt); }
+  .s-card.prov .s-value { color: var(--provider); }
+  .s-card.accent .s-value { color: var(--accent); }
+
+  .main-content { padding: 0 32px 32px; }
+
+  .section-title {
+    font-size: 16px; font-weight: 600; margin: 24px 0 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-title .count {
+    font-size: 11px; background: var(--surface2); color: var(--text-dim);
+    padding: 2px 8px; border-radius: 10px;
+  }
+
+  .chart-container {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 24px; margin-bottom: 24px;
+  }
+  .bar-row {
+    display: grid; grid-template-columns: 140px 1fr 100px; gap: 12px;
+    align-items: center; padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .bar-row:last-child { border-bottom: none; }
+  .bar-label { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar-track {
+    height: 32px; background: var(--surface2); border-radius: 6px; overflow: hidden;
+    display: flex; position: relative;
+  }
+  .bar-fill-bolt {
+    height: 100%; background: var(--bolt); border-radius: 6px 0 0 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600; color: #fff; min-width: 0;
+    transition: width .4s ease;
+  }
+  .bar-fill-prov {
+    height: 100%; background: var(--provider); border-radius: 0 6px 6px 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600; color: #000; min-width: 0;
+    transition: width .4s ease;
+  }
+  .bar-total { font-size: 14px; font-weight: 700; text-align: right; }
+
+  .am-table-wrap {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    overflow: hidden;
+  }
+  .am-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .am-table thead th {
+    background: var(--surface2); padding: 12px 14px; text-align: left;
+    font-size: 11px; text-transform: uppercase; letter-spacing: .5px;
+    color: var(--text-dim); font-weight: 600; position: sticky; top: 0;
+    cursor: pointer; user-select: none;
+  }
+  .am-table thead th:hover { color: var(--accent); }
+  .am-table thead th .sort-arrow { font-size: 10px; margin-left: 4px; }
+  .am-table tbody td {
+    padding: 10px 14px; border-bottom: 1px solid var(--border);
+  }
+  .am-table tbody tr:hover { background: rgba(52,211,153,.04); }
+  .am-table tbody tr.am-header-row {
+    background: var(--surface2); cursor: pointer;
+  }
+  .am-table tbody tr.am-header-row:hover { background: rgba(52,211,153,.08); }
+  .am-table tbody tr.am-header-row td { font-weight: 600; padding: 14px; }
+  .am-table tbody tr.campaign-row td { padding-left: 28px; font-size: 12px; }
+  .am-table tbody tr.campaign-row { background: rgba(0,0,0,.15); }
+
+  .tag {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 11px; font-weight: 600;
+  }
+  .tag-delivery { background: var(--accent-dim); color: var(--accent); }
+  .tag-menu { background: var(--bolt-dim); color: var(--bolt); }
+  .tag-item { background: var(--provider-dim); color: var(--provider); }
+
+  .cost-bolt { color: var(--bolt); font-weight: 600; }
+  .cost-prov { color: var(--provider); font-weight: 600; }
+
+  .toggle-icon { display: inline-block; width: 16px; transition: transform .2s; }
+  .expanded .toggle-icon { transform: rotate(90deg); }
+
+  .legend {
+    display: flex; gap: 16px; margin-bottom: 16px; font-size: 12px;
+  }
+  .legend-dot {
+    width: 12px; height: 12px; border-radius: 3px; display: inline-block;
+    vertical-align: middle; margin-right: 4px;
+  }
+
+  .view-toggle {
+    display: flex; gap: 4px; background: var(--surface2); border-radius: 8px; padding: 3px;
+  }
+  .view-btn {
+    padding: 6px 14px; border-radius: 6px; border: none; background: none;
+    color: var(--text-dim); font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+  .view-btn.active { background: var(--accent); color: #fff; }
+
+  .search-box {
+    position: relative;
+  }
+  .search-box input {
+    padding-left: 32px;
+  }
+  .search-box::before {
+    content: '🔍'; position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    font-size: 13px; pointer-events: none;
+  }
+
+  @media (max-width: 768px) {
+    .header, .filter-bar, .summary-cards, .main-content { padding-left: 16px; padding-right: 16px; }
+    .summary-cards { grid-template-columns: 1fr 1fr; }
+    .bar-row { grid-template-columns: 100px 1fr 80px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Campaign Spend by Account Manager</h1>
+  <span class="badge">OPS Dashboard</span>
+  <a href="campaign-cost-calculator.html" class="nav-link">← Cost Calculator</a>
+</div>
+
+<div class="filter-bar">
+  <div class="filter-group">
+    <label>Week</label>
+    <select id="filterWeek" onchange="refresh()">
+      <option value="all">All Weeks</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label>Campaign Type</label>
+    <select id="filterType" onchange="refresh()">
+      <option value="all">All Types</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label>Investment Reason</label>
+    <select id="filterReason" onchange="refresh()">
+      <option value="all">All Reasons</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label>Cost Bearer</label>
+    <select id="filterBearer" onchange="refresh()">
+      <option value="all">All</option>
+      <option value="bolt">Bolt-Funded Only</option>
+      <option value="provider">Provider-Funded Only</option>
+      <option value="shared">Shared Cost</option>
+    </select>
+  </div>
+  <div class="filter-group search-box">
+    <label>Search Provider</label>
+    <input type="text" id="filterSearch" placeholder="Name or ID..." oninput="refresh()">
+  </div>
+</div>
+
+<div class="summary-cards">
+  <div class="s-card accent">
+    <div class="s-label">Total Campaigns</div>
+    <div class="s-value" id="sTotalCampaigns">0</div>
+    <div class="s-sub" id="sTotalProviders">0 providers</div>
+  </div>
+  <div class="s-card">
+    <div class="s-label">Total Estimated Cost / Week</div>
+    <div class="s-value" id="sTotalCost">€0</div>
+    <div class="s-sub" id="sTotalCostSub">per week across all campaigns</div>
+  </div>
+  <div class="s-card bolt">
+    <div class="s-label">Bolt Share / Week</div>
+    <div class="s-value" id="sBoltCost">€0</div>
+    <div class="s-sub" id="sBoltPct">0% of total</div>
+  </div>
+  <div class="s-card prov">
+    <div class="s-label">Provider Share / Week</div>
+    <div class="s-value" id="sProvCost">€0</div>
+    <div class="s-sub" id="sProvPct">0% of total</div>
+  </div>
+</div>
+
+<div class="main-content">
+  <div class="section-title">
+    Spend by Account Manager
+    <span class="count" id="amCount">0 AMs</span>
+    <div style="margin-left:auto">
+      <div class="view-toggle">
+        <button class="view-btn active" onclick="setView('chart')" id="btnChart">Chart</button>
+        <button class="view-btn" onclick="setView('table')" id="btnTable">Table</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span><span class="legend-dot" style="background:var(--bolt)"></span> Bolt Share</span>
+    <span><span class="legend-dot" style="background:var(--provider)"></span> Provider Share</span>
+  </div>
+
+  <div id="chartView" class="chart-container"></div>
+
+  <div id="tableView" class="am-table-wrap" style="display:none; max-height: 70vh; overflow-y: auto;">
+    <table class="am-table">
+      <thead>
+        <tr>
+          <th onclick="sortTable(0)">Account Manager <span class="sort-arrow"></span></th>
+          <th onclick="sortTable(1)"># Campaigns <span class="sort-arrow"></span></th>
+          <th onclick="sortTable(2)">Campaign Type <span class="sort-arrow"></span></th>
+          <th onclick="sortTable(3)">Provider <span class="sort-arrow"></span></th>
+          <th onclick="sortTable(4)">Discount <span class="sort-arrow"></span></th>
+          <th onclick="sortTable(5)">Cost Share <span class="sort-arrow"></span></th>
+          <th onclick="sortTable(6)">Total / Week <span class="sort-arrow"></span></th>
+          <th onclick="sortTable(7)">Bolt / Week <span class="sort-arrow"></span></th>
+          <th onclick="sortTable(8)">Provider / Week <span class="sort-arrow"></span></th>
+          <th>Reason</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const WEEKS_IN_DATA = 8;
+const REDEMPTION = { menu_discount: 0.72, item_discount: 0.38, free_delivery: 0.85 };
+const UPLIFT = { 5:.03, 10:.06, 15:.10, 20:.14, 25:.19, 30:.24, 35:.28, 40:.32, 45:.36, 50:.40 };
+const UPLIFT_FD = 0.12;
+const AVG_DELIVERY_FEE = 2.80;
+const FULL_DELIVERY_FEE = 5.00;
+
+function getUplift(d) {
+  if (d <= 0) return 0;
+  const keys = Object.keys(UPLIFT).map(Number).sort((a,b) => a - b);
+  if (d >= keys[keys.length-1]) return UPLIFT[keys[keys.length-1]];
+  for (let i = 0; i < keys.length - 1; i++) {
+    if (d >= keys[i] && d < keys[i+1]) {
+      const ratio = (d - keys[i]) / (keys[i+1] - keys[i]);
+      return UPLIFT[keys[i]] + ratio * (UPLIFT[keys[i+1]] - UPLIFT[keys[i]]);
+    }
+  }
+  return 0;
+}
+
+function estimateCampaignCost(c) {
+  const weeklyOrders = c[12] / WEEKS_IN_DATA;
+  const aov = c[14];
+  const campType = c[4];
+  const bonusPct = c[5];
+  const costSharePct = c[6];
+  const discountCap = c[8];
+
+  if (weeklyOrders <= 0) return { total: 0, bolt: 0, prov: 0 };
+
+  let total = 0;
+
+  if (campType.includes('Free') && campType.includes('Delivery')) {
+    const uplift = UPLIFT_FD;
+    const redemption = REDEMPTION.free_delivery;
+    const upliftedOrders = weeklyOrders * (1 + uplift);
+    const dOrders = upliftedOrders * redemption;
+
+    let avgSave;
+    if (campType === 'Free Full Delivery') {
+      avgSave = FULL_DELIVERY_FEE;
+    } else if (campType === 'Free Delivery (capped)' && discountCap > 0) {
+      avgSave = Math.min(discountCap, AVG_DELIVERY_FEE);
+    } else {
+      avgSave = AVG_DELIVERY_FEE;
+    }
+    total = dOrders * avgSave;
+  } else if (campType === 'Menu Discount') {
+    const disc = bonusPct;
+    const uplift = getUplift(disc);
+    const redemption = REDEMPTION.menu_discount;
+    const upliftedOrders = weeklyOrders * (1 + uplift);
+    const dOrders = upliftedOrders * redemption;
+    const dpo = aov * (disc / 100);
+    total = dOrders * dpo;
+  } else if (campType === 'Item Discount') {
+    const disc = bonusPct;
+    const uplift = getUplift(disc);
+    const redemption = REDEMPTION.item_discount;
+    const upliftedOrders = weeklyOrders * (1 + uplift);
+    const dOrders = upliftedOrders * redemption;
+    const dpo = aov * (disc / 100);
+    total = dOrders * dpo;
+  }
+
+  const provShare = total * (costSharePct / 100);
+  const boltShare = total * (1 - costSharePct / 100);
+
+  return { total, bolt: boltShare, prov: provShare };
+}
+
+function fmt(n) { return '€' + Math.round(n).toLocaleString(); }
+function pct(n) { return (n * 100).toFixed(1) + '%'; }
+
+function getCampTypeTag(t) {
+  if (t.includes('Delivery')) return `<span class="tag tag-delivery">${t}</span>`;
+  if (t.includes('Menu')) return `<span class="tag tag-menu">${t}</span>`;
+  if (t.includes('Item')) return `<span class="tag tag-item">${t}</span>`;
+  return `<span class="tag">${t}</span>`;
+}
+
+let currentView = 'chart';
+let sortCol = -1, sortAsc = true;
+
+function setView(v) {
+  currentView = v;
+  document.getElementById('btnChart').classList.toggle('active', v === 'chart');
+  document.getElementById('btnTable').classList.toggle('active', v === 'table');
+  document.getElementById('chartView').style.display = v === 'chart' ? '' : 'none';
+  document.getElementById('tableView').style.display = v === 'table' ? '' : 'none';
+}
+
+function getFiltered() {
+  const week = document.getElementById('filterWeek').value;
+  const type = document.getElementById('filterType').value;
+  const reason = document.getElementById('filterReason').value;
+  const bearer = document.getElementById('filterBearer').value;
+  const search = document.getElementById('filterSearch').value.toLowerCase().trim();
+
+  return _OPS_CAMPAIGNS.filter(c => {
+    if (week !== 'all' && c[0] !== parseInt(week)) return false;
+    if (type !== 'all' && c[4] !== type) return false;
+    if (reason !== 'all' && c[10] !== reason) return false;
+    if (bearer === 'bolt' && c[6] !== 0) return false;
+    if (bearer === 'provider' && c[6] !== 100) return false;
+    if (bearer === 'shared' && (c[6] === 0 || c[6] === 100)) return false;
+    if (search) {
+      const nameMatch = c[3].toLowerCase().includes(search);
+      const idMatch = String(c[1]).includes(search);
+      const amMatch = c[11].toLowerCase().includes(search);
+      if (!nameMatch && !idMatch && !amMatch) return false;
+    }
+    return true;
+  });
+}
+
+function refresh() {
+  const filtered = getFiltered();
+  const amMap = {};
+  let totalCost = 0, totalBolt = 0, totalProv = 0;
+  const providerSet = new Set();
+
+  filtered.forEach(c => {
+    const am = c[11];
+    if (!amMap[am]) amMap[am] = { campaigns: [], totalCost: 0, boltCost: 0, provCost: 0 };
+    const est = estimateCampaignCost(c);
+    amMap[am].campaigns.push({ data: c, est });
+    amMap[am].totalCost += est.total;
+    amMap[am].boltCost += est.bolt;
+    amMap[am].provCost += est.prov;
+    totalCost += est.total;
+    totalBolt += est.bolt;
+    totalProv += est.prov;
+    providerSet.add(c[1]);
+  });
+
+  document.getElementById('sTotalCampaigns').textContent = filtered.length.toLocaleString();
+  document.getElementById('sTotalProviders').textContent = providerSet.size + ' unique providers';
+  document.getElementById('sTotalCost').textContent = fmt(totalCost);
+  document.getElementById('sTotalCostSub').textContent = fmt(totalCost * 4) + ' estimated per month';
+  document.getElementById('sBoltCost').textContent = fmt(totalBolt);
+  document.getElementById('sBoltPct').textContent = totalCost > 0 ? pct(totalBolt / totalCost) + ' of total' : '0%';
+  document.getElementById('sProvCost').textContent = fmt(totalProv);
+  document.getElementById('sProvPct').textContent = totalCost > 0 ? pct(totalProv / totalCost) + ' of total' : '0%';
+
+  const amArr = Object.entries(amMap).sort((a, b) => b[1].totalCost - a[1].totalCost);
+  document.getElementById('amCount').textContent = amArr.length + ' AMs';
+
+  renderChart(amArr, totalCost);
+  renderTable(amArr);
+}
+
+function renderChart(amArr, totalCost) {
+  const maxCost = amArr.length > 0 ? amArr[0][1].totalCost : 1;
+  let html = '';
+  amArr.forEach(([am, d]) => {
+    const boltW = maxCost > 0 ? (d.boltCost / maxCost * 100) : 0;
+    const provW = maxCost > 0 ? (d.provCost / maxCost * 100) : 0;
+    const boltLabel = boltW > 12 ? fmt(d.boltCost) : '';
+    const provLabel = provW > 12 ? fmt(d.provCost) : '';
+    html += `<div class="bar-row">
+      <div class="bar-label" title="${am}">${am}</div>
+      <div class="bar-track">
+        <div class="bar-fill-bolt" style="width:${boltW}%">${boltLabel}</div>
+        <div class="bar-fill-prov" style="width:${provW}%">${provLabel}</div>
+      </div>
+      <div class="bar-total">${fmt(d.totalCost)}</div>
+    </div>`;
+  });
+  document.getElementById('chartView').innerHTML = html || '<div style="padding:20px;color:var(--text-dim);text-align:center">No data matches filters</div>';
+}
+
+function renderTable(amArr) {
+  let html = '';
+  amArr.forEach(([am, d]) => {
+    const id = 'am_' + am.replace(/\s/g, '_');
+    html += `<tr class="am-header-row expanded" onclick="toggleAM('${id}')">
+      <td><span class="toggle-icon">▶</span> ${am}</td>
+      <td>${d.campaigns.length}</td>
+      <td></td><td></td><td></td><td></td>
+      <td><strong>${fmt(d.totalCost)}</strong></td>
+      <td class="cost-bolt">${fmt(d.boltCost)}</td>
+      <td class="cost-prov">${fmt(d.provCost)}</td>
+      <td></td>
+    </tr>`;
+
+    const sorted = [...d.campaigns].sort((a, b) => b.est.total - a.est.total);
+    sorted.forEach(({ data: c, est }) => {
+      const disc = c[5] > 0 ? c[5] + '%' : '—';
+      const share = c[6] + '% / ' + (100 - c[6]) + '%';
+      html += `<tr class="campaign-row ${id}">
+        <td style="color:var(--text-dim)">${am}</td>
+        <td></td>
+        <td>${getCampTypeTag(c[4])}</td>
+        <td title="ID: ${c[1]}">${c[3]}</td>
+        <td>${disc}</td>
+        <td>${share}</td>
+        <td>${fmt(est.total)}</td>
+        <td class="cost-bolt">${fmt(est.bolt)}</td>
+        <td class="cost-prov">${fmt(est.prov)}</td>
+        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c[16]}">${c[10]}</td>
+      </tr>`;
+    });
+  });
+  document.getElementById('tableBody').innerHTML = html;
+}
+
+function toggleAM(id) {
+  const rows = document.querySelectorAll('.' + id);
+  const header = rows.length > 0 ? rows[0].previousElementSibling : null;
+  const visible = rows.length > 0 && rows[0].style.display !== 'none';
+  rows.forEach(r => r.style.display = visible ? 'none' : '');
+  if (header) header.classList.toggle('expanded', !visible);
+}
+
+function sortTable(col) {
+  sortAsc = sortCol === col ? !sortAsc : true;
+  sortCol = col;
+  refresh();
+}
+
+function initFilters() {
+  const weeks = new Set(), types = new Set(), reasons = new Set();
+  _OPS_CAMPAIGNS.forEach(c => {
+    weeks.add(c[0]);
+    types.add(c[4]);
+    if (c[10]) reasons.add(c[10]);
+  });
+
+  const wkSel = document.getElementById('filterWeek');
+  [...weeks].sort((a,b) => a - b).forEach(w => {
+    const o = document.createElement('option');
+    o.value = w; o.textContent = 'Week ' + w;
+    wkSel.appendChild(o);
+  });
+
+  const tSel = document.getElementById('filterType');
+  [...types].sort().forEach(t => {
+    const o = document.createElement('option');
+    o.value = t; o.textContent = t;
+    tSel.appendChild(o);
+  });
+
+  const rSel = document.getElementById('filterReason');
+  [...reasons].sort().forEach(r => {
+    const o = document.createElement('option');
+    o.value = r; o.textContent = r;
+    rSel.appendChild(o);
+  });
+}
+
+// ─── Embedded OPS Campaign Data ───
+// Format: [week, pid, city, pname, type, bonus%, costShare%, users, discountCap, mov, invReason, am, orders8wk, gmv8wk, aov, segment, comment]
+const _OPS_CAMPAIGNS = [
+[10,16873,'Valletta','CFC Crispy Flavoured Chicken Marsaskala','Free Base Delivery',0,50.0,'All',0,25.0,'profit-generator','Alena Tokareva',1280,36261,28.33,'Enterprise (AM Segment)','AC - always 50% cost share (FD up to €2/FBD: MOV€18 - €20) - Contractual terms'],
+[10,16876,'Valletta','CFC Crispy Flavoured Chicken Ghaxaq','Free Base Delivery',0,50.0,'All',0,25.0,'profit-generator','Alena Tokareva',1952,55591,28.48,'Enterprise (AM Segment)','AC - always 50% cost share (FD up to €2/FBD: MOV€18 - €20) - Contractual terms'],
+[10,46093,'Valletta','CFC Crispy Flavoured Chicken Zebbug','Free Base Delivery',0,50.0,'All',0,25.0,'profit-generator','Alena Tokareva',911,26345,28.92,'Enterprise (AM Segment)','AC - always 50% cost share (FD up to €2/FBD: MOV€18 - €20) - Contractual terms'],
+[10,46096,'Valletta','CFC Crispy Flavoured Chicken Qormi','Free Base Delivery',0,50.0,'All',0,25.0,'profit-generator','Alena Tokareva',1151,31232,27.13,'Enterprise (AM Segment)','AC - always 50% cost share (FD up to €2/FBD: MOV€18 - €20) - Contractual terms'],
+[10,56034,'Valletta','CFC Crispy Flavoured Chicken Naxxar','Free Base Delivery',0,50.0,'All',0,25.0,'profit-generator','Alena Tokareva',1015,29801,29.36,'Enterprise (AM Segment)','AC - always 50% cost share (FD up to €2/FBD: MOV€18 - €20) - Contractual terms'],
+[10,56831,'Valletta','CFC Crispy Flavoured Chicken Hamrun','Free Base Delivery',0,50.0,'All',0,25.0,'profit-generator','Alena Tokareva',1833,47868,26.11,'Enterprise (AM Segment)','AC - always 50% cost share (FD up to €2/FBD: MOV€18 - €20) - Contractual terms'],
+[10,73411,'Valletta','CFC Crispy Flavoured Chicken - St. Pauls Bay','Free Base Delivery',0,50.0,'All',0,25.0,'profit-generator','Alena Tokareva',1159,30442,26.27,'Enterprise (AM Segment)','AC - always 50% cost share (FD up to €2/FBD: MOV€18 - €20) - Contractual terms'],
+[10,86659,'Valletta','CFC Crispy Flavoured Chicken San Gwann','Free Base Delivery',0,50.0,'All',0,25.0,'profit-generator','Alena Tokareva',769,19854,25.82,'Enterprise (AM Segment)','AC - always 50% cost share (FD up to €2/FBD: MOV€18 - €20) - Contractual terms'],
+[10,89664,'Valletta','CFC Crispy Flavoured Chicken Zurrieq','Free Base Delivery',0,50.0,'All',0,25.0,'profit-generator','Alena Tokareva',1239,35271,28.47,'Enterprise (AM Segment)','AC - always 50% cost share (FD up to €2/FBD: MOV€18 - €20) - Contractual terms'],
+[10,73986,'Valletta','CFC Cafe & Breakfast - St. Pauls Bay','Free Base Delivery',0,50.0,'All',0,25.0,'profit-generator','Alena Tokareva',162,3387,20.91,'Enterprise (AM Segment)','AC - always 50% cost share (FD up to €2/FBD: MOV€18 - €20) - Contractual terms'],
+[10,73989,'Valletta','CFC Cafe & Breakfast - Marsaskala','Free Base Delivery',0,50.0,'All',0,25.0,'profit-generator','Alena Tokareva',126,2661,21.12,'Enterprise (AM Segment)','AC - always 50% cost share (FD up to €2/FBD: MOV€18 - €20) - Contractual terms'],
+[10,104283,'Gozo','CFC Crispy Flavoured Chicken Gozo','Free Base Delivery',0,50.0,'All',0,25.0,'profit-generator','Alena Tokareva',1595,50340,31.56,'Enterprise (AM Segment)','AC - always 50% cost share (FD up to €2/FBD: MOV€18 - €20) - Contractual terms'],
+[10,130082,'Valletta','CFC Crispy Flavoured Chicken Birkirkara','Free Base Delivery',0,50.0,'All',0,25.0,'profit-generator','Alena Tokareva',959,27527,28.7,'Enterprise (AM Segment)','AC - always 50% cost share (FD up to €2/FBD: MOV€18 - €20) - Contractual terms'],
+[10,130081,'Valletta','CFC Cafe & Breakfast -Birkirkara','Free Base Delivery',0,50.0,'All',0,25.0,'profit-generator','Alena Tokareva',211,4553,21.58,'Enterprise (AM Segment)','AC - always 50% cost share (FD up to €2/FBD: MOV€18 - €20) - Contractual terms'],
+[10,1337,'Valletta','J\'Oli Salad Bar Msida','Free Base Delivery',0,0.0,'All',0,0,'obligations-commitments','Yousef Moungad',2508,55603,22.17,'Mid-market (AM Segment)','KD forever'],
+[10,17867,'Valletta','J\'Oli Salad Bar - St.Julians','Free Base Delivery',0,0.0,'All',0,0,'obligations-commitments','Yousef Moungad',976,19957,20.45,'Mid-market (AM Segment)','KD forever'],
+[10,68163,'Valletta','J\'Oli Salad Bar Mosta','Free Base Delivery',0,0.0,'All',0,0,'obligations-commitments','Yousef Moungad',1676,39327,23.46,'Mid-market (AM Segment)','KD forever'],
+[10,77497,'Valletta','J\'Oli Salad Bar Marsa','Free Base Delivery',0,0.0,'All',0,0,'obligations-commitments','Yousef Moungad',2460,56144,22.82,'Mid-market (AM Segment)','KD forever'],
+[10,59480,'Valletta','Black Bull Poke Bowl St. Julians','Free Full Delivery',0,0.0,'All',0,0,'obligations-commitments','Gulcin Erguven',36,854,23.72,'Mid-market (AM Segment)','MH'],
+[10,59481,'Valletta','Black Bull Bubble Tea St Julian\'s','Free Full Delivery',0,0.0,'All',0,0,'obligations-commitments','Gulcin Erguven',37,622,16.81,'Mid-market (AM Segment)','MH'],
+[10,60940,'Gozo','Wagyu To Go','Free Full Delivery',0,0.0,'All',0,0,'obligations-commitments','Gulcin Erguven',756,29256,38.7,'Mid-market (AM Segment)','MH'],
+[10,61148,'Valletta','Burgers INK Zurrieq','Free Full Delivery',0,0.0,'All',0,0,'obligations-commitments','Gulcin Erguven',1023,27523,26.9,'Mid-market (AM Segment)','MH'],
+[10,68974,'Valletta','Burgers Ink Bugibba','Free Full Delivery',0,0.0,'All',0,0,'obligations-commitments','Gulcin Erguven',623,16415,26.35,'Mid-market (AM Segment)','MH'],
+[10,68975,'Valletta','Black Bull Chinese Bugibba','Free Full Delivery',0,0.0,'All',0,0,'obligations-commitments','Gulcin Erguven',357,10530,29.5,'Mid-market (AM Segment)','MH'],
+[10,68976,'Valletta','Black Bull Poke Bowl Bugibba','Free Full Delivery',0,0.0,'All',0,0,'obligations-commitments','Gulcin Erguven',41,1054,25.71,'Mid-market (AM Segment)','MH'],
+[10,68979,'Valletta','Black Bull Sushi Bugibba','Free Full Delivery',0,0.0,'All',0,0,'obligations-commitments','Gulcin Erguven',258,8552,33.15,'Mid-market (AM Segment)','MH'],
+[10,82617,'Valletta','Topo Gigio Pizzeria Valletta','Free Full Delivery',0,0.0,'All',0,0,'obligations-commitments','Gulcin Erguven',1,12,12.0,'Mid-market (AM Segment)','MH'],
+[10,189233,'Valletta','Topo Gigio Marsaskala','Free Full Delivery',0,0.0,'All',0,0,'obligations-commitments','Gulcin Erguven',180,4565,25.36,'Mid-market (AM Segment)','MH'],
+[10,1414,'Valletta','McDonald\'s ® Naxxar','Free Delivery (capped)',0,50.0,'All',1.0,30.0,'profit-generator','Alena Tokareva',6594,179092,27.16,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,1415,'Valletta','McDonald\'s ® St Julian’s','Free Delivery (capped)',0,50.0,'All',1.0,30.0,'profit-generator','Alena Tokareva',5584,127457,22.83,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,1545,'Valletta','McDonald\'s ® Birkirkara','Free Delivery (capped)',0,50.0,'All',1.0,30.0,'profit-generator','Alena Tokareva',10503,275173,26.2,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,1546,'Valletta','McDonald\'s ® Luqa','Free Delivery (capped)',0,50.0,'All',1.0,30.0,'profit-generator','Alena Tokareva',11372,346410,30.46,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,1576,'Valletta','McDonald\'s ® Sliema','Free Delivery (capped)',0,50.0,'All',1.0,30.0,'profit-generator','Alena Tokareva',4043,98521,24.37,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,1577,'Valletta','McDonald\'s ® Baystreet','Free Delivery (capped)',0,50.0,'All',1.0,30.0,'profit-generator','Alena Tokareva',1988,46585,23.43,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,1578,'Valletta','McDonald\'s ® Bugibba','Free Delivery (capped)',0,50.0,'All',1.0,30.0,'profit-generator','Alena Tokareva',6014,152330,25.33,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,1579,'Valletta','McDonald\'s ® Valletta','Free Delivery (capped)',0,50.0,'All',1.0,30.0,'profit-generator','Alena Tokareva',623,17453,28.01,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,1663,'Gozo','McDonald\'s ® Gozo','Free Delivery (capped)',0,50.0,'All',1.0,30.0,'profit-generator','Alena Tokareva',7878,229732,29.16,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,1414,'Valletta','McDonald\'s ® Naxxar','Free Base Delivery',0,50.0,'New',0,30.0,'profit-generator','Alena Tokareva',6594,179092,27.16,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,1415,'Valletta','McDonald\'s ® St Julian’s','Free Base Delivery',0,50.0,'New',0,30.0,'profit-generator','Alena Tokareva',5584,127457,22.83,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,1545,'Valletta','McDonald\'s ® Birkirkara','Free Base Delivery',0,50.0,'New',0,30.0,'profit-generator','Alena Tokareva',10503,275173,26.2,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,1546,'Valletta','McDonald\'s ® Luqa','Free Base Delivery',0,50.0,'New',0,30.0,'profit-generator','Alena Tokareva',11372,346410,30.46,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,1576,'Valletta','McDonald\'s ® Sliema','Free Base Delivery',0,50.0,'New',0,30.0,'profit-generator','Alena Tokareva',4043,98521,24.37,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,1577,'Valletta','McDonald\'s ® Baystreet','Free Base Delivery',0,50.0,'New',0,30.0,'profit-generator','Alena Tokareva',1988,46585,23.43,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,1578,'Valletta','McDonald\'s ® Bugibba','Free Base Delivery',0,50.0,'New',0,30.0,'profit-generator','Alena Tokareva',6014,152330,25.33,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,1579,'Valletta','McDonald\'s ® Valletta','Free Base Delivery',0,50.0,'New',0,30.0,'profit-generator','Alena Tokareva',623,17453,28.01,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,1663,'Gozo','McDonald\'s ® Gozo','Free Base Delivery',0,50.0,'New',0,30.0,'profit-generator','Alena Tokareva',7878,229732,29.16,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,20839,'Valletta','Burger King Paola','Free Delivery (capped)',0,50.0,'All',1.0,30.0,'obligations-commitments','Alena Tokareva',2949,80447,27.28,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,20839,'Valletta','Burger King Paola','Free Base Delivery',0,50.0,'New',0,30.0,'obligations-commitments','Alena Tokareva',2949,80447,27.28,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,6693,'Valletta','Burger King MIA','Free Base Delivery',0,50.0,'New',0,30.0,'obligations-commitments','Alena Tokareva',674,21073,31.27,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,6691,'Valletta','Burger King Mosta','Free Base Delivery',0,50.0,'New',0,30.0,'obligations-commitments','Alena Tokareva',1650,49461,29.98,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,6690,'Valletta','Burger King Valletta','Free Base Delivery',0,50.0,'New',0,30.0,'obligations-commitments','Alena Tokareva',329,9601,29.18,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,53990,'Valletta','Burger King Campus Hub','Free Delivery (capped)',0,50.0,'All',1.0,30.0,'obligations-commitments','Alena Tokareva',2006,54015,26.93,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,6693,'Valletta','Burger King MIA','Free Delivery (capped)',0,50.0,'All',1.0,30.0,'obligations-commitments','Alena Tokareva',674,21073,31.27,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,6691,'Valletta','Burger King Mosta','Free Delivery (capped)',0,50.0,'All',1.0,30.0,'obligations-commitments','Alena Tokareva',1650,49461,29.98,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,6690,'Valletta','Burger King Valletta','Free Delivery (capped)',0,50.0,'All',1.0,30.0,'obligations-commitments','Alena Tokareva',329,9601,29.18,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,6688,'Valletta','Burger King Paceville','Free Delivery (capped)',0,50.0,'All',1.0,30.0,'obligations-commitments','Alena Tokareva',10,251,25.1,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,6687,'Valletta','Burger King Sliema','Free Delivery (capped)',0,50.0,'All',1.0,30.0,'obligations-commitments','Alena Tokareva',1007,25889,25.71,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,6689,'Valletta','Burger King Qormi','Free Delivery (capped)',0,50.0,'All',1.0,30.0,'obligations-commitments','Alena Tokareva',2538,69600,27.42,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,7065,'Valletta','KFC Gzira','Free Delivery (capped)',0,50.0,'All',1.0,28.0,'obligations-commitments','Alena Tokareva',6592,172732,26.2,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,7066,'Valletta','KFC Airport','Free Delivery (capped)',0,50.0,'All',1.0,28.0,'obligations-commitments','Alena Tokareva',1522,46594,30.61,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,7067,'Valletta','KFC Mosta','Free Delivery (capped)',0,50.0,'All',1.0,28.0,'obligations-commitments','Alena Tokareva',3098,84084,27.14,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,102387,'Valletta','KFC St. Julian\'s','Free Delivery (capped)',0,50.0,'All',1.0,28.0,'obligations-commitments','Alena Tokareva',1765,45700,25.89,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,7266,'Valletta','Pizza Hut Qormi','Free Delivery (capped)',0,50.0,'All',1.0,25.0,'obligations-commitments','Alena Tokareva',1050,33929,32.31,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,7268,'Valletta','Pizza Hut Baystreet','Free Delivery (capped)',0,50.0,'All',1.0,25.0,'obligations-commitments','Alena Tokareva',1063,29677,27.92,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,7269,'Valletta','Pizza Hut Valletta','Free Delivery (capped)',0,50.0,'All',1.0,25.0,'obligations-commitments','Alena Tokareva',177,5430,30.68,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,53987,'Valletta','Pizza Hut Campus Hub','Free Delivery (capped)',0,50.0,'All',1.0,25.0,'obligations-commitments','Alena Tokareva',1501,44448,29.61,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,132239,'Valletta','Pizza Hut Zejtun','Free Delivery (capped)',0,50.0,'All',1.0,25.0,'obligations-commitments','Alena Tokareva',1051,32581,31.0,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,1149,'Valletta','Black Bull','Free Full Delivery',0,100.0,'All',0,0,'locations','Gulcin Erguven',423,12205,28.85,'Mid-market (AM Segment)','Contractual deal: Always Free Full Delivery'],
+[10,1150,'Valletta','Burgers INK St. Julians','Free Full Delivery',0,100.0,'All',0,0,'locations','Unknown',0,0,0,'','Contractual deal: Always Free Full Delivery'],
+[10,1151,'Valletta','Burgers INK Valletta','Free Full Delivery',0,100.0,'All',0,0,'locations','Unknown',0,0,0,'','Contractual deal: Always Free Full Delivery'],
+[10,1562,'Valletta','Black Bull Sushi St. Julians','Free Full Delivery',0,100.0,'All',0,0,'locations','Gulcin Erguven',311,9347,30.05,'Mid-market (AM Segment)','Contractual deal: Always Free Full Delivery'],
+[10,1563,'Valletta','Black Bull Chinese Paceville','Free Full Delivery',0,100.0,'All',0,0,'locations','Gulcin Erguven',718,19660,27.38,'Mid-market (AM Segment)','Contractual deal: Always Free Full Delivery'],
+[10,3108,'Valletta','Café Sicilia','Free Full Delivery',0,100.0,'All',0,0,'locations','Rico Spagnol',88,3021,34.33,'SMB (AM Segment)','Contractual deal: Always Free Full Delivery'],
+[10,17939,'Valletta','Burgers INK Birkirkara','Free Full Delivery',0,100.0,'All',0,0,'locations','Unknown',0,0,0,'','Contractual deal: Always Free Full Delivery'],
+[10,20916,'Valletta','Wagyu To Go - Marsaskala','Free Full Delivery',0,100.0,'All',0,0,'locations','Unknown',0,0,0,'','Contractual deal: Always Free Full Delivery'],
+[10,28736,'Gozo','Burgers Ink','Free Full Delivery',0,100.0,'All',0,0,'locations','Gulcin Erguven',1159,28985,25.01,'Mid-market (AM Segment)','Contractual deal: Always Free Full Delivery'],
+[10,33379,'Valletta','Wagyu To Go -  Paceville','Free Full Delivery',0,100.0,'All',0,0,'locations','Unknown',0,0,0,'','Contractual deal: Always Free Full Delivery'],
+[10,36262,'Valletta','Burgers INK Mellieha','Free Full Delivery',0,100.0,'All',0,0,'locations','Unknown',0,0,0,'','Contractual deal: Always Free Full Delivery'],
+[10,50602,'Valletta','Topo Gigio Pizzeria Paceville','Free Full Delivery',0,100.0,'All',0,0,'locations','Gulcin Erguven',478,9906,20.72,'Mid-market (AM Segment)','Contractual deal: Always Free Full Delivery'],
+[10,61124,'Valletta','Burgers INK St. Julians','Free Full Delivery',0,100.0,'All',0,0,'locations','Gulcin Erguven',572,14328,25.05,'Mid-market (AM Segment)','Contractual deal: Always Free Full Delivery'],
+[10,61126,'Valletta','Burgers INK Valletta','Free Full Delivery',0,100.0,'All',0,0,'locations','Gulcin Erguven',260,5962,22.93,'Mid-market (AM Segment)','Contractual deal: Always Free Full Delivery'],
+[10,61140,'Valletta','Burgers INK Birkirkara','Free Full Delivery',0,100.0,'All',0,0,'locations','Gulcin Erguven',1781,44816,25.16,'Mid-market (AM Segment)','Contractual deal: Always Free Full Delivery'],
+[10,61143,'Valletta','Burgers INK Mellieha','Free Full Delivery',0,100.0,'All',0,0,'locations','Gulcin Erguven',759,19391,25.55,'Mid-market (AM Segment)','Contractual deal: Always Free Full Delivery'],
+[10,61145,'Valletta','Wagyu To Go -  Paceville','Free Full Delivery',0,100.0,'All',0,0,'locations','Gulcin Erguven',991,30418,30.69,'Mid-market (AM Segment)','Contractual deal: Always Free Full Delivery'],
+[10,61146,'Valletta','Wagyu To Go - Marsaskala','Free Full Delivery',0,100.0,'All',0,0,'locations','Gulcin Erguven',1361,45337,33.31,'Mid-market (AM Segment)','Contractual deal: Always Free Full Delivery'],
+[10,70788,'Valletta','Burgers INK Marsascala','Free Full Delivery',0,100.0,'All',0,0,'locations','Gulcin Erguven',1083,25498,23.54,'Mid-market (AM Segment)','Contractual deal: Always Free Full Delivery'],
+[10,74092,'Valletta','Fog Buddies','Free Full Delivery',0,100.0,'All',0,0,'locations','Fiona Borg',545,19573,35.91,'Mid-market (AM Segment)','Contractual deal: Always Free Full Delivery'],
+[10,1046,'Valletta','Moo\'s Kebab Gzira','Free Base Delivery',0,100.0,'All',0,0,'locations','Gulcin Erguven',1328,35544,26.77,'Mid-market (AM Segment)','Contractual deal: Always Free Base Delivery'],
+[10,1141,'Valletta','Antalya Kebab Birkirkara','Free Base Delivery',0,100.0,'All',0,0,'locations','Gulcin Erguven',1438,32445,22.56,'Mid-market (AM Segment)','Always Free Base Delivery'],
+[10,1283,'Valletta','Pulcinella Pizzeria Bugibba','Free Base Delivery',0,100.0,'All',0,0,'locations','Rico Spagnol',644,16786,26.07,'SMB (AM Segment)','Contractual deal: Always Free Base Delivery'],
+[10,1300,'Valletta','Whippy\'s Fried Chicken & Take Away','Free Base Delivery',0,100.0,'All',0,0,'locations','Duncan Calleja',577,13823,23.96,'SMB (AM Segment)','AC - Contractual deal: Always Free Base Delivery'],
+[10,1607,'Valletta','Talbot&Bons','Free Base Delivery',0,100.0,'All',0,0,'locations','Rico Spagnol',132,4741,35.92,'SMB (AM Segment)','Contractual deal: Always Free Base Delivery'],
+[10,1662,'Valletta','Bianco\'s','Free Base Delivery',0,100.0,'All',0,0,'locations','Duncan Calleja',235,7294,31.04,'SMB (AM Segment)','Contractual deal: Always Free Base Delivery'],
+[10,2613,'Valletta','Elba Bahar ic-Caghaq','Free Base Delivery',0,100.0,'All',0,0,'locations','Rico Spagnol',157,4953,31.55,'SMB (AM Segment)','Contractual deal: Always Free Base Delivery'],
+[10,4168,'Valletta','HERMANOS BURGERS PACEVILLE','Free Base Delivery',0,100.0,'All',0,0,'locations','Gulcin Erguven',2376,64576,27.18,'Mid-market (AM Segment)','Contractual deal: Always Free Base Delivery'],
+[10,6010,'Valletta','Moo\'s Kebab Valletta','Free Base Delivery',0,100.0,'All',0,0,'locations','Gulcin Erguven',268,5702,21.28,'Mid-market (AM Segment)','Contractual deal: Always Free Base Delivery'],
+[10,8800,'Valletta','HERMANOS BURGERS PAOLA','Free Base Delivery',0,100.0,'All',0,0,'locations','Gulcin Erguven',2045,62379,30.5,'Mid-market (AM Segment)','Contractual deal: Always Free Base Delivery'],
+[10,9280,'Gozo','Ferdies To Go','Free Base Delivery',0,100.0,'All',0,0,'locations','Duncan Calleja',35,1018,29.09,'SMB (AM Segment)','Contractual deal: Always Free Base Delivery'],
+[10,16026,'Valletta','Eda Kebab Pizza House','Free Base Delivery',0,100.0,'All',0,0,'locations','Duncan Calleja',819,22598,27.59,'SMB (AM Segment)','Contractual deal: Always Free Base Delivery'],
+[10,24800,'Valletta','HERMANOS BURGERS MELLIEHA','Free Base Delivery',0,100.0,'All',0,0,'locations','Gulcin Erguven',1047,33149,31.66,'Mid-market (AM Segment)','JS - Contractual deal: Always Free Base Delivery'],
+[10,26919,'Valletta','Angela\'s Restaurant','Free Base Delivery',0,100.0,'All',0,0,'locations','Rico Spagnol',0,0,0,'SMB (AM Segment)','Contractual deal: Always Free Base Delivery'],
+[10,30622,'Valletta','Pizza Pritt','Free Base Delivery',0,100.0,'All',0,0,'locations','Rico Spagnol',483,11895,24.63,'SMB (AM Segment)','Contractual deal: Always Free Base Delivery'],
+[10,31391,'Valletta','Goloso Gastro Bar & Pizzeria','Free Base Delivery',0,100.0,'All',0,0,'locations','Rico Spagnol',462,10811,23.4,'SMB (AM Segment)','Contractual deal: Always Free Base Delivery'],
+[10,34666,'Valletta','Saigon Gzira','Free Base Delivery',0,100.0,'All',0,0,'locations','Rico Spagnol',980,26172,26.71,'Mid-market (AM Segment)','Contractual deal: Always Free Base Delivery'],
+[10,35932,'Valletta','HERMANOS BURGERS BIRKIRKARA','Free Base Delivery',0,100.0,'All',0,0,'locations','Gulcin Erguven',2851,85295,29.92,'Mid-market (AM Segment)','JS -Contractual deal: Always Free Base Delivery'],
+[10,51004,'Valletta','Clouds Express','Free Base Delivery',0,100.0,'All',0,0,'locations','Fiona Borg',87,3174,36.48,'SMB (AM Segment)','Contractual deal: Always Free Base Delivery'],
+[10,61123,'Valletta','Amigos Xemxija','Free Base Delivery',0,0.0,'All',0,0,'commission-increase','Gulcin Erguven',612,17157,28.03,'Mid-market (AM Segment)','GE - Contractual deal: Always Free Base Delivery'],
+[10,61127,'Valletta','Amigos Ta\' Xbiex','Free Base Delivery',0,0.0,'All',0,0,'commission-increase','Gulcin Erguven',564,16058,28.47,'Mid-market (AM Segment)','GE - Contractual deal: Always Free Base Delivery'],
+[10,61128,'Valletta','Amigos Hamrun','Free Base Delivery',0,0.0,'All',0,0,'commission-increase','Gulcin Erguven',996,27830,27.94,'Mid-market (AM Segment)','GE - Contractual deal: Always Free Base Delivery'],
+[10,61129,'Valletta','Amigos Zabbar','Free Base Delivery',0,0.0,'All',0,0,'commission-increase','Gulcin Erguven',1033,29608,28.66,'Mid-market (AM Segment)','GE - Contractual deal: Always Free Base Delivery'],
+[10,61130,'Valletta','Amigos Sliema','Free Base Delivery',0,0.0,'All',0,0,'commission-increase','Gulcin Erguven',667,18659,27.97,'Mid-market (AM Segment)','GE - Contractual deal: Always Free Base Delivery'],
+[10,61132,'Valletta','Amigos Mosta','Free Base Delivery',0,0.0,'All',0,0,'commission-increase','Gulcin Erguven',1173,34819,29.68,'Mid-market (AM Segment)','GE - Contractual deal: Always Free Base Delivery'],
+[10,61134,'Valletta','Amigos Luqa','Free Base Delivery',0,0.0,'All',0,0,'commission-increase','Gulcin Erguven',613,18461,30.12,'Mid-market (AM Segment)','GE - Contractual deal: Always Free Base Delivery'],
+[10,106677,'Valletta','Amigos Zebbug','Free Base Delivery',0,0.0,'All',0,0,'commission-increase','Gulcin Erguven',605,15412,25.47,'Mid-market (AM Segment)','GE - Contractual deal: Always Free Base Delivery'],
+[10,64192,'Valletta','Saigon Birkirkara','Free Base Delivery',0,100.0,'All',0,0,'locations','Rico Spagnol',678,18688,27.56,'Mid-market (AM Segment)','MH - Contractual deal: Always Free Base Delivery'],
+[10,64947,'Valletta','HERMANOS BURGERS MARSASKALA','Free Base Delivery',0,100.0,'All',0,0,'locations','Gulcin Erguven',1182,37083,31.37,'Mid-market (AM Segment)','Contractual Deal'],
+[10,1284,'Valletta','Mr Kebab','Free Base Delivery',0,100.0,'All',0,15.0,'locations','Mariem Slimen',402,9620,23.93,'Mid-market (AM Segment)','Provider Campaign'],
+[10,14304,'Gozo','Fuli Kiosk','Free Base Delivery',0,100.0,'All',0,15.0,'locations','Yousef Moungad',1289,32483,25.2,'Mid-market (AM Segment)','100% on provider'],
+[10,76764,'Valletta','Smokey\'s Snack Bar and take away','Free Delivery (capped)',0,100.0,'All',3.0,20.0,'locations','Rico Spagnol',0,0,0,'SMB (AM Segment)','GE'],
+[10,79760,'Valletta','Pizzeria Da Luigi Central','Free Delivery (capped)',0,100.0,'All',1.0,20.0,'locations','Gulcin Erguven',474,16517,34.85,'Mid-market (AM Segment)','GE'],
+[10,79761,'Valletta','Pizzeria Da Luigi Balluta','Free Delivery (capped)',0,100.0,'All',1.0,20.0,'locations','Gulcin Erguven',287,7975,27.79,'Mid-market (AM Segment)','GE'],
+[10,79762,'Valletta','Pizzeria Da Luigi Wied Il Ghajn','Free Delivery (capped)',0,100.0,'All',1.0,20.0,'locations','Gulcin Erguven',461,13712,29.74,'Mid-market (AM Segment)','GE'],
+[10,79764,'Valletta','Pizzeria Da Luigi St. Paul\'s Bay','Free Delivery (capped)',0,100.0,'All',1.0,20.0,'locations','Gulcin Erguven',525,14184,27.02,'Mid-market (AM Segment)','GE'],
+[10,79765,'Valletta','Pizzeria Da Luigi Msida','Free Delivery (capped)',0,100.0,'All',1.0,20.0,'locations','Gulcin Erguven',210,5510,26.24,'Mid-market (AM Segment)','GE'],
+[10,79856,'Gozo','Pizzeria Da Luigi Ghajnsielem','Free Delivery (capped)',0,100.0,'All',1.0,20.0,'locations','Gulcin Erguven',0,0,0,'Mid-market (AM Segment)','GE'],
+[10,79859,'Valletta','Pizzeria Da Luigi Marsa','Free Delivery (capped)',0,100.0,'All',1.0,20.0,'locations','Gulcin Erguven',414,12259,29.61,'Mid-market (AM Segment)','GE'],
+[10,80063,'Valletta','Pizzeria Da Luigi South','Free Delivery (capped)',0,100.0,'All',1.0,20.0,'locations','Gulcin Erguven',285,8708,30.55,'Mid-market (AM Segment)','GE'],
+[10,1561,'Valletta','Ferdinand\'s Burger Siggiewi','Free Base Delivery',0,100.0,'New',0,0,'locations','Rico Spagnol',419,13783,32.89,'SMB (AM Segment)','JS (Until they tell to stop)'],
+[10,24554,'Valletta','Biriyani Haven','Free Base Delivery',0,100.0,'All',0,25.0,'locations','Duncan Calleja',0,0,0,'SMB (AM Segment)','JS (Until they tell to stop)'],
+[10,1128,'Valletta','Shakes n\' Bakes San Gwann','Free Delivery (capped)',0,100.0,'All',2.0,0,'locations','Yousef Moungad',2082,59164,28.42,'Mid-market (AM Segment)','JS (Until they tell to stop)'],
+[10,70939,'Valletta','Cross Bar and Bistro','Free Delivery (capped)',0,100.0,'All',2.0,0,'locations','Yousef Moungad',17,455,26.76,'Mid-market (AM Segment)','JS (Until they tell to stop)'],
+[10,14116,'Valletta','Shakes n\' Bakes Cafe’ Msida','Free Delivery (capped)',0,100.0,'All',2.0,0,'locations','Yousef Moungad',611,14528,23.78,'Mid-market (AM Segment)','JS (Until they tell to stop)'],
+[10,97637,'Valletta','Black Bull Chinese Paola','Free Full Delivery',0,0.0,'All',0,0,'obligations-commitments','Gulcin Erguven',1827,60785,33.27,'Mid-market (AM Segment)','Contractual deal: Always Free Full Delivery'],
+[10,97642,'Valletta','Black Bull Sushi Paola','Free Full Delivery',0,0.0,'All',0,0,'obligations-commitments','Gulcin Erguven',888,29772,33.53,'Mid-market (AM Segment)','Contractual deal: Always Free Full Delivery'],
+[10,95659,'Valletta','Topo Gigio Pizzeria Paola','Free Full Delivery',0,0.0,'All',0,0,'obligations-commitments','Gulcin Erguven',1363,32568,23.89,'Mid-market (AM Segment)','Contractual deal: Always Free Full Delivery'],
+[10,93962,'Valletta','Burgers Ink Paola','Free Full Delivery',0,0.0,'All',0,0,'obligations-commitments','Gulcin Erguven',1298,33480,25.79,'Mid-market (AM Segment)','Contractual deal: Always Free Full Delivery'],
+[10,98406,'Valletta','Black Bull Poke Bowl Paola','Free Full Delivery',0,0.0,'All',0,0,'obligations-commitments','Gulcin Erguven',59,1711,29.0,'Mid-market (AM Segment)','MH - Contractual deal: Always Free Full Delivery'],
+[10,98410,'Valletta','Black Bull Bubble Tea Paola','Free Full Delivery',0,0.0,'All',0,0,'obligations-commitments','Gulcin Erguven',66,1140,17.27,'Mid-market (AM Segment)','MH - Contractual deal: Always Free Full Delivery'],
+[10,73846,'Valletta','COOPERS Chicken Birkirkara','Free Delivery (capped)',0,0.0,'All',1.0,0,'obligations-commitments','Gulcin Erguven',2897,83332,28.76,'Mid-market (AM Segment)','GE - Contract terms - always up to €1 off'],
+[10,100765,'Valletta','COOPERS Chicken Zejtun','Free Delivery (capped)',0,0.0,'All',1.0,0,'obligations-commitments','Gulcin Erguven',3250,99896,30.74,'Mid-market (AM Segment)','GE - Contract terms - always up to €1 off'],
+[10,1379,'Valletta','3 Cities Take Away Cospicua','Free Base Delivery',0,0.0,'All',0,0,'sales-benefit','Yousef Moungad',1503,51777,34.45,'Mid-market (AM Segment)','GE - Contractual deal - always FBD'],
+[10,130303,'Valletta','HERMANOS FOOD TRUCK MOSTA','Free Base Delivery',0,100.0,'All',0,0,'locations','Gulcin Erguven',0,0,0,'Mid-market (AM Segment)','Contractual deal - Always FBD'],
+[10,122061,'Valletta','HERMANOS BURGERS SLIEMA','Free Base Delivery',0,100.0,'All',0,0,'locations','Gulcin Erguven',0,0,0,'Mid-market (AM Segment)','Contractual deal - Always FBD'],
+[10,113547,'Valletta','Chicken Brothers Birkirkara','Free Base Delivery',0,100.0,'All',0,0,'locations','Gulcin Erguven',522,15726,30.13,'Mid-market (AM Segment)','Contractual deal - Always FBD'],
+[10,128660,'Valletta','Chivos Latin Food','Free Base Delivery',0,100.0,'All',0,0,'locations','Gulcin Erguven',274,7742,28.26,'Mid-market (AM Segment)','Contractual deal - Always FBD'],
+[10,3459,'Valletta','Brass & Knuckle','Free Full Delivery',0,100.0,'All',2.0,0,'locations','Rico Spagnol',49,2536,51.76,'SMB (AM Segment)','YM - Investment Always'],
+[10,3459,'Valletta','Brass & Knuckle','Item Discount',20.0,100.0,'All',0,20.0,'locations','Rico Spagnol',49,2536,51.76,'SMB (AM Segment)','YM - Investment Always'],
+[10,126730,'Valletta','The Oriental Garden Express','Free Base Delivery',0,100.0,'All',0,20.0,'locations','Duncan Calleja',192,7698,40.09,'Mid-market (AM Segment)','MS - Manual Provider Promotion'],
+[10,142692,'Valletta','Don Pizza Bar','Free Base Delivery',0,100.0,'All',0,0,'locations','Gulcin Erguven',528,13004,24.63,'Mid-market (AM Segment)','Contractual deal'],
+[10,162500,'Valletta','COOPERS Chicken Zebbug','Free Delivery (capped)',0,0.0,'All',1.0,0,'obligations-commitments','Gulcin Erguven',1844,53894,29.23,'Mid-market (AM Segment)','GE - Contractual Deal'],
+[10,152895,'Valletta','CFC Crispy Flavoured Chicken Paola','Free Base Delivery',0,50.0,'All',0,25.0,'profit-generator','Alena Tokareva',1124,31686,28.19,'Enterprise (AM Segment)','AC - always 50% cost share (FD up to €2/FBD: MOV€18 - €20) - Contractual terms'],
+[10,153381,'Valletta','CFC Crispy Flavoured Chicken Paceville','Free Base Delivery',0,50.0,'All',0,25.0,'profit-generator','Alena Tokareva',838,21616,25.79,'Enterprise (AM Segment)','AC - always 50% cost share (FD up to €2/FBD: MOV€18 - €20) - Contractual terms'],
+[10,6688,'Valletta','Burger King Paceville','Free Base Delivery',0,50.0,'New',0,30.0,'obligations-commitments','Alena Tokareva',10,251,25.1,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,6687,'Valletta','Burger King Sliema','Free Base Delivery',0,50.0,'New',0,30.0,'obligations-commitments','Alena Tokareva',1007,25889,25.71,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,6689,'Valletta','Burger King Qormi','Free Base Delivery',0,50.0,'New',0,30.0,'obligations-commitments','Alena Tokareva',2538,69600,27.42,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,53990,'Valletta','Burger King Campus Hub','Free Base Delivery',0,50.0,'New',0,30.0,'obligations-commitments','Alena Tokareva',2006,54015,26.93,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,100127,'Valletta','Beef Buds Malta','Free Base Delivery',0,100.0,'All',0,0,'locations','Duncan Calleja',565,17220,30.48,'SMB (AM Segment)','YM Always'],
+[10,1257,'Valletta','Chick\'n Bites','Free Full Delivery',0,100.0,'All',0,0,'locations','Yousef Moungad',3974,121289,30.52,'Mid-market (AM Segment)','YM Always'],
+[10,1266,'Valletta','Chick King the Original - Zabbar','Menu Discount',30.0,100.0,'All',0,0,'locations','Yousef Moungad',526,15692,29.83,'Mid-market (AM Segment)','YM Always'],
+[10,1266,'Valletta','Chick King the Original - Zabbar','Free Base Delivery',0,100.0,'All',0,0,'locations','Yousef Moungad',526,15692,29.83,'Mid-market (AM Segment)','YM Always'],
+[10,1736,'Gozo','SFC - Southern Fried Chicken Gozo','Free Delivery (capped)',0,100.0,'All',2.0,0,'locations','Alena Tokareva',1053,30893,29.34,'Enterprise (AM Segment)','SFC Gozo request'],
+[10,110894,'Valletta','Wicked Paul Qormi','Free Base Delivery',0,100.0,'All',0,0,'locations','Yousef Moungad',336,10129,30.15,'Mid-market (AM Segment)','YM Always'],
+[10,97037,'Valletta','Fat Boy Chicken Naxxar','Free Base Delivery',0,100.0,'All',0,0,'locations','Yousef Moungad',70,1795,25.64,'Mid-market (AM Segment)','YM Always'],
+[10,10026,'Valletta','Chubbz Naxxar','Free Base Delivery',0,0.0,'All',0,0,'obligations-commitments','Yousef Moungad',670,21107,31.5,'Mid-market (AM Segment)','YM Always'],
+[10,51230,'Valletta','Chubbz Sliema','Free Base Delivery',0,0.0,'All',0,0,'obligations-commitments','Yousef Moungad',1119,31235,27.91,'Mid-market (AM Segment)','YM Always'],
+[10,86155,'Valletta','Chubbz St.Pauls Bay','Free Base Delivery',0,0.0,'All',0,0,'obligations-commitments','Yousef Moungad',347,10854,31.28,'Mid-market (AM Segment)','YM Always'],
+[10,71650,'Valletta','Chubbz Zejtun','Free Base Delivery',0,0.0,'All',0,0,'obligations-commitments','Yousef Moungad',314,10742,34.21,'Mid-market (AM Segment)','YM Always'],
+[10,125182,'Valletta','Chubbz Qormi','Free Base Delivery',0,0.0,'All',0,0,'obligations-commitments','Yousef Moungad',230,7636,33.2,'Mid-market (AM Segment)','YM Always'],
+[10,6435,'Valletta','SFC - Southern Fried Chicken Zabbar','Free Base Delivery',0,100.0,'All',0,0,'locations','Alena Tokareva',3964,112867,28.47,'Enterprise (AM Segment)','Manual Delivery Promo'],
+[10,6436,'Valletta','SFC - Southern Fried Chicken Qormi','Free Base Delivery',0,100.0,'All',0,0,'locations','Alena Tokareva',1230,35901,29.19,'Enterprise (AM Segment)','Manual Delivery Promo'],
+[10,6438,'Valletta','SFC - Southern Fried Chicken Mosta','Free Base Delivery',0,100.0,'All',0,0,'locations','Alena Tokareva',1208,34060,28.2,'Enterprise (AM Segment)','Manual Delivery Promo'],
+[10,6437,'Valletta','SFC - Southern Fried Chicken B\'kara','Free Base Delivery',0,100.0,'All',0,0,'locations','Alena Tokareva',1564,44392,28.38,'Enterprise (AM Segment)','Manual Delivery Promo'],
+[10,60783,'Valletta','SFC - Southern Fried Chicken Qawra','Free Base Delivery',0,100.0,'All',0,0,'locations','Alena Tokareva',1069,28897,27.03,'Enterprise (AM Segment)','Manual Delivery Promo'],
+[10,90014,'Valletta','SFC - Southern Fried Chicken Luqa','Free Base Delivery',0,100.0,'All',0,0,'locations','Alena Tokareva',1089,31410,28.84,'Enterprise (AM Segment)','Manual Delivery Promo'],
+[10,99447,'Valletta','Saigon MIA','Free Base Delivery',0,100.0,'All',0,0,'locations','Rico Spagnol',417,12497,29.97,'Mid-market (AM Segment)','Contractual deal: Always Free Base Delivery'],
+[10,166223,'Valletta','Trattoria 102','Menu Discount',10.0,100.0,'All',0,30.0,'locations','Rico Spagnol',11,200,18.18,'SMB (AM Segment)','Provider Campaign'],
+[10,166223,'Valletta','Trattoria 102','Menu Discount',15.0,100.0,'All',0,40.0,'locations','Rico Spagnol',11,200,18.18,'SMB (AM Segment)','Provider Campaign'],
+[10,97037,'Valletta','Fat Boy Chicken Naxxar','Menu Discount',10.0,100.0,'All',0,0,'locations','Yousef Moungad',70,1795,25.64,'Mid-market (AM Segment)','YM (no deadline, until further notice)'],
+[10,51002,'Valletta','Billy Boyz Naxxar','Free Base Delivery',0,0.0,'All',0,0,'obligations-commitments','Yousef Moungad',1011,38908,38.48,'Mid-market (AM Segment)','FBD included'],
+[10,100695,'Valletta','Billy Boyz Hamrun','Free Base Delivery',0,0.0,'All',0,0,'obligations-commitments','Yousef Moungad',781,28418,36.39,'Mid-market (AM Segment)','FBD included'],
+[10,177015,'Valletta','McDonald\'s ® Mriehel','Free Base Delivery',0,50.0,'New',0,30.0,'profit-generator','Alena Tokareva',7260,198900,27.4,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,177015,'Valletta','McDonald\'s ® Mriehel','Free Delivery (capped)',0,50.0,'All',1.0,30.0,'profit-generator','Alena Tokareva',7260,198900,27.4,'Enterprise (AM Segment)','IC - Always Free Delivery Deal'],
+[10,170396,'Valletta','Chubbz Pizza Qormi','Free Base Delivery',0,0.0,'All',0,0,'obligations-commitments','Yousef Moungad',467,14917,31.94,'Mid-market (AM Segment)','YM Always'],
+[10,1736,'Gozo','SFC - Southern Fried Chicken Gozo','Free Full Delivery',0,100.0,'All',0,20.0,'locations','Alena Tokareva',1053,30893,29.34,'Enterprise (AM Segment)','Provider Funded'],
+[10,81762,'Valletta','Panku Asian Street Food Mriehel','Menu Discount',20.0,100.0,'All',0,0,'locations','Rico Spagnol',1294,51151,39.53,'Mid-market (AM Segment)','Provider Campaigns'],
+[10,81762,'Valletta','Panku Asian Street Food Mriehel','Menu Discount',25.0,100.0,'All',0,0,'locations','Rico Spagnol',1294,51151,39.53,'Mid-market (AM Segment)','Provider Campaigns'],
+[10,81762,'Valletta','Panku Asian Street Food Mriehel','Free Delivery (capped)',0,100.0,'All',6.0,15.0,'locations','Rico Spagnol',1294,51151,39.53,'Mid-market (AM Segment)','Provider Campaigns'],
+[10,130179,'Valletta','Arnold\'s Wiener','Menu Discount',30.0,100.0,'All',0,0,'locations','Rico Spagnol',249,7169,28.79,'SMB (AM Segment)','Provider Campaign'],
+[10,176521,'Valletta','My Dream Taste','Free Delivery (capped)',0,100.0,'All',2.0,0,'locations','Rico Spagnol',462,15115,32.72,'SMB (AM Segment)','RS Provider Campaign'],
+[10,90255,'Valletta','Queens Pastizzerria','Menu Discount',10.0,50.0,'All',0,0,'obligations-commitments','Yousef Moungad',459,9628,20.98,'Mid-market (AM Segment)','YM Always'],
+[10,175387,'Valletta','Pizza Just Italy','Menu Discount',40.0,100.0,'All',0,0,'locations','Rico Spagnol',0,0,0,'SMB (AM Segment)','RS Untill End of Feb'],
+[10,76646,'Valletta','NOVI Burger Marsaskala','Free Base Delivery',0,0.0,'All',0,0,'obligations-commitments','Duncan Calleja',433,11255,25.99,'Mid-market (AM Segment)','DC - investments'],
+[10,99493,'Valletta','NOVI Burger Gzira','Free Base Delivery',0,0.0,'All',0,0,'obligations-commitments','Duncan Calleja',1611,42664,26.48,'Mid-market (AM Segment)','DC - investments'],
+[10,99499,'Valletta','NOVI Burger Sliema','Free Base Delivery',0,0.0,'All',0,0,'obligations-commitments','Duncan Calleja',607,15904,26.2,'Mid-market (AM Segment)','DC - investments'],
+[10,188158,'Valletta','ASIAN GARDEN BUGIBBA','Menu Discount',10.0,0.0,'All',0,0,'sales-benefit','Rico Spagnol',57,2260,39.65,'SMB (AM Segment)','Manual ELC'],
+[10,188158,'Valletta','ASIAN GARDEN BUGIBBA','Free Base Delivery',0,0.0,'All',0,0,'sales-benefit','Rico Spagnol',57,2260,39.65,'SMB (AM Segment)','Manual ELC'],
+[10,62333,'Valletta','Panina Fgura','Item Discount',50.0,0.0,'All',0,0,'obligations-commitments','Mariem Slimen',3326,75230,22.62,'Mid-market (AM Segment)','MS - investments wk7 and 8 - 9'],
+[10,73795,'Valletta','Panina St. Venera','Item Discount',50.0,0.0,'All',0,0,'obligations-commitments','Mariem Slimen',2910,64515,22.17,'Mid-market (AM Segment)','MS - investments wk7 and 8 - 9'],
+[10,119035,'Valletta','Hungry Horse','Item Discount',20.0,0.0,'All',0,0,'obligations-commitments','Rico Spagnol',356,10617,29.82,'SMB (AM Segment)','RS WK10 Commission Error'],
+[10,87179,'Valletta','Aleppo Food','Menu Discount',15.0,100.0,'All',0,20.0,'locations','Duncan Calleja',276,5851,21.2,'SMB (AM Segment)','1 month as of wk 9'],
+[10,190764,'Valletta','Wings Spot','Menu Discount',20.0,0.0,'All',0,0,'sales-benefit','Yousef Moungad',10,231,23.1,'Mid-market (AM Segment)','ELC'],
+[10,190764,'Valletta','Wings Spot','Free Base Delivery',0,0.0,'All',0,0,'sales-benefit','Yousef Moungad',10,231,23.1,'Mid-market (AM Segment)','ELC'],
+[10,1415,'Valletta','McDonald\'s ® St Julian’s','Item Discount',20.0,0.0,'All',0,0,'obligations-commitments','Alena Tokareva',5584,127457,22.83,'Enterprise (AM Segment)',''],
+[10,93367,'Valletta','Japanese Street Food by Zen to Go','Item Discount',30.0,0.0,'All',0,0,'commission-increase','Gulcin Erguven',57,1709,29.98,'Mid-market (AM Segment)','Commission increase benefit'],
+[10,59483,'Valletta','Zen to Go Express & Japanese Street Food- Carob Tree','Item Discount',30.0,0.0,'All',0,0,'commission-increase','Gulcin Erguven',17,398,23.41,'Mid-market (AM Segment)','Commission increase benefit'],
+[10,79742,'Valletta','Zen To Go Sushi & More Marsascala','Item Discount',30.0,0.0,'All',0,0,'commission-increase','Gulcin Erguven',438,19527,44.58,'Mid-market (AM Segment)','Commission increase benefit'],
+[10,79739,'Valletta','Zen To Go Sushi & More Pavi','Item Discount',30.0,0.0,'All',0,0,'commission-increase','Gulcin Erguven',363,15744,43.37,'Mid-market (AM Segment)','Commission increase benefit'],
+[10,79736,'Valletta','Zen To Go Sushi PAMA & Japanese Street Food','Item Discount',30.0,0.0,'All',0,0,'commission-increase','Gulcin Erguven',755,34956,46.3,'Mid-market (AM Segment)','Commission increase benefit'],
+[10,79733,'Valletta','Zen To Go Sushi & More Ta\' Xbiex','Item Discount',30.0,0.0,'All',0,0,'commission-increase','Gulcin Erguven',601,26377,43.89,'Mid-market (AM Segment)','Commission increase benefit'],
+[10,79729,'Valletta','Zen To Go Sushi SkyParks & Japanese Street Food','Item Discount',30.0,0.0,'All',0,0,'commission-increase','Gulcin Erguven',420,19638,46.76,'Mid-market (AM Segment)','Commission increase benefit'],
+[10,79728,'Valletta','Zen To Go Sushi & More St.Julian\'s','Item Discount',30.0,0.0,'All',0,0,'commission-increase','Gulcin Erguven',501,22625,45.16,'Mid-market (AM Segment)','Commission increase benefit'],
+[10,176491,'Valletta','Maison de Fleurs','Menu Discount',10.0,100.0,'All',0,0,'provider_campaign_marketing','Fiona Borg',90,2746,30.51,'SMB (AM Segment)','Women\'s Day campaign'],
+[10,120574,'Valletta','The Floral Designer David Grech','Menu Discount',10.0,100.0,'All',0,0,'provider_campaign_marketing','Fiona Borg',162,5950,36.73,'SMB (AM Segment)','Women\'s Day campaign'],
+[10,87699,'Valletta','Green Sleeves Florists','Menu Discount',10.0,100.0,'All',0,0,'provider_campaign_marketing','Fiona Borg',68,2516,37.0,'SMB (AM Segment)','Women\'s Day campaign'],
+[10,145222,'Valletta','Top Supplements Malta','Menu Discount',10.0,100.0,'All',0,0,'provider_campaign_marketing','Fiona Borg',20,1143,57.15,'SMB (AM Segment)','Women\'s Day campaign'],
+[10,64197,'Valletta','Shop4all Stationery, Toys & Gifts.','Menu Discount',10.0,100.0,'All',0,0,'provider_campaign_marketing','Fiona Borg',44,1088,24.73,'SMB (AM Segment)','Women\'s Day campaign'],
+[10,179460,'Valletta','DEN Shopping','Menu Discount',10.0,100.0,'All',0,0,'provider_campaign_marketing','Unknown',0,0,0,'','Women\'s Day campaign'],
+[10,97649,'Valletta','Lusty Love','Menu Discount',15.0,100.0,'All',0,0,'provider_campaign_marketing','Fiona Borg',163,6922,42.47,'SMB (AM Segment)','Women\'s Day campaign'],
+[10,175841,'Valletta','MarCheri Collections','Menu Discount',10.0,100.0,'All',0,0,'provider_campaign_marketing','Fiona Borg',5,150,30.0,'SMB (AM Segment)','Women\'s Day campaign'],
+[10,34956,'Valletta','Liquor Store V&V Gzira','Menu Discount',10.0,100.0,'All',0,0,'provider_campaign_marketing','Fiona Borg',160,5386,33.66,'SMB (AM Segment)','Women\'s Day campaign'],
+[10,57266,'Valletta','Liquor Store V&S','Menu Discount',10.0,100.0,'All',0,0,'provider_campaign_marketing','Fiona Borg',56,1690,30.18,'SMB (AM Segment)','Women\'s Day campaign'],
+[10,76407,'Valletta','Toysfourplay.com','Menu Discount',10.0,100.0,'All',0,0,'provider_campaign_marketing','Fiona Borg',13,507,39.0,'SMB (AM Segment)','Women\'s Day campaign'],
+[10,72369,'Valletta','Fun4Malta','Menu Discount',10.0,100.0,'All',0,0,'provider_campaign_marketing','Fiona Borg',94,2880,30.64,'SMB (AM Segment)','Women\'s Day campaign'],
+[10,179395,'Valletta','House of Pampas by H&S','Menu Discount',10.0,100.0,'All',0,0,'provider_campaign_marketing','Fiona Borg',19,731,38.47,'SMB (AM Segment)','Women\'s Day campaign'],
+[10,38823,'Valletta','Anurakti Healthy Hub Qawra','Menu Discount',10.0,100.0,'All',0,0,'provider_campaign_marketing','Fiona Borg',25,600,24.0,'SMB (AM Segment)','Women\'s Day campaign'],
+[10,104031,'Valletta','Anurakti Healthy Hub Msida','Menu Discount',10.0,100.0,'All',0,0,'provider_campaign_marketing','Fiona Borg',84,2013,23.96,'SMB (AM Segment)','Women\'s Day campaign'],
+[10,34666,'Valletta','Saigon Gzira','Menu Discount',20.0,50.0,'All',0,0,'obligations-commitments','Rico Spagnol',980,26172,26.71,'Mid-market (AM Segment)','RS WK10 Investement'],
+[10,34666,'Valletta','Saigon Gzira','Item Discount',40.0,50.0,'All',0,0,'obligations-commitments','Rico Spagnol',980,26172,26.71,'Mid-market (AM Segment)','RS WK10 Investement'],
+[10,64192,'Valletta','Saigon Birkirkara','Menu Discount',20.0,50.0,'All',0,0,'obligations-commitments','Rico Spagnol',678,18688,27.56,'Mid-market (AM Segment)','RS WK10 Investement'],
+[10,64192,'Valletta','Saigon Birkirkara','Item Discount',40.0,50.0,'All',0,0,'obligations-commitments','Rico Spagnol',678,18688,27.56,'Mid-market (AM Segment)','RS WK10 Investement'],
+[10,99447,'Valletta','Saigon MIA','Menu Discount',20.0,50.0,'All',0,0,'obligations-commitments','Rico Spagnol',417,12497,29.97,'Mid-market (AM Segment)','RS WK10 Investement'],
+[10,99447,'Valletta','Saigon MIA','Item Discount',40.0,50.0,'All',0,0,'obligations-commitments','Rico Spagnol',417,12497,29.97,'Mid-market (AM Segment)','RS WK10 Investement'],
+[10,72318,'Valletta','Fuel & Co Birkirkara','Item Discount',50.0,25.0,'All',0,0,'obligations-commitments','Yousef Moungad',1644,44312,26.95,'Mid-market (AM Segment)','YM WK 10'],
+[10,105628,'Valletta','Norita’s','Item Discount',50.0,25.0,'All',0,0,'obligations-commitments','Yousef Moungad',966,31205,32.3,'Mid-market (AM Segment)','YM WK 10'],
+[10,92551,'Valletta','Osaka Sushi Naxxar','Item Discount',50.0,25.0,'All',0,0,'obligations-commitments','Yousef Moungad',707,30672,43.38,'Mid-market (AM Segment)','YM WK 10'],
+[10,134236,'Valletta','Osaka Sushi & Grill Msida','Item Discount',50.0,25.0,'All',0,0,'obligations-commitments','Yousef Moungad',693,27461,39.63,'Mid-market (AM Segment)','YM WK 10'],
+[9,68680,'Valletta','Mr Smash Naxxar','Free Base Delivery',0,100.0,'All',0,0,'locations','Yousef Moungad',136,3698,27.19,'Mid-market (AM Segment)','YM Always'],
+[9,70437,'Valletta','Mr Smash Sliema','Free Base Delivery',0,100.0,'All',0,0,'locations','Yousef Moungad',422,11290,26.75,'Mid-market (AM Segment)','YM Always'],
+[9,71647,'Valletta','Mr Smash Zejtun','Free Base Delivery',0,100.0,'All',0,0,'locations','Yousef Moungad',83,2543,30.64,'Mid-market (AM Segment)','YM Always'],
+[9,86156,'Valletta','Mr Smash St.Pauls Bay','Free Base Delivery',0,100.0,'All',0,0,'locations','Yousef Moungad',102,3138,30.76,'Mid-market (AM Segment)','YM Always'],
+[9,125183,'Valletta','Mr Smash Qormi','Free Base Delivery',0,100.0,'All',0,0,'locations','Yousef Moungad',58,1457,25.12,'Mid-market (AM Segment)','YM Always'],
+[10,143065,'Gozo','Buzun Kiosk','Menu Discount',20.0,50.0,'All',0,0,'obligations-commitments','Rico Spagnol',143,4613,32.26,'SMB (AM Segment)','RS WK10 Investement'],
+[10,68680,'Valletta','Mr Smash Naxxar','Menu Discount',25.0,75.0,'All',0,0,'provider_campaign_marketing','Yousef Moungad',136,3698,27.19,'Mid-market (AM Segment)','Women\'s Day campaign'],
+[10,70437,'Valletta','Mr Smash Sliema','Menu Discount',25.0,75.0,'All',0,0,'provider_campaign_marketing','Yousef Moungad',422,11290,26.75,'Mid-market (AM Segment)','Women\'s Day campaign'],
+[10,71647,'Valletta','Mr Smash Zejtun','Menu Discount',25.0,75.0,'All',0,0,'provider_campaign_marketing','Yousef Moungad',83,2543,30.64,'Mid-market (AM Segment)','Women\'s Day campaign'],
+[10,86156,'Valletta','Mr Smash St.Pauls Bay','Menu Discount',25.0,75.0,'All',0,0,'provider_campaign_marketing','Yousef Moungad',102,3138,30.76,'Mid-market (AM Segment)','Women\'s Day campaign'],
+[10,125183,'Valletta','Mr Smash Qormi','Menu Discount',25.0,75.0,'All',0,0,'provider_campaign_marketing','Yousef Moungad',58,1457,25.12,'Mid-market (AM Segment)','Women\'s Day campaign'],
+[10,10026,'Valletta','Chubbz Naxxar','Menu Discount',25.0,75.0,'All',0,0,'provider_campaign_marketing','Yousef Moungad',670,21107,31.5,'Mid-market (AM Segment)','Women\'s Day campaign'],
+[10,51230,'Valletta','Chubbz Sliema','Menu Discount',25.0,75.0,'All',0,0,'provider_campaign_marketing','Yousef Moungad',1119,31235,27.91,'Mid-market (AM Segment)','Women\'s Day campaign'],
+[10,86155,'Valletta','Chubbz St.Pauls Bay','Menu Discount',25.0,75.0,'All',0,0,'provider_campaign_marketing','Yousef Moungad',347,10854,31.28,'Mid-market (AM Segment)','Women\'s Day campaign'],
+[10,71650,'Valletta','Chubbz Zejtun','Menu Discount',25.0,75.0,'All',0,0,'provider_campaign_marketing','Yousef Moungad',314,10742,34.21,'Mid-market (AM Segment)','Women\'s Day campaign'],
+[10,125182,'Valletta','Chubbz Qormi','Menu Discount',25.0,75.0,'All',0,0,'provider_campaign_marketing','Yousef Moungad',230,7636,33.2,'Mid-market (AM Segment)','Women\'s Day campaign'],
+[10,110894,'Valletta','Wicked Paul Qormi','Menu Discount',25.0,75.0,'All',0,0,'provider_campaign_marketing','Yousef Moungad',336,10129,30.15,'Mid-market (AM Segment)','Women\'s Day campaign'],
+[10,170396,'Valletta','Chubbz Pizza Qormi','Menu Discount',25.0,75.0,'',0,0,'provider_campaign_marketing','Yousef Moungad',467,14917,31.94,'Mid-market (AM Segment)','Women\'s Day campaign']
+];
+
+
+initFilters();
+refresh();
+</script>
+</body>
+</html>
