@@ -399,6 +399,15 @@
           </div>
         </div>
       </div>
+      <div id="itemShareRow" style="display:none;">
+        <div class="field">
+          <label>Item % of Basket (discounted items' share of order)</label>
+          <div class="range-display">
+            <input type="range" id="itemSharePct" min="5" max="100" value="30" step="5" oninput="syncRange('itemSharePct','itemSharePctVal','%'); calculate()">
+            <span class="range-val" id="itemSharePctVal">30%</span>
+          </div>
+        </div>
+      </div>
       <div id="fdRow" style="display:none;">
         <div class="field">
           <label>Free Delivery Cap</label>
@@ -2805,6 +2814,7 @@ function onTypeChange() {
   const t = document.getElementById('discountType').value;
   document.getElementById('discountRow').style.display = t === 'free_delivery' ? 'none' : 'block';
   document.getElementById('fdRow').style.display = t === 'free_delivery' ? 'block' : 'none';
+  document.getElementById('itemShareRow').style.display = t === 'item_discount' ? 'block' : 'none';
 }
 
 function fmt(n) { return '€' + Math.round(n).toLocaleString(); }
@@ -2852,10 +2862,11 @@ function movQualifyingRate(aov, mov, cv) {
   return { rate, condMean };
 }
 
-function est(orders, aov, disc, type, share, fdCap, mov, cv) {
+function est(orders, aov, disc, type, share, fdCap, mov, cv, itemShare) {
   const gmv = orders * aov;
   mov = mov || 0;
   cv = cv || ORDER_VALUE_CV;
+  itemShare = itemShare || 1;
   let uplift, redemption, total, dpo;
 
   const { rate: qualifyingRate, condMean: effectiveAov } =
@@ -2874,7 +2885,8 @@ function est(orders, aov, disc, type, share, fdCap, mov, cv) {
     redemption = REDEMPTION[type];
     const uo = orders * (1 + uplift);
     const dOrders = uo * redemption * qualifyingRate;
-    dpo = effectiveAov * (disc / 100);
+    const basketFraction = type === 'item_discount' ? itemShare : 1;
+    dpo = effectiveAov * basketFraction * (disc / 100);
     total = dOrders * dpo;
   }
 
@@ -2882,7 +2894,7 @@ function est(orders, aov, disc, type, share, fdCap, mov, cv) {
   return {
     gmv, uplift, upliftedOrders: uo, upliftOrders: uo - orders,
     redemption, dpo, total, provShare: total * share, boltShare: total * (1 - share), share,
-    mov, qualifyingRate, effectiveAov, cv
+    mov, qualifyingRate, effectiveAov, cv, itemShare
   };
 }
 
@@ -2912,10 +2924,11 @@ function calculate() {
   const weeks = parseInt(document.getElementById('duration').value);
   const fdCap = parseFloat(document.getElementById('fdCap').value) || 3.5;
   const mov = parseFloat(document.getElementById('movValue').value) || 0;
+  const itemShare = parseInt(document.getElementById('itemSharePct').value) / 100;
 
   if (orders <= 0 || aov <= 0) return;
 
-  const r = est(orders, aov, disc, type, share, fdCap, mov, provCV);
+  const r = est(orders, aov, disc, type, share, fdCap, mov, provCV, itemShare);
   const pw = r.provShare, bw = r.boltShare, tw = r.total;
   const pt = pw * weeks, bt = bw * weeks, gt = tw * weeks;
 
@@ -2924,7 +2937,7 @@ function calculate() {
   document.getElementById('providerIdDisplay').textContent = pid;
 
   const tl = type === 'menu_discount' ? `${disc}% Menu Discount` :
-             type === 'item_discount' ? `${disc}% Item Discount` :
+             type === 'item_discount' ? `${disc}% Item Discount (${Math.round(itemShare*100)}% of basket)` :
              `Free Delivery (cap €${fdCap})`;
   const sl = share === 1 ? '100% provider-funded' :
              share === 0 ? '100% Bolt-funded' :
@@ -2974,6 +2987,7 @@ function calculate() {
     <div class="breakdown-item"><span class="bi-label">Orders During Campaign / week</span><span class="bi-value">${Math.round(r.upliftedOrders).toLocaleString()}</span></div>
     <div class="breakdown-item"><span class="bi-label">Redemption Rate</span><span class="bi-value">${pct(r.redemption)}</span></div>${movBreakdown}
     <div class="breakdown-item"><span class="bi-label">Orders With Discount Applied</span><span class="bi-value">${Math.round(r.upliftedOrders * r.redemption * r.qualifyingRate).toLocaleString()}</span></div>
+    ${type === 'item_discount' ? `<div class="breakdown-item"><span class="bi-label">Discounted Items' Share of Basket</span><span class="bi-value">${Math.round(itemShare*100)}% → effective discount ${pct(disc/100 * itemShare)} on basket</span></div>` : ''}
     <div class="breakdown-item"><span class="bi-label">Avg. Discount Per Order</span><span class="bi-value">${fmtDec(r.dpo)}</span></div>
     <div class="divider"></div>
     <div class="breakdown-item"><span class="bi-label"><strong>Total Discount Cost / week</strong></span><span class="bi-value total-val"><strong>${fmt(tw)}</strong></span></div>
@@ -2996,7 +3010,7 @@ function calculate() {
 
   if (type === 'free_delivery') {
     [2,2.5,3,3.5,4,5].forEach(c => {
-      const s = est(orders, aov, disc, type, share, c, mov, provCV);
+      const s = est(orders, aov, disc, type, share, c, mov, provCV, itemShare);
       scHtml += `<div class="scenario-row" style="${c===fdCap?'color:var(--accent);font-weight:600':''}">
         <span>€${c.toFixed(1)}</span><span class="num">+${pct(s.uplift)}</span>
         <span class="num">${fmt(s.total)}</span><span class="num">${fmt(s.provShare)}</span>
@@ -3004,7 +3018,7 @@ function calculate() {
     });
   } else {
     [5,10,15,20,25,30,40,50].forEach(d => {
-      const s = est(orders, aov, d, type, share, fdCap, mov, provCV);
+      const s = est(orders, aov, d, type, share, fdCap, mov, provCV, itemShare);
       scHtml += `<div class="scenario-row" style="${d===disc?'color:var(--accent);font-weight:600':''}">
         <span>${d}%</span><span class="num">+${pct(s.uplift)}</span>
         <span class="num">${fmt(s.total)}</span><span class="num">${fmt(s.provShare)}</span>
@@ -3034,7 +3048,7 @@ function calculate() {
 
   ['enterprise','mm','smb','stores'].forEach(sk => {
     const sb = SEGMENT_BENCHMARKS[sk];
-    const sr = est(sb.avgOrders, sb.avgAOV, disc, type, share, fdCap, mov, provCV);
+    const sr = est(sb.avgOrders, sb.avgAOV, disc, type, share, fdCap, mov, provCV, itemShare);
     const isCurrent = sk === segment;
     segHtml += `<div class="scenario-row" style="${isCurrent ? 'color:var(--bolt);' : ''}">
       <span>${segNames[sk]} avg${isCurrent ? ' (selected)' : ''}</span>
