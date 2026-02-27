@@ -3576,7 +3576,7 @@ function renderSnapshots() {
     el.innerHTML = '<div class="sp-empty">No snapshots yet. Click "Snapshot Now" to save the current estimates, or they\'ll be saved automatically every Sunday.</div>';
     return;
   }
-  let html = '<table><thead><tr><th>Date</th><th>Week</th><th>Campaigns</th><th>Est. Total/wk</th><th>Est. Bolt/wk</th><th>Est. Provider/wk</th><th></th></tr></thead><tbody>';
+  let html = '<table><thead><tr><th>Date</th><th>Week</th><th>Campaigns</th><th>Est. Total/wk</th><th>Est. Bolt/wk</th><th>Est. Provider/wk</th><th></th><th></th></tr></thead><tbody>';
   snaps.forEach(s => {
     html += `<tr>
       <td>${s.date}</td>
@@ -3585,11 +3585,80 @@ function renderSnapshots() {
       <td>€${s.totals.total.toLocaleString()}</td>
       <td style="color:var(--bolt)">€${s.totals.bolt.toLocaleString()}</td>
       <td style="color:var(--provider)">€${s.totals.prov.toLocaleString()}</td>
+      <td><button onclick="toggleSnapDetail(${s.id})" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap" title="View providers">▸ Providers</button></td>
       <td><button onclick="deleteSnapshot(${s.id})" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px" title="Delete">✕</button></td>
     </tr>`;
+    html += `<tr id="snapDetail_${s.id}" style="display:none"><td colspan="8" style="padding:0"><div id="snapDetailInner_${s.id}"></div></td></tr>`;
   });
   html += '</tbody></table>';
   el.innerHTML = html;
+}
+
+function toggleSnapDetail(id) {
+  const row = document.getElementById('snapDetail_' + id);
+  const inner = document.getElementById('snapDetailInner_' + id);
+  const btn = row.previousElementSibling.querySelector('button');
+  const visible = row.style.display !== 'none';
+  row.style.display = visible ? 'none' : '';
+  btn.textContent = visible ? '▸ Providers' : '▾ Providers';
+  if (!visible && !inner.dataset.loaded) {
+    inner.dataset.loaded = '1';
+    renderSnapDetail(id, inner);
+  }
+}
+
+function renderSnapDetail(id, container) {
+  const snaps = getSnapshots();
+  const snap = snaps.find(s => s.id === id);
+  if (!snap || !snap.campaigns) { container.innerHTML = '<p style="padding:8px;color:var(--text-dim)">No campaign data in this snapshot.</p>'; return; }
+
+  const byAM = {};
+  snap.campaigns.forEach(c => {
+    if (!byAM[c.am]) byAM[c.am] = [];
+    byAM[c.am].push(c);
+  });
+
+  let html = '<div style="padding:12px 16px;max-height:400px;overflow-y:auto;background:var(--surface2);border-radius:0 0 8px 8px">';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:12px">';
+  html += '<thead><tr style="position:sticky;top:0;background:var(--surface2);z-index:1">';
+  html += '<th style="text-align:left;padding:6px 8px;border-bottom:2px solid var(--border)">AM</th>';
+  html += '<th style="text-align:left;padding:6px 8px;border-bottom:2px solid var(--border)">Provider</th>';
+  html += '<th style="text-align:left;padding:6px 8px;border-bottom:2px solid var(--border)">Type</th>';
+  html += '<th style="text-align:right;padding:6px 8px;border-bottom:2px solid var(--border)">Disc.</th>';
+  html += '<th style="text-align:right;padding:6px 8px;border-bottom:2px solid var(--border)">Share</th>';
+  html += '<th style="text-align:right;padding:6px 8px;border-bottom:2px solid var(--border)">Est. Total/wk</th>';
+  html += '<th style="text-align:right;padding:6px 8px;border-bottom:2px solid var(--border);color:var(--bolt)">Bolt/wk</th>';
+  html += '<th style="text-align:right;padding:6px 8px;border-bottom:2px solid var(--border);color:var(--provider)">Provider/wk</th>';
+  html += '</tr></thead><tbody>';
+
+  const ams = Object.keys(byAM).sort();
+  ams.forEach(am => {
+    const camps = byAM[am];
+    const amTotal = camps.reduce((s, c) => s + c.estTotal, 0);
+    const amBolt = camps.reduce((s, c) => s + c.estBolt, 0);
+    const amProv = camps.reduce((s, c) => s + c.estProv, 0);
+    html += `<tr style="background:var(--surface);font-weight:600">
+      <td style="padding:6px 8px;border-bottom:1px solid var(--border)" colspan="5">${am} (${camps.length} campaigns)</td>
+      <td style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border)">€${amTotal.toLocaleString()}</td>
+      <td style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border);color:var(--bolt)">€${amBolt.toLocaleString()}</td>
+      <td style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border);color:var(--provider)">€${amProv.toLocaleString()}</td>
+    </tr>`;
+    camps.sort((a, b) => b.estTotal - a.estTotal).forEach(c => {
+      html += `<tr>
+        <td style="padding:4px 8px;border-bottom:1px solid var(--border);color:var(--text-dim)"></td>
+        <td style="padding:4px 8px;border-bottom:1px solid var(--border)">${c.pname} <span style="color:var(--text-dim);font-size:11px">(${c.pid})</span></td>
+        <td style="padding:4px 8px;border-bottom:1px solid var(--border)">${c.type}</td>
+        <td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border)">${c.discount}%</td>
+        <td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border)">${c.costShare}%</td>
+        <td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border)">€${c.estTotal.toLocaleString()}</td>
+        <td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border);color:var(--bolt)">€${c.estBolt.toLocaleString()}</td>
+        <td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border);color:var(--provider)">€${c.estProv.toLocaleString()}</td>
+      </tr>`;
+    });
+  });
+
+  html += '</tbody></table></div>';
+  container.innerHTML = html;
 }
 
 function deleteSnapshot(id) {
@@ -3683,7 +3752,10 @@ function uploadActuals(input) {
   input.value = '';
 }
 
-function renderComparison(actuals) {
+let _lastActuals = null;
+
+function renderComparison(actuals, snapId) {
+  _lastActuals = actuals;
   const snaps = getSnapshots();
   const wrap = document.getElementById('compareWrap');
 
@@ -3693,22 +3765,27 @@ function renderComparison(actuals) {
     return;
   }
 
-  const latestSnap = snaps[0];
-  let matched = 0, totalEst = 0, totalAct = 0, totalAbsErr = 0;
+  const snap = snapId ? snaps.find(s => s.id === snapId) : snaps[0];
+  if (!snap) return;
+
+  let matched = 0, totalEst = 0, totalAct = 0;
   const rows = [];
 
-  latestSnap.campaigns.forEach(c => {
+  snap.campaigns.forEach(c => {
     const act = actuals[String(c.pid)];
     if (!act || act.total === 0) return;
     matched++;
     const est = c.estTotal;
+    const estBolt = c.estBolt;
+    const estProv = c.estProv;
     const actual = Math.round(act.total);
+    const actBolt = Math.round(act.bolt);
+    const actProv = Math.round(act.prov);
     const diff = est - actual;
     const pctErr = actual > 0 ? ((diff / actual) * 100) : 0;
     totalEst += est;
     totalAct += actual;
-    totalAbsErr += Math.abs(diff);
-    rows.push({ ...c, actual, diff, pctErr });
+    rows.push({ ...c, actual, actBolt, actProv, diff, pctErr });
   });
 
   if (matched === 0) {
@@ -3721,39 +3798,83 @@ function renderComparison(actuals) {
   const bias = totalEst - totalAct;
   const biasPct = totalAct > 0 ? ((bias / totalAct) * 100) : 0;
 
-  let html = `<h4>Accuracy: Snapshot ${latestSnap.date} vs Actuals (${matched} providers matched)</h4>`;
+  let html = '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">';
+  html += `<h4 style="margin:0">Accuracy: Estimated vs Actual (${matched} providers matched)</h4>`;
+  html += '<select id="snapPicker" onchange="renderComparison(_lastActuals, parseInt(this.value))" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 10px;font-size:12px">';
+  snaps.forEach(s => {
+    html += `<option value="${s.id}" ${s.id === snap.id ? 'selected' : ''}>Snapshot ${s.date} (W${s.isoWeek})</option>`;
+  });
+  html += '</select></div>';
+
   html += '<div class="accuracy-cards">';
   html += `<div class="accuracy-card"><div class="ac-label">Total Estimated/wk</div><div class="ac-value">€${totalEst.toLocaleString()}</div></div>`;
-  html += `<div class="accuracy-card"><div class="ac-label">Total Actual/wk</div><div class="ac-value">€${totalAct.toLocaleString()}</div></div>`;
+  html += `<div class="accuracy-card"><div class="ac-label">Total Actual</div><div class="ac-value">€${totalAct.toLocaleString()}</div></div>`;
   const biasClass = Math.abs(biasPct) < 15 ? 'delta-ok' : biasPct > 0 ? 'delta-pos' : 'delta-neg';
   html += `<div class="accuracy-card"><div class="ac-label">Bias (Est − Actual)</div><div class="ac-value ${biasClass}">${bias >= 0 ? '+' : ''}€${bias.toLocaleString()} (${biasPct >= 0 ? '+' : ''}${biasPct.toFixed(1)}%)</div></div>`;
   const mapeClass = mape < 20 ? 'delta-ok' : mape < 40 ? 'delta-neg' : 'delta-pos';
   html += `<div class="accuracy-card"><div class="ac-label">MAPE (avg. error)</div><div class="ac-value ${mapeClass}">${mape.toFixed(1)}%</div></div>`;
   html += '</div>';
 
-  html += '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>';
-  html += '<th style="text-align:left;padding:6px 8px;border-bottom:2px solid var(--border)">Provider</th>';
-  html += '<th style="text-align:left;padding:6px 8px;border-bottom:2px solid var(--border)">Type</th>';
-  html += '<th style="text-align:right;padding:6px 8px;border-bottom:2px solid var(--border)">Estimated/wk</th>';
-  html += '<th style="text-align:right;padding:6px 8px;border-bottom:2px solid var(--border)">Actual</th>';
-  html += '<th style="text-align:right;padding:6px 8px;border-bottom:2px solid var(--border)">Diff</th>';
-  html += '<th style="text-align:right;padding:6px 8px;border-bottom:2px solid var(--border)">Error %</th>';
+  const byAM = {};
+  rows.forEach(r => {
+    if (!byAM[r.am]) byAM[r.am] = [];
+    byAM[r.am].push(r);
+  });
+
+  const thStyle = 'text-align:right;padding:6px 8px;border-bottom:2px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:var(--text-dim)';
+  const thStyleL = thStyle.replace('right', 'left');
+  html += `<div style="max-height:500px;overflow-y:auto;margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="position:sticky;top:0;background:var(--surface);z-index:1">`;
+  html += `<th style="${thStyleL}">AM / Provider</th>`;
+  html += `<th style="${thStyleL}">Type</th>`;
+  html += `<th style="${thStyle}">Est. Total</th>`;
+  html += `<th style="${thStyle}">Actual Total</th>`;
+  html += `<th style="${thStyle}">Est. Bolt</th>`;
+  html += `<th style="${thStyle}">Act. Bolt</th>`;
+  html += `<th style="${thStyle}">Est. Prov</th>`;
+  html += `<th style="${thStyle}">Act. Prov</th>`;
+  html += `<th style="${thStyle}">Diff</th>`;
+  html += `<th style="${thStyle}">Error</th>`;
   html += '</tr></thead><tbody>';
 
-  rows.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
-  rows.forEach(r => {
-    const errClass = Math.abs(r.pctErr) < 20 ? 'delta-ok' : r.pctErr > 0 ? 'delta-pos' : 'delta-neg';
-    html += `<tr>
-      <td style="padding:5px 8px;border-bottom:1px solid var(--border)">${r.pname} <span style="color:var(--text-dim)">(${r.pid})</span></td>
-      <td style="padding:5px 8px;border-bottom:1px solid var(--border)">${r.type}</td>
-      <td style="text-align:right;padding:5px 8px;border-bottom:1px solid var(--border)">€${r.estTotal.toLocaleString()}</td>
-      <td style="text-align:right;padding:5px 8px;border-bottom:1px solid var(--border)">€${r.actual.toLocaleString()}</td>
-      <td style="text-align:right;padding:5px 8px;border-bottom:1px solid var(--border)" class="${errClass}">${r.diff >= 0 ? '+' : ''}€${r.diff.toLocaleString()}</td>
-      <td style="text-align:right;padding:5px 8px;border-bottom:1px solid var(--border)" class="${errClass}">${r.pctErr >= 0 ? '+' : ''}${r.pctErr.toFixed(1)}%</td>
-    </tr>`;
-  });
-  html += '</tbody></table>';
+  const tdR = 'text-align:right;padding:5px 8px;border-bottom:1px solid var(--border)';
+  const tdL = tdR.replace('right', 'left');
 
+  Object.keys(byAM).sort().forEach(am => {
+    const amRows = byAM[am];
+    amRows.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+    const amEst = amRows.reduce((s, r) => s + r.estTotal, 0);
+    const amAct = amRows.reduce((s, r) => s + r.actual, 0);
+    const amDiff = amEst - amAct;
+    const amPctErr = amAct > 0 ? ((amDiff / amAct) * 100) : 0;
+    const amClass = Math.abs(amPctErr) < 15 ? 'delta-ok' : amPctErr > 0 ? 'delta-pos' : 'delta-neg';
+
+    html += `<tr style="background:var(--surface2);font-weight:600">
+      <td style="${tdL}" colspan="2">${am} (${amRows.length} providers)</td>
+      <td style="${tdR}">€${amEst.toLocaleString()}</td>
+      <td style="${tdR}">€${amAct.toLocaleString()}</td>
+      <td style="${tdR}" colspan="4"></td>
+      <td style="${tdR}" class="${amClass}">${amDiff >= 0 ? '+' : ''}€${amDiff.toLocaleString()}</td>
+      <td style="${tdR}" class="${amClass}">${amPctErr >= 0 ? '+' : ''}${amPctErr.toFixed(1)}%</td>
+    </tr>`;
+
+    amRows.forEach(r => {
+      const errClass = Math.abs(r.pctErr) < 20 ? 'delta-ok' : r.pctErr > 0 ? 'delta-pos' : 'delta-neg';
+      html += `<tr>
+        <td style="${tdL};padding-left:20px">${r.pname} <span style="color:var(--text-dim);font-size:11px">(${r.pid})</span></td>
+        <td style="${tdL}">${r.type} ${r.discount}%</td>
+        <td style="${tdR}">€${r.estTotal.toLocaleString()}</td>
+        <td style="${tdR}">€${r.actual.toLocaleString()}</td>
+        <td style="${tdR};color:var(--bolt)">€${r.estBolt.toLocaleString()}</td>
+        <td style="${tdR};color:var(--bolt)">€${r.actBolt.toLocaleString()}</td>
+        <td style="${tdR};color:var(--provider)">€${r.estProv.toLocaleString()}</td>
+        <td style="${tdR};color:var(--provider)">€${r.actProv.toLocaleString()}</td>
+        <td style="${tdR}" class="${errClass}">${r.diff >= 0 ? '+' : ''}€${r.diff.toLocaleString()}</td>
+        <td style="${tdR}" class="${errClass}">${r.pctErr >= 0 ? '+' : ''}${r.pctErr.toFixed(1)}%</td>
+      </tr>`;
+    });
+  });
+
+  html += '</tbody></table></div>';
   wrap.style.display = 'block';
   wrap.innerHTML = html;
 }
