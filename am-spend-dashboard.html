@@ -86,6 +86,43 @@
     padding: 1px 6px; border-radius: 10px; margin-left: 2px;
   }
 
+  .snapshot-panel {
+    margin: 24px 32px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px 24px;
+  }
+  .snapshot-panel .sp-header {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;
+    cursor: pointer; user-select: none;
+  }
+  .snapshot-panel .sp-header h3 { margin: 0; font-size: 15px; font-weight: 700; color: var(--text); }
+  .snapshot-panel .sp-header .sp-toggle { font-size: 12px; color: var(--text-dim); }
+  .sp-body { display: none; }
+  .sp-body.open { display: block; }
+  .sp-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+  .sp-actions button {
+    padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    cursor: pointer; border: 1px solid var(--border); background: var(--surface2); color: var(--text);
+    transition: all .15s;
+  }
+  .sp-actions button:hover { border-color: var(--accent); color: var(--accent); }
+  .sp-actions button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .sp-actions button.primary:hover { background: #e5a825; }
+  .sp-history { margin-top: 12px; }
+  .sp-history table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .sp-history th { text-align: left; padding: 8px 10px; border-bottom: 2px solid var(--border); color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+  .sp-history td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  .sp-history tr:hover td { background: var(--surface2); }
+  .sp-empty { color: var(--text-dim); font-size: 13px; padding: 12px 0; }
+  .sp-compare-wrap { margin-top: 16px; }
+  .sp-compare-wrap h4 { font-size: 13px; font-weight: 700; margin: 0 0 8px; color: var(--text); }
+  .accuracy-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .accuracy-card { background: var(--surface2); border-radius: 8px; padding: 12px; border: 1px solid var(--border); }
+  .accuracy-card .ac-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; }
+  .accuracy-card .ac-value { font-size: 20px; font-weight: 700; margin-top: 4px; }
+  .delta-pos { color: #e74c3c; }
+  .delta-neg { color: var(--accent); }
+  .delta-ok { color: #2ecc71; }
+
   .summary-cards {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 16px; padding: 24px 32px;
@@ -328,6 +365,25 @@
       </thead>
       <tbody id="tableBody"></tbody>
     </table>
+  </div>
+</div>
+
+<div class="snapshot-panel">
+  <div class="sp-header" onclick="document.getElementById('spBody').classList.toggle('open'); this.querySelector('.sp-toggle').textContent = document.getElementById('spBody').classList.contains('open') ? '▾ collapse' : '▸ expand'">
+    <h3>Estimate Snapshots &amp; Accuracy Tracker</h3>
+    <span class="sp-toggle">▸ expand</span>
+  </div>
+  <div class="sp-body" id="spBody">
+    <div class="sp-actions">
+      <button class="primary" onclick="takeSnapshot()">📸 Snapshot Now</button>
+      <button onclick="exportSnapshots()">⬇ Export All</button>
+      <button onclick="document.getElementById('importSnap').click()">⬆ Import</button>
+      <input type="file" id="importSnap" accept=".json" style="display:none" onchange="importSnapshots(this)">
+      <button onclick="document.getElementById('uploadActuals').click()">📊 Upload Actuals CSV</button>
+      <input type="file" id="uploadActuals" accept=".csv" style="display:none" onchange="uploadActuals(this)">
+    </div>
+    <div class="sp-history" id="snapshotHistory"></div>
+    <div class="sp-compare-wrap" id="compareWrap" style="display:none"></div>
   </div>
 </div>
 
@@ -3410,6 +3466,7 @@ async function loadLiveData() {
       resetFilters();
       initFilters();
       refresh();
+      autoSnapshotIfSunday();
 
       const now = new Date();
       const timeStr = now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
@@ -3448,6 +3505,260 @@ function resetFilters() {
     if (dd) dd.innerHTML = '';
   });
 }
+
+// ─── Snapshot & Accuracy Tracker ───
+const SNAP_KEY = 'am_spend_snapshots';
+
+function getSnapshots() {
+  try { return JSON.parse(localStorage.getItem(SNAP_KEY) || '[]'); } catch { return []; }
+}
+
+function saveSnapshots(snaps) {
+  localStorage.setItem(SNAP_KEY, JSON.stringify(snaps));
+}
+
+function takeSnapshot() {
+  if (_OPS_CAMPAIGNS.length === 0) { alert('No campaign data loaded yet.'); return; }
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10);
+  const weekNum = getISOWeek(now);
+
+  const campaigns = _OPS_CAMPAIGNS.map(c => {
+    const est = estimateCampaignCost(c);
+    return {
+      pid: c[1], pname: c[3], type: c[4], discount: c[5],
+      costShare: c[6], am: c[11], week: c[0],
+      estTotal: Math.round(est.total), estBolt: Math.round(est.bolt), estProv: Math.round(est.prov)
+    };
+  });
+
+  const totals = campaigns.reduce((s, c) => ({
+    total: s.total + c.estTotal, bolt: s.bolt + c.estBolt, prov: s.prov + c.estProv
+  }), { total: 0, bolt: 0, prov: 0 });
+
+  const snap = {
+    id: Date.now(),
+    date: dateStr,
+    isoWeek: weekNum,
+    campaignCount: campaigns.length,
+    totals,
+    campaigns
+  };
+
+  const snaps = getSnapshots();
+  snaps.unshift(snap);
+  saveSnapshots(snaps);
+  renderSnapshots();
+  alert(`Snapshot saved: ${dateStr} (Week ${weekNum}) — ${campaigns.length} campaigns, est. total €${totals.total.toLocaleString()}/wk`);
+}
+
+function getISOWeek(d) {
+  const date = new Date(d.getTime());
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
+  const week1 = new Date(date.getFullYear(), 0, 4);
+  return 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+}
+
+function autoSnapshotIfSunday() {
+  const now = new Date();
+  if (now.getDay() !== 0) return;
+  const today = now.toISOString().slice(0, 10);
+  const snaps = getSnapshots();
+  if (snaps.some(s => s.date === today)) return;
+  takeSnapshot();
+}
+
+function renderSnapshots() {
+  const snaps = getSnapshots();
+  const el = document.getElementById('snapshotHistory');
+  if (snaps.length === 0) {
+    el.innerHTML = '<div class="sp-empty">No snapshots yet. Click "Snapshot Now" to save the current estimates, or they\'ll be saved automatically every Sunday.</div>';
+    return;
+  }
+  let html = '<table><thead><tr><th>Date</th><th>Week</th><th>Campaigns</th><th>Est. Total/wk</th><th>Est. Bolt/wk</th><th>Est. Provider/wk</th><th></th></tr></thead><tbody>';
+  snaps.forEach(s => {
+    html += `<tr>
+      <td>${s.date}</td>
+      <td>W${s.isoWeek}</td>
+      <td>${s.campaignCount}</td>
+      <td>€${s.totals.total.toLocaleString()}</td>
+      <td style="color:var(--bolt)">€${s.totals.bolt.toLocaleString()}</td>
+      <td style="color:var(--provider)">€${s.totals.prov.toLocaleString()}</td>
+      <td><button onclick="deleteSnapshot(${s.id})" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px" title="Delete">✕</button></td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+function deleteSnapshot(id) {
+  if (!confirm('Delete this snapshot?')) return;
+  const snaps = getSnapshots().filter(s => s.id !== id);
+  saveSnapshots(snaps);
+  renderSnapshots();
+}
+
+function exportSnapshots() {
+  const snaps = getSnapshots();
+  if (snaps.length === 0) { alert('No snapshots to export.'); return; }
+  const blob = new Blob([JSON.stringify(snaps, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `am-spend-snapshots-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+}
+
+function importSnapshots(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const imported = JSON.parse(e.target.result);
+      if (!Array.isArray(imported)) throw new Error('Invalid format');
+      const existing = getSnapshots();
+      const existingIds = new Set(existing.map(s => s.id));
+      let added = 0;
+      imported.forEach(s => {
+        if (!existingIds.has(s.id)) { existing.push(s); added++; }
+      });
+      existing.sort((a, b) => b.id - a.id);
+      saveSnapshots(existing);
+      renderSnapshots();
+      alert(`Imported ${added} new snapshot(s). ${imported.length - added} duplicates skipped.`);
+    } catch (err) {
+      alert('Failed to import: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  input.value = '';
+}
+
+function uploadActuals(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const text = e.target.result;
+      const lines = text.split('\n').filter(l => l.trim());
+      if (lines.length < 2) throw new Error('CSV appears empty');
+
+      const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+      const pidCol = headers.findIndex(h => /provider.?id/i.test(h));
+      const boltCol = headers.findIndex(h => /spend.*bolt|bolt.*spend|bolt.*cost/i.test(h));
+      const provCol = headers.findIndex(h => /spend.*merchant|merchant.*spend|provider.*spend|provider.*cost/i.test(h));
+      const totalCol = headers.findIndex(h => /discount.*€|campaign.*discount|total.*discount/i.test(h));
+
+      if (pidCol === -1) throw new Error('Could not find Provider ID column');
+      if (boltCol === -1 && provCol === -1 && totalCol === -1) throw new Error('Could not find spend columns (Bolt/Provider/Discount)');
+
+      const pn = s => {
+        if (!s) return 0;
+        return parseFloat(s.replace(/[€$£%,"]/g, '').trim()) || 0;
+      };
+
+      const actuals = {};
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(',').map(c => c.replace(/"/g, '').trim());
+        const pid = cols[pidCol];
+        if (!pid || !/^\d+$/.test(pid)) continue;
+        actuals[pid] = {
+          bolt: boltCol >= 0 ? pn(cols[boltCol]) : 0,
+          prov: provCol >= 0 ? pn(cols[provCol]) : 0,
+          total: totalCol >= 0 ? pn(cols[totalCol]) : 0
+        };
+        if (!actuals[pid].total && (actuals[pid].bolt || actuals[pid].prov)) {
+          actuals[pid].total = actuals[pid].bolt + actuals[pid].prov;
+        }
+      }
+
+      renderComparison(actuals);
+    } catch (err) {
+      alert('Failed to parse actuals: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  input.value = '';
+}
+
+function renderComparison(actuals) {
+  const snaps = getSnapshots();
+  const wrap = document.getElementById('compareWrap');
+
+  if (snaps.length === 0) {
+    wrap.style.display = 'block';
+    wrap.innerHTML = '<p style="color:var(--text-dim)">No snapshots to compare against. Take a snapshot first.</p>';
+    return;
+  }
+
+  const latestSnap = snaps[0];
+  let matched = 0, totalEst = 0, totalAct = 0, totalAbsErr = 0;
+  const rows = [];
+
+  latestSnap.campaigns.forEach(c => {
+    const act = actuals[String(c.pid)];
+    if (!act || act.total === 0) return;
+    matched++;
+    const est = c.estTotal;
+    const actual = Math.round(act.total);
+    const diff = est - actual;
+    const pctErr = actual > 0 ? ((diff / actual) * 100) : 0;
+    totalEst += est;
+    totalAct += actual;
+    totalAbsErr += Math.abs(diff);
+    rows.push({ ...c, actual, diff, pctErr });
+  });
+
+  if (matched === 0) {
+    wrap.style.display = 'block';
+    wrap.innerHTML = '<p style="color:var(--text-dim)">No matching providers found between snapshot and actuals CSV. Make sure the CSV has a "Provider ID" column.</p>';
+    return;
+  }
+
+  const mape = rows.reduce((s, r) => s + Math.abs(r.pctErr), 0) / rows.length;
+  const bias = totalEst - totalAct;
+  const biasPct = totalAct > 0 ? ((bias / totalAct) * 100) : 0;
+
+  let html = `<h4>Accuracy: Snapshot ${latestSnap.date} vs Actuals (${matched} providers matched)</h4>`;
+  html += '<div class="accuracy-cards">';
+  html += `<div class="accuracy-card"><div class="ac-label">Total Estimated/wk</div><div class="ac-value">€${totalEst.toLocaleString()}</div></div>`;
+  html += `<div class="accuracy-card"><div class="ac-label">Total Actual/wk</div><div class="ac-value">€${totalAct.toLocaleString()}</div></div>`;
+  const biasClass = Math.abs(biasPct) < 15 ? 'delta-ok' : biasPct > 0 ? 'delta-pos' : 'delta-neg';
+  html += `<div class="accuracy-card"><div class="ac-label">Bias (Est − Actual)</div><div class="ac-value ${biasClass}">${bias >= 0 ? '+' : ''}€${bias.toLocaleString()} (${biasPct >= 0 ? '+' : ''}${biasPct.toFixed(1)}%)</div></div>`;
+  const mapeClass = mape < 20 ? 'delta-ok' : mape < 40 ? 'delta-neg' : 'delta-pos';
+  html += `<div class="accuracy-card"><div class="ac-label">MAPE (avg. error)</div><div class="ac-value ${mapeClass}">${mape.toFixed(1)}%</div></div>`;
+  html += '</div>';
+
+  html += '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>';
+  html += '<th style="text-align:left;padding:6px 8px;border-bottom:2px solid var(--border)">Provider</th>';
+  html += '<th style="text-align:left;padding:6px 8px;border-bottom:2px solid var(--border)">Type</th>';
+  html += '<th style="text-align:right;padding:6px 8px;border-bottom:2px solid var(--border)">Estimated/wk</th>';
+  html += '<th style="text-align:right;padding:6px 8px;border-bottom:2px solid var(--border)">Actual</th>';
+  html += '<th style="text-align:right;padding:6px 8px;border-bottom:2px solid var(--border)">Diff</th>';
+  html += '<th style="text-align:right;padding:6px 8px;border-bottom:2px solid var(--border)">Error %</th>';
+  html += '</tr></thead><tbody>';
+
+  rows.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+  rows.forEach(r => {
+    const errClass = Math.abs(r.pctErr) < 20 ? 'delta-ok' : r.pctErr > 0 ? 'delta-pos' : 'delta-neg';
+    html += `<tr>
+      <td style="padding:5px 8px;border-bottom:1px solid var(--border)">${r.pname} <span style="color:var(--text-dim)">(${r.pid})</span></td>
+      <td style="padding:5px 8px;border-bottom:1px solid var(--border)">${r.type}</td>
+      <td style="text-align:right;padding:5px 8px;border-bottom:1px solid var(--border)">€${r.estTotal.toLocaleString()}</td>
+      <td style="text-align:right;padding:5px 8px;border-bottom:1px solid var(--border)">€${r.actual.toLocaleString()}</td>
+      <td style="text-align:right;padding:5px 8px;border-bottom:1px solid var(--border)" class="${errClass}">${r.diff >= 0 ? '+' : ''}€${r.diff.toLocaleString()}</td>
+      <td style="text-align:right;padding:5px 8px;border-bottom:1px solid var(--border)" class="${errClass}">${r.pctErr >= 0 ? '+' : ''}${r.pctErr.toFixed(1)}%</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+
+  wrap.style.display = 'block';
+  wrap.innerHTML = html;
+}
+
+renderSnapshots();
 
 loadLiveData();
 </script>
