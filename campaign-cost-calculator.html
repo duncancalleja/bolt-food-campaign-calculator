@@ -2413,7 +2413,7 @@ function parseWideFormat(text) {
     });
   }
 
-  // Compute averages
+  // Compute averages + order-value CV from weekly variance
   Object.keys(providerDB).forEach(pid => {
     const p = providerDB[pid];
     const valid = p.weeks.filter(w => !isNaN(w.orders) && w.orders > 0);
@@ -2421,8 +2421,15 @@ function parseWideFormat(text) {
       p.avgOrders = valid.reduce((s, w) => s + w.orders, 0) / valid.length;
       p.avgGMV = valid.reduce((s, w) => s + (w.gmv || 0), 0) / valid.length;
       p.avgAOV = p.avgGMV > 0 && p.avgOrders > 0 ? p.avgGMV / p.avgOrders : 0;
+      const aovVals = valid.filter(w => !isNaN(w.aov) && w.aov > 0).map(w => w.aov);
+      if (aovVals.length >= 3 && p.avgAOV > 0) {
+        const weeklyCV = Math.sqrt(aovVals.reduce((s, v) => s + Math.pow(v - p.avgAOV, 2), 0) / aovVals.length) / p.avgAOV;
+        p.estimatedCV = Math.max(0.25, Math.min(0.7, weeklyCV * 1.8));
+      } else {
+        p.estimatedCV = ORDER_VALUE_CV;
+      }
     } else {
-      p.avgOrders = 0; p.avgGMV = 0; p.avgAOV = 0;
+      p.avgOrders = 0; p.avgGMV = 0; p.avgAOV = 0; p.estimatedCV = ORDER_VALUE_CV;
     }
   });
 
@@ -2569,8 +2576,15 @@ function reBuildDB() {
       p.avgOrders = valid.reduce((s, w) => s + w.orders, 0) / valid.length;
       p.avgGMV = valid.reduce((s, w) => s + (w.gmv || 0), 0) / valid.length;
       p.avgAOV = p.avgGMV > 0 && p.avgOrders > 0 ? p.avgGMV / p.avgOrders : 0;
+      const aovVals = valid.filter(w => !isNaN(w.aov) && w.aov > 0).map(w => w.aov);
+      if (aovVals.length >= 3 && p.avgAOV > 0) {
+        const weeklyCV = Math.sqrt(aovVals.reduce((s, v) => s + Math.pow(v - p.avgAOV, 2), 0) / aovVals.length) / p.avgAOV;
+        p.estimatedCV = Math.max(0.25, Math.min(0.7, weeklyCV * 1.8));
+      } else {
+        p.estimatedCV = ORDER_VALUE_CV;
+      }
     } else {
-      p.avgOrders = 0; p.avgGMV = 0; p.avgAOV = 0;
+      p.avgOrders = 0; p.avgGMV = 0; p.avgAOV = 0; p.estimatedCV = ORDER_VALUE_CV;
     }
   });
 
@@ -2667,7 +2681,7 @@ function onProviderPick() {
   if (!p) return;
 
   currentSource = 'uploaded';
-  _selectedProvider = { orders: Math.round(p.avgOrders), aov: p.avgAOV, gmv: Math.round(p.avgGMV) };
+  _selectedProvider = { orders: Math.round(p.avgOrders), aov: p.avgAOV, gmv: Math.round(p.avgGMV), cv: p.estimatedCV || ORDER_VALUE_CV };
 
   document.getElementById('statOrders').textContent = Math.round(p.avgOrders).toLocaleString();
   document.getElementById('statAOV').textContent = '€' + p.avgAOV.toFixed(2);
@@ -2806,23 +2820,46 @@ function getUplift(d) {
   return UPLIFT[lo] + (d-lo)/(hi-lo) * (UPLIFT[hi]-UPLIFT[lo]);
 }
 
-function est(orders, aov, disc, type, share, fdCap, mov) {
+// Log-normal order value distribution model
+// Food delivery order values are well-modeled by log-normal distributions.
+// CV (coefficient of variation) controls the spread - higher = more dispersed.
+const ORDER_VALUE_CV = 0.45;
+
+function normCdf(x) {
+  const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741;
+  const a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
+  const sign = x < 0 ? -1 : 1;
+  x = Math.abs(x) / Math.SQRT2;
+  const t = 1.0 / (1.0 + p * x);
+  const y = 1.0 - (((((a5*t + a4)*t) + a3)*t + a2)*t + a1)*t * Math.exp(-x*x);
+  return 0.5 * (1.0 + sign * y);
+}
+
+function logNormParams(mean, cv) {
+  const sigma2 = Math.log(1 + cv * cv);
+  const sigma = Math.sqrt(sigma2);
+  const mu = Math.log(mean) - sigma2 / 2;
+  return { mu, sigma };
+}
+
+function movQualifyingRate(aov, mov, cv) {
+  if (mov <= 0 || aov <= 0) return { rate: 1.0, condMean: aov };
+  const { mu, sigma } = logNormParams(aov, cv);
+  const z = (Math.log(mov) - mu) / sigma;
+  const rate = Math.max(0.01, 1 - normCdf(z));
+  const zAdj = (Math.log(mov) - mu - sigma * sigma) / sigma;
+  const condMean = rate > 0.001 ? aov * (1 - normCdf(zAdj)) / rate : mov;
+  return { rate, condMean };
+}
+
+function est(orders, aov, disc, type, share, fdCap, mov, cv) {
   const gmv = orders * aov;
   mov = mov || 0;
+  cv = cv || ORDER_VALUE_CV;
   let uplift, redemption, total, dpo;
 
-  // MOV impact: when MOV > AOV, fewer orders qualify but qualifying orders have higher value
-  let qualifyingRate = 1.0;
-  let effectiveAov = aov;
-  if (mov > 0 && aov > 0) {
-    if (mov > aov) {
-      qualifyingRate = Math.max(0.05, Math.pow(aov / mov, 1.5));
-      effectiveAov = mov;
-    } else {
-      qualifyingRate = 1.0;
-      effectiveAov = aov;
-    }
-  }
+  const { rate: qualifyingRate, condMean: effectiveAov } =
+    mov > 0 ? movQualifyingRate(aov, mov, cv) : { rate: 1.0, condMean: aov };
 
   if (type === 'free_delivery') {
     uplift = UPLIFT_FD;
@@ -2845,22 +2882,24 @@ function est(orders, aov, disc, type, share, fdCap, mov) {
   return {
     gmv, uplift, upliftedOrders: uo, upliftOrders: uo - orders,
     redemption, dpo, total, provShare: total * share, boltShare: total * (1 - share), share,
-    mov, qualifyingRate, effectiveAov
+    mov, qualifyingRate, effectiveAov, cv
   };
 }
 
 function calculate() {
-  let orders, aov, pid, segment;
+  let orders, aov, pid, segment, provCV;
 
   if (currentSource === 'uploaded' && _selectedProvider) {
     orders = _selectedProvider.orders;
     aov = _selectedProvider.aov;
+    provCV = _selectedProvider.cv || ORDER_VALUE_CV;
     pid = document.getElementById('providerPicker').value || '—';
     segment = document.getElementById('segment_uploaded').value;
   } else {
     pid = document.getElementById('providerId').value.trim() || '—';
     orders = parseInt(document.getElementById('weeklyOrders').value) || 0;
     aov = parseFloat(document.getElementById('aov').value) || 0;
+    provCV = ORDER_VALUE_CV;
     segment = document.getElementById('segment').value;
     if (orders > 0 && aov > 0) {
       document.getElementById('weeklyGMV').value = Math.round(orders * aov);
@@ -2876,7 +2915,7 @@ function calculate() {
 
   if (orders <= 0 || aov <= 0) return;
 
-  const r = est(orders, aov, disc, type, share, fdCap, mov);
+  const r = est(orders, aov, disc, type, share, fdCap, mov, provCV);
   const pw = r.provShare, bw = r.boltShare, tw = r.total;
   const pt = pw * weeks, bt = bw * weeks, gt = tw * weeks;
 
@@ -2920,10 +2959,13 @@ function calculate() {
   document.getElementById('barProvider').textContent = r.provShare > 0 ? `Provider ${Math.round(share*100)}%` : '';
 
   // Breakdown
+  const cvSource = (currentSource === 'uploaded' && _selectedProvider && _selectedProvider.cv !== ORDER_VALUE_CV)
+    ? 'from provider history' : 'default estimate';
   const movBreakdown = mov > 0 ? `
     <div class="breakdown-item"><span class="bi-label">MOV (Minimum Order Value)</span><span class="bi-value">€${mov}</span></div>
-    <div class="breakdown-item"><span class="bi-label">Est. Qualifying Order Rate</span><span class="bi-value" style="color:${r.qualifyingRate < 1 ? 'var(--provider)' : 'var(--accent)'};">${pct(r.qualifyingRate)}${r.qualifyingRate < 1 ? ' (MOV > AOV)' : ''}</span></div>
-    ${r.effectiveAov !== aov ? `<div class="breakdown-item"><span class="bi-label">Effective AOV (qualifying orders)</span><span class="bi-value">€${r.effectiveAov.toFixed(2)}</span></div>` : ''}` : '';
+    <div class="breakdown-item"><span class="bi-label">Order value spread (CV: ${r.cv.toFixed(2)})</span><span class="bi-value" style="color:var(--text-dim)">${cvSource}</span></div>
+    <div class="breakdown-item"><span class="bi-label">Orders ≥ €${mov} MOV</span><span class="bi-value" style="color:${r.qualifyingRate < 0.9 ? 'var(--provider)' : 'var(--accent)'};">${pct(r.qualifyingRate)} (~${Math.round(r.upliftedOrders * r.redemption * r.qualifyingRate)} of ${Math.round(r.upliftedOrders * r.redemption)} discounted)</span></div>
+    <div class="breakdown-item"><span class="bi-label">Avg. value of qualifying orders</span><span class="bi-value">€${r.effectiveAov.toFixed(2)}${r.effectiveAov > aov * 1.01 ? ' (above AOV)' : ''}</span></div>` : '';
 
   document.getElementById('breakdownContent').innerHTML = `
     <div class="breakdown-item"><span class="bi-label">Provider Weekly GMV</span><span class="bi-value">${fmt(r.gmv)}</span></div>
@@ -2954,7 +2996,7 @@ function calculate() {
 
   if (type === 'free_delivery') {
     [2,2.5,3,3.5,4,5].forEach(c => {
-      const s = est(orders, aov, disc, type, share, c, mov);
+      const s = est(orders, aov, disc, type, share, c, mov, provCV);
       scHtml += `<div class="scenario-row" style="${c===fdCap?'color:var(--accent);font-weight:600':''}">
         <span>€${c.toFixed(1)}</span><span class="num">+${pct(s.uplift)}</span>
         <span class="num">${fmt(s.total)}</span><span class="num">${fmt(s.provShare)}</span>
@@ -2962,7 +3004,7 @@ function calculate() {
     });
   } else {
     [5,10,15,20,25,30,40,50].forEach(d => {
-      const s = est(orders, aov, d, type, share, fdCap, mov);
+      const s = est(orders, aov, d, type, share, fdCap, mov, provCV);
       scHtml += `<div class="scenario-row" style="${d===disc?'color:var(--accent);font-weight:600':''}">
         <span>${d}%</span><span class="num">+${pct(s.uplift)}</span>
         <span class="num">${fmt(s.total)}</span><span class="num">${fmt(s.provShare)}</span>
@@ -2992,7 +3034,7 @@ function calculate() {
 
   ['enterprise','mm','smb','stores'].forEach(sk => {
     const sb = SEGMENT_BENCHMARKS[sk];
-    const sr = est(sb.avgOrders, sb.avgAOV, disc, type, share, fdCap, mov);
+    const sr = est(sb.avgOrders, sb.avgAOV, disc, type, share, fdCap, mov, provCV);
     const isCurrent = sk === segment;
     segHtml += `<div class="scenario-row" style="${isCurrent ? 'color:var(--bolt);' : ''}">
       <span>${segNames[sk]} avg${isCurrent ? ' (selected)' : ''}</span>
