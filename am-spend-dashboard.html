@@ -175,12 +175,14 @@
     padding: 24px; margin-bottom: 24px;
   }
   .bar-row {
-    display: grid; grid-template-columns: 140px 1fr 100px; gap: 12px;
+    display: grid; grid-template-columns: 130px 1fr 90px 90px 110px; gap: 10px;
     align-items: center; padding: 10px 0;
     border-bottom: 1px solid var(--border);
   }
+  .bar-row.bar-header { border-bottom: 2px solid var(--border); padding: 6px 0; }
   .bar-row:last-child { border-bottom: none; }
   .bar-label { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar-col-header { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-dim); font-weight: 600; text-align: right; }
   .bar-track {
     height: 32px; background: var(--surface2); border-radius: 6px; overflow: hidden;
     display: flex; position: relative;
@@ -269,7 +271,7 @@
   @media (max-width: 768px) {
     .header, .filter-bar, .summary-cards, .main-content { padding-left: 16px; padding-right: 16px; }
     .summary-cards { grid-template-columns: 1fr 1fr; }
-    .bar-row { grid-template-columns: 100px 1fr 80px; }
+    .bar-row { grid-template-columns: 90px 1fr 70px 70px 90px; }
   }
 </style>
 </head>
@@ -730,36 +732,36 @@ function refresh() {
 
 function renderChart(amArr, totalCost, totalBolt, budget) {
   const maxCost = amArr.length > 0 ? amArr[0][1].totalCost : 1;
-  let html = '';
+
+  let html = `<div class="bar-row bar-header">
+    <div class="bar-col-header" style="text-align:left">Account Manager</div>
+    <div></div>
+    <div class="bar-col-header">Total/wk</div>
+    <div class="bar-col-header" style="color:var(--provider)">Provider</div>
+    <div class="bar-col-header" style="color:var(--bolt)">Bolt${budget > 0 ? ' (% budget)' : ''}</div>
+  </div>`;
+
   amArr.forEach(([am, d]) => {
     const boltW = maxCost > 0 ? (d.boltCost / maxCost * 100) : 0;
     const provW = maxCost > 0 ? (d.provCost / maxCost * 100) : 0;
-    const boltLabel = boltW > 12 ? fmt(d.boltCost) : '';
-    const provLabel = provW > 12 ? fmt(d.provCost) : '';
 
-    let budgetLine = '';
-    if (budget > 0 && totalBolt > 0) {
-      const amShare = d.boltCost / totalBolt;
-      const amBudget = budget * amShare;
-      const amUsedPct = amBudget > 0 ? (d.boltCost / amBudget * 100) : 0;
-      const fillClass = amUsedPct > 100 ? 'over' : amUsedPct > 85 ? 'warn' : 'ok';
-      budgetLine = `<div class="budget-am-bar"><div class="budget-am-fill budget-bar-fill ${fillClass}" style="width:${Math.min(amUsedPct, 100)}%"></div></div>`;
-    }
-
-    let budgetPctLabel = '';
+    let boltCell = `<div style="text-align:right"><div style="font-size:14px;font-weight:700;color:var(--bolt)">${fmt(d.boltCost)}</div>`;
     if (budget > 0) {
       const pctOfBudget = (d.boltCost / budget * 100).toFixed(1);
       const pctColor = d.boltCost / budget > 0.25 ? '#e74c3c' : d.boltCost / budget > 0.15 ? '#e67e22' : 'var(--text-dim)';
-      budgetPctLabel = `<div style="font-size:10px;font-weight:400"><span style="color:var(--bolt)">Bolt ${fmt(d.boltCost)}</span> · <span style="color:${pctColor}">${pctOfBudget}% of budget</span></div>`;
+      boltCell += `<div style="font-size:10px;color:${pctColor};margin-top:1px">${pctOfBudget}%</div>`;
     }
+    boltCell += '</div>';
 
     html += `<div class="bar-row">
-      <div class="bar-label" title="${am}">${am}${budgetPctLabel}</div>
+      <div class="bar-label" title="${am}">${am}</div>
       <div class="bar-track">
-        <div class="bar-fill-bolt" style="width:${boltW}%">${boltLabel}</div>
-        <div class="bar-fill-prov" style="width:${provW}%">${provLabel}</div>
+        <div class="bar-fill-bolt" style="width:${boltW}%"></div>
+        <div class="bar-fill-prov" style="width:${provW}%"></div>
       </div>
-      <div class="bar-total">${fmt(d.totalCost)}${budgetLine}</div>
+      <div style="text-align:right;font-size:14px;font-weight:700">${fmt(d.totalCost)}</div>
+      <div style="text-align:right;font-size:14px;font-weight:700;color:var(--provider)">${fmt(d.provCost)}</div>
+      ${boltCell}
     </div>`;
   });
   document.getElementById('chartView').innerHTML = html || '<div style="padding:20px;color:var(--text-dim);text-align:center">No data matches filters</div>';
