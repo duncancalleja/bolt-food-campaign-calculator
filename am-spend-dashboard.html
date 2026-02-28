@@ -746,8 +746,15 @@ function renderChart(amArr, totalCost, totalBolt, budget) {
       budgetLine = `<div class="budget-am-bar"><div class="budget-am-fill budget-bar-fill ${fillClass}" style="width:${Math.min(amUsedPct, 100)}%"></div></div>`;
     }
 
+    let budgetPctLabel = '';
+    if (budget > 0) {
+      const pctOfBudget = (d.boltCost / budget * 100).toFixed(1);
+      const pctColor = d.boltCost / budget > 0.25 ? '#e74c3c' : d.boltCost / budget > 0.15 ? '#e67e22' : 'var(--text-dim)';
+      budgetPctLabel = `<div style="font-size:10px;font-weight:400"><span style="color:var(--bolt)">Bolt ${fmt(d.boltCost)}</span> · <span style="color:${pctColor}">${pctOfBudget}% of budget</span></div>`;
+    }
+
     html += `<div class="bar-row">
-      <div class="bar-label" title="${am}">${am}${budget > 0 && totalBolt > 0 ? `<div style="font-size:10px;color:var(--text-dim);font-weight:400">Bolt: ${fmt(d.boltCost)} (${totalBolt > 0 ? (d.boltCost/totalBolt*100).toFixed(0) : 0}% of budget)</div>` : ''}</div>
+      <div class="bar-label" title="${am}">${am}${budgetPctLabel}</div>
       <div class="bar-track">
         <div class="bar-fill-bolt" style="width:${boltW}%">${boltLabel}</div>
         <div class="bar-fill-prov" style="width:${provW}%">${provLabel}</div>
