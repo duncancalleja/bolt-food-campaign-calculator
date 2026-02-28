@@ -138,6 +138,27 @@
   .s-card.prov .s-value { color: var(--provider); }
   .s-card.accent .s-value { color: var(--accent); }
 
+  .budget-input-wrap {
+    display: flex; align-items: center; gap: 6px; margin-bottom: 10px;
+  }
+  .budget-input-wrap label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; font-weight: 600; }
+  .budget-input-wrap input {
+    width: 100px; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); border-radius: 6px; padding: 5px 8px; font-size: 14px;
+    font-weight: 700; outline: none; text-align: right;
+  }
+  .budget-input-wrap input:focus { border-color: var(--accent); }
+  .budget-input-wrap .prefix { color: var(--text-dim); font-weight: 600; font-size: 14px; }
+  .budget-bar { height: 6px; background: var(--surface2); border-radius: 3px; margin-top: 8px; overflow: hidden; }
+  .budget-bar-fill { height: 100%; border-radius: 3px; transition: width .4s ease; }
+  .budget-bar-fill.ok { background: var(--accent); }
+  .budget-bar-fill.warn { background: #e67e22; }
+  .budget-bar-fill.over { background: #e74c3c; }
+  .budget-am-bar {
+    height: 4px; background: var(--surface); border-radius: 2px; margin-top: 4px; overflow: hidden;
+  }
+  .budget-am-fill { height: 100%; border-radius: 2px; transition: width .4s; }
+
   .main-content { padding: 0 32px 32px; }
 
   .section-title {
@@ -317,9 +338,16 @@
     <div class="s-sub" id="sTotalCostSub">per week across all campaigns</div>
   </div>
   <div class="s-card bolt">
+    <div class="budget-input-wrap">
+      <label>Weekly Bolt Budget</label>
+      <span class="prefix">€</span>
+      <input type="number" id="boltBudget" placeholder="0" min="0" step="100" oninput="saveBudget(); refresh()">
+    </div>
     <div class="s-label">Bolt Share / Week</div>
     <div class="s-value" id="sBoltCost">€0</div>
     <div class="s-sub" id="sBoltPct">0% of total</div>
+    <div class="budget-bar" id="budgetBarWrap" style="display:none"><div class="budget-bar-fill ok" id="budgetBarFill"></div></div>
+    <div class="s-sub" id="budgetSub" style="display:none"></div>
   </div>
   <div class="s-card prov">
     <div class="s-label">Provider Share / Week</div>
@@ -435,6 +463,11 @@ const UPLIFT = new Proxy(_BASE_UPLIFT, {
 });
 function getUpliftFD() { return getParam('uplift_fd'); }
 function getItemBasketShare() { return getParam('item_basket_share'); }
+
+const BUDGET_KEY = 'am_spend_bolt_budget';
+function getBudget() { return parseFloat(localStorage.getItem(BUDGET_KEY)) || 0; }
+function saveBudget() { localStorage.setItem(BUDGET_KEY, document.getElementById('boltBudget').value || '0'); }
+function loadBudget() { const b = getBudget(); if (b > 0) document.getElementById('boltBudget').value = b; }
 
 // ─── Multi-select dropdown helpers ───
 function toggleMS(trigger) {
@@ -669,14 +702,33 @@ function refresh() {
   document.getElementById('sProvCost').textContent = fmt(totalProv);
   document.getElementById('sProvPct').textContent = totalCost > 0 ? pct(totalProv / totalCost) + ' of total' : '0%';
 
+  const budget = getBudget();
+  const budgetBar = document.getElementById('budgetBarWrap');
+  const budgetFill = document.getElementById('budgetBarFill');
+  const budgetSub = document.getElementById('budgetSub');
+  if (budget > 0) {
+    const usedPct = totalBolt / budget;
+    const remaining = budget - totalBolt;
+    budgetBar.style.display = '';
+    budgetSub.style.display = '';
+    budgetFill.style.width = Math.min(usedPct * 100, 100) + '%';
+    budgetFill.className = 'budget-bar-fill ' + (usedPct > 1 ? 'over' : usedPct > 0.85 ? 'warn' : 'ok');
+    budgetSub.innerHTML = remaining >= 0
+      ? `<span style="color:var(--accent)">${fmt(remaining)} remaining</span> of ${fmt(budget)} budget (${(usedPct*100).toFixed(0)}% used)`
+      : `<span style="color:#e74c3c">${fmt(Math.abs(remaining))} over budget</span> of ${fmt(budget)} (${(usedPct*100).toFixed(0)}% used)`;
+  } else {
+    budgetBar.style.display = 'none';
+    budgetSub.style.display = 'none';
+  }
+
   const amArr = Object.entries(amMap).sort((a, b) => b[1].totalCost - a[1].totalCost);
   document.getElementById('amCount').textContent = amArr.length + ' AMs';
 
-  renderChart(amArr, totalCost);
-  renderTable(amArr);
+  renderChart(amArr, totalCost, totalBolt, budget);
+  renderTable(amArr, budget);
 }
 
-function renderChart(amArr, totalCost) {
+function renderChart(amArr, totalCost, totalBolt, budget) {
   const maxCost = amArr.length > 0 ? amArr[0][1].totalCost : 1;
   let html = '';
   amArr.forEach(([am, d]) => {
@@ -684,22 +736,41 @@ function renderChart(amArr, totalCost) {
     const provW = maxCost > 0 ? (d.provCost / maxCost * 100) : 0;
     const boltLabel = boltW > 12 ? fmt(d.boltCost) : '';
     const provLabel = provW > 12 ? fmt(d.provCost) : '';
+
+    let budgetLine = '';
+    if (budget > 0 && totalBolt > 0) {
+      const amShare = d.boltCost / totalBolt;
+      const amBudget = budget * amShare;
+      const amUsedPct = amBudget > 0 ? (d.boltCost / amBudget * 100) : 0;
+      const fillClass = amUsedPct > 100 ? 'over' : amUsedPct > 85 ? 'warn' : 'ok';
+      budgetLine = `<div class="budget-am-bar"><div class="budget-am-fill budget-bar-fill ${fillClass}" style="width:${Math.min(amUsedPct, 100)}%"></div></div>`;
+    }
+
     html += `<div class="bar-row">
-      <div class="bar-label" title="${am}">${am}</div>
+      <div class="bar-label" title="${am}">${am}${budget > 0 && totalBolt > 0 ? `<div style="font-size:10px;color:var(--text-dim);font-weight:400">Bolt: ${fmt(d.boltCost)} (${totalBolt > 0 ? (d.boltCost/totalBolt*100).toFixed(0) : 0}% of budget)</div>` : ''}</div>
       <div class="bar-track">
         <div class="bar-fill-bolt" style="width:${boltW}%">${boltLabel}</div>
         <div class="bar-fill-prov" style="width:${provW}%">${provLabel}</div>
       </div>
-      <div class="bar-total">${fmt(d.totalCost)}</div>
+      <div class="bar-total">${fmt(d.totalCost)}${budgetLine}</div>
     </div>`;
   });
   document.getElementById('chartView').innerHTML = html || '<div style="padding:20px;color:var(--text-dim);text-align:center">No data matches filters</div>';
 }
 
-function renderTable(amArr) {
+function renderTable(amArr, budget) {
+  const totalBolt = amArr.reduce((s, [, d]) => s + d.boltCost, 0);
   let html = '';
   amArr.forEach(([am, d]) => {
     const id = 'am_' + am.replace(/\s/g, '_');
+    let budgetCell = '';
+    if (budget > 0 && totalBolt > 0) {
+      const amBudget = budget * (d.boltCost / totalBolt);
+      const pctUsed = (d.boltCost / amBudget * 100).toFixed(0);
+      budgetCell = `<td style="font-size:11px;color:var(--text-dim)">${fmt(amBudget)} alloc.</td>`;
+    } else {
+      budgetCell = '<td></td>';
+    }
     html += `<tr class="am-header-row expanded" onclick="toggleAM('${id}')">
       <td><span class="toggle-icon">▶</span> ${am}</td>
       <td>${d.campaigns.length}</td>
@@ -4113,6 +4184,7 @@ function showActiveCalibration() {
 
 renderSnapshots();
 showActiveCalibration();
+loadBudget();
 
 loadLiveData();
 </script>
