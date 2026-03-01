@@ -448,18 +448,53 @@ function getCalibration() {
 }
 function saveCalibration(cal) { localStorage.setItem(CAL_KEY, JSON.stringify(cal)); }
 
-function getParam(name) {
+const SEGMENTS = ['Enterprise', 'Mid-market', 'SMB'];
+function normalizeSegment(seg) {
+  if (!seg) return 'SMB';
+  if (seg.includes('Enterprise')) return 'Enterprise';
+  if (seg.includes('Mid-market') || seg.includes('Mid market')) return 'Mid-market';
+  return 'SMB';
+}
+
+const PARAM_DEFAULTS = {
+  redemption_menu: _BASE_REDEMPTION.menu_discount,
+  redemption_item: _BASE_REDEMPTION.item_discount,
+  redemption_fd: _BASE_REDEMPTION.free_delivery,
+  uplift_fd: _BASE_UPLIFT_FD,
+  item_basket_share: _BASE_ITEM_BASKET_SHARE,
+  uplift_scale: 1.0
+};
+
+function getParam(name, segment) {
   const cal = getCalibration();
+  if (segment) {
+    const seg = normalizeSegment(segment);
+    const segKey = name + '__' + seg;
+    if (cal[segKey] !== undefined) return cal[segKey];
+  }
   if (cal[name] !== undefined) return cal[name];
-  const defaults = {
-    redemption_menu: _BASE_REDEMPTION.menu_discount,
-    redemption_item: _BASE_REDEMPTION.item_discount,
-    redemption_fd: _BASE_REDEMPTION.free_delivery,
-    uplift_fd: _BASE_UPLIFT_FD,
-    item_basket_share: _BASE_ITEM_BASKET_SHARE,
-    uplift_scale: 1.0
-  };
-  return defaults[name];
+  return PARAM_DEFAULTS[name];
+}
+
+function getRedemption(type, segment) {
+  if (type === 'menu_discount') return getParam('redemption_menu', segment);
+  if (type === 'item_discount') return getParam('redemption_item', segment);
+  if (type === 'free_delivery') return getParam('redemption_fd', segment);
+  return 0;
+}
+
+function getUpliftScaled(disc, segment) {
+  const scale = getParam('uplift_scale', segment);
+  const keys = Object.keys(_BASE_UPLIFT).map(Number).sort((a,b) => a - b);
+  if (disc <= 0) return 0;
+  if (disc >= keys[keys.length-1]) return _BASE_UPLIFT[keys[keys.length-1]] * scale;
+  for (let i = 0; i < keys.length - 1; i++) {
+    if (disc >= keys[i] && disc < keys[i+1]) {
+      const ratio = (disc - keys[i]) / (keys[i+1] - keys[i]);
+      return (_BASE_UPLIFT[keys[i]] + ratio * (_BASE_UPLIFT[keys[i+1]] - _BASE_UPLIFT[keys[i]])) * scale;
+    }
+  }
+  return 0;
 }
 
 const REDEMPTION = {
@@ -475,8 +510,8 @@ const UPLIFT = new Proxy(_BASE_UPLIFT, {
     return target[prop];
   }
 });
-function getUpliftFD() { return getParam('uplift_fd'); }
-function getItemBasketShare() { return getParam('item_basket_share'); }
+function getUpliftFD(segment) { return getParam('uplift_fd', segment); }
+function getItemBasketShare(segment) { return getParam('item_basket_share', segment); }
 
 const BUDGET_KEY = 'am_spend_bolt_budget';
 function getBudget() { return parseFloat(localStorage.getItem(BUDGET_KEY)) || 0; }
@@ -642,6 +677,7 @@ function estimateCampaignCost(c) {
   const costSharePct = c[6];
   const discountCap = c[8];
   const mov = c[9] || 0;
+  const segment = c[15] || '';
 
   if (weeklyOrders <= 0) return { total: 0, bolt: 0, prov: 0 };
 
@@ -651,8 +687,8 @@ function estimateCampaignCost(c) {
   let total = 0;
 
   if (campType.includes('Free') && campType.includes('Delivery')) {
-    const uplift = getUpliftFD();
-    const redemption = REDEMPTION.free_delivery;
+    const uplift = getUpliftFD(segment);
+    const redemption = getRedemption('free_delivery', segment);
     const upliftedOrders = weeklyOrders * (1 + uplift);
     const dOrders = upliftedOrders * redemption * qualifyingRate;
 
@@ -667,19 +703,19 @@ function estimateCampaignCost(c) {
     total = dOrders * avgSave;
   } else if (campType === 'Menu Discount') {
     const disc = bonusPct;
-    const uplift = getUplift(disc);
-    const redemption = REDEMPTION.menu_discount;
+    const uplift = getUpliftScaled(disc, segment);
+    const redemption = getRedemption('menu_discount', segment);
     const upliftedOrders = weeklyOrders * (1 + uplift);
     const dOrders = upliftedOrders * redemption * qualifyingRate;
     const dpo = effectiveAov * (disc / 100);
     total = dOrders * dpo;
   } else if (campType === 'Item Discount') {
     const disc = bonusPct;
-    const uplift = getUplift(disc);
-    const redemption = REDEMPTION.item_discount;
+    const uplift = getUpliftScaled(disc, segment);
+    const redemption = getRedemption('item_discount', segment);
     const upliftedOrders = weeklyOrders * (1 + uplift);
     const dOrders = upliftedOrders * redemption * qualifyingRate;
-    const dpo = effectiveAov * getItemBasketShare() * (disc / 100);
+    const dpo = effectiveAov * getItemBasketShare(segment) * (disc / 100);
     total = dOrders * dpo;
   }
 
@@ -3708,6 +3744,7 @@ function takeSnapshot() {
       pid: c[1], pname: c[3], type: c[4], discount: c[5],
       costShare: c[6], am: c[11], week: c[0],
       mov: c[9] || 0, discountCap: c[8] || 0,
+      segment: normalizeSegment(c[15]),
       estTotal: Math.round(est.total), estBolt: Math.round(est.bolt), estProv: Math.round(est.prov)
     };
   });
@@ -4088,6 +4125,7 @@ function buildCalibrationData() {
       dataPoints.push({
         pid: c.pid, pname: c.pname, type: c.type,
         discount: c.discount, costShare: c.costShare,
+        segment: c.segment || 'SMB',
         estTotal: c.estTotal, actTotal: Math.round(act.total),
         estBolt: c.estBolt, actBolt: Math.round(act.bolt),
         estProv: c.estProv, actProv: Math.round(act.prov),
@@ -4114,6 +4152,7 @@ function calibrate(dataPoints) {
     return sumAct > 0 && sumEst > 0 ? sumAct / sumEst : 1;
   }
 
+  // Global suggestions (same as before)
   if (byType['Menu Discount'].length >= 2) {
     const r = ratio(byType['Menu Discount']);
     suggestions.redemption_menu = Math.round(_BASE_REDEMPTION.menu_discount * r * 1000) / 1000;
@@ -4129,13 +4168,53 @@ function calibrate(dataPoints) {
     const r = ratio(byType['Free Delivery']);
     suggestions.redemption_fd = Math.round(_BASE_REDEMPTION.free_delivery * r * 1000) / 1000;
   }
-
   const allR = ratio(dataPoints);
   if (Math.abs(allR - 1) > 0.05) {
     suggestions.uplift_scale = Math.round(allR * 100) / 100;
   }
 
-  return { suggestions, byType, overall: { ratio: allR, count: dataPoints.length } };
+  // Per-segment suggestions
+  const segmentData = {};
+  SEGMENTS.forEach(seg => {
+    const segPoints = dataPoints.filter(dp => normalizeSegment(dp.segment) === seg);
+    if (segPoints.length < 2) return;
+
+    const segByType = { 'Menu Discount': [], 'Item Discount': [], 'Free Delivery': [] };
+    segPoints.forEach(dp => {
+      if (dp.type.includes('Free') && dp.type.includes('Delivery')) segByType['Free Delivery'].push(dp);
+      else if (dp.type === 'Menu Discount') segByType['Menu Discount'].push(dp);
+      else if (dp.type === 'Item Discount') segByType['Item Discount'].push(dp);
+    });
+
+    const segSuggestions = {};
+    if (segByType['Menu Discount'].length >= 2) {
+      const r = ratio(segByType['Menu Discount']);
+      segSuggestions['redemption_menu__' + seg] = Math.round(_BASE_REDEMPTION.menu_discount * r * 1000) / 1000;
+    }
+    if (segByType['Item Discount'].length >= 2) {
+      const r = ratio(segByType['Item Discount']);
+      segSuggestions['redemption_item__' + seg] = Math.round(Math.min(1, _BASE_REDEMPTION.item_discount * r) * 1000) / 1000;
+      segSuggestions['item_basket_share__' + seg] = Math.round(Math.min(1, _BASE_ITEM_BASKET_SHARE * r) * 1000) / 1000;
+    }
+    if (segByType['Free Delivery'].length >= 2) {
+      const r = ratio(segByType['Free Delivery']);
+      segSuggestions['redemption_fd__' + seg] = Math.round(_BASE_REDEMPTION.free_delivery * r * 1000) / 1000;
+    }
+    const segR = ratio(segPoints);
+    if (Math.abs(segR - 1) > 0.05) {
+      segSuggestions['uplift_scale__' + seg] = Math.round(segR * 100) / 100;
+    }
+
+    if (Object.keys(segSuggestions).length > 0) {
+      segmentData[seg] = {
+        suggestions: segSuggestions,
+        byType: segByType,
+        overall: { ratio: segR, count: segPoints.length }
+      };
+    }
+  });
+
+  return { suggestions, byType, overall: { ratio: allR, count: dataPoints.length }, segmentData };
 }
 
 function runCalibration() {
@@ -4202,14 +4281,93 @@ function runCalibration() {
 
   const hasAnySuggestion = Object.keys(s).length > 0;
   if (hasAnySuggestion) {
-    html += `<div style="margin-top:12px"><button onclick="applyAllSuggestions()" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer">Apply All Suggestions</button></div>`;
+    html += `<div style="margin-top:12px"><button onclick="applyAllSuggestions()" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer">Apply All Global Suggestions</button></div>`;
   }
 
   html += '</div>';
+
+  // Per-segment calibration
+  const segData = result.segmentData || {};
+  if (Object.keys(segData).length > 0) {
+    html += '<div style="padding:16px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);margin-bottom:16px">';
+    html += '<h4 style="margin:0 0 4px;font-size:14px">Segment-Specific Calibration</h4>';
+    html += '<p style="color:var(--text-dim);font-size:12px;margin:0 0 12px">Different segments behave differently. These overrides apply only to providers in that segment.</p>';
+
+    const segColors = { 'Enterprise': '#6366f1', 'Mid-market': '#f59e0b', 'SMB': '#34d399' };
+
+    SEGMENTS.forEach(seg => {
+      const sd = segData[seg];
+      if (!sd) {
+        html += `<div style="padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:10px">
+          <div style="font-size:12px;font-weight:700;color:${segColors[seg] || 'var(--text)'}">${seg}</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:2px">Not enough data (need 2+ providers with actuals)</div>
+        </div>`;
+        return;
+      }
+
+      const segR = sd.overall.ratio;
+      const rClass = Math.abs(segR - 1) < 0.15 ? 'delta-ok' : segR < 1 ? 'delta-neg' : 'delta-pos';
+
+      html += `<div style="padding:12px;border:1px solid var(--border);border-radius:8px;margin-bottom:10px;border-left:3px solid ${segColors[seg] || 'var(--border)'}">`;
+      html += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:700;color:${segColors[seg] || 'var(--text)'}">${seg}</div>
+        <div style="font-size:12px"><span class="${rClass}" style="font-weight:700">${segR.toFixed(2)}x</span> <span style="color:var(--text-dim)">(${sd.overall.count} providers)</span></div>
+      </div>`;
+
+      // Segment type breakdown
+      html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">';
+      types.forEach(t => {
+        const pts = sd.byType[t];
+        if (pts.length === 0) return;
+        const sumE = pts.reduce((s, p) => s + p.estTotal, 0);
+        const sumA = pts.reduce((s, p) => s + p.actTotal, 0);
+        const r = sumA / sumE;
+        const rc = Math.abs(r - 1) < 0.15 ? 'delta-ok' : r < 1 ? 'delta-neg' : 'delta-pos';
+        html += `<div style="font-size:11px;padding:4px 8px;border:1px solid var(--border);border-radius:6px">
+          ${t}: <span class="${rc}" style="font-weight:600">${r.toFixed(2)}x</span> <span style="color:var(--text-dim)">(${pts.length})</span>
+        </div>`;
+      });
+      html += '</div>';
+
+      // Segment parameter suggestions
+      const segSugg = sd.suggestions;
+      const segKeys = Object.keys(segSugg);
+      if (segKeys.length > 0) {
+        html += '<table style="width:100%;border-collapse:collapse;font-size:12px">';
+        html += '<thead><tr><th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--border);font-size:10px;color:var(--text-dim)">Parameter</th><th style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border);font-size:10px;color:var(--text-dim)">Default</th><th style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border);font-size:10px;color:var(--text-dim)">Current</th><th style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border);font-size:10px;color:var(--text-dim)">Suggested</th><th style="padding:4px;border-bottom:1px solid var(--border)"></th></tr></thead><tbody>';
+
+        segKeys.forEach(sk => {
+          const baseName = sk.split('__')[0];
+          const pd = paramDefs.find(p => p.key === baseName);
+          if (!pd) return;
+          const current = cal[sk] !== undefined ? cal[sk] : pd.base;
+          const suggested = segSugg[sk];
+          const hasSugg = suggested !== undefined && Math.abs(suggested - pd.base) > 0.005;
+          const isChg = cal[sk] !== undefined;
+          html += `<tr>
+            <td style="padding:4px 8px;border-bottom:1px solid var(--border)">${pd.label}</td>
+            <td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border);color:var(--text-dim)">${pd.fmt(pd.base)}</td>
+            <td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border);${isChg ? 'color:var(--accent);font-weight:600' : ''}">${pd.fmt(current)}</td>
+            <td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border);font-weight:600;${hasSugg ? 'color:var(--accent)' : 'color:var(--text-dim)'}">${hasSugg ? pd.fmt(suggested) : '—'}</td>
+            <td style="padding:4px 8px;border-bottom:1px solid var(--border)">${hasSugg ? `<button onclick="applyParam('${sk}',${suggested})" style="background:${segColors[seg]};color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:10px;font-weight:600;cursor:pointer">Apply</button>` : ''}</td>
+          </tr>`;
+        });
+        html += '</tbody></table>';
+
+        html += `<div style="margin-top:6px"><button onclick="applySegmentSuggestions('${seg}')" style="background:${segColors[seg]};color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:11px;font-weight:600;cursor:pointer">Apply All ${seg}</button></div>`;
+      }
+
+      html += '</div>';
+    });
+
+    html += '</div>';
+  }
+
   panel.style.display = 'block';
   panel.innerHTML = html;
 
   window._lastCalibrationSuggestions = s;
+  window._lastSegmentData = segData;
 }
 
 function applyParam(key, value) {
@@ -4230,6 +4388,16 @@ function applyAllSuggestions() {
   runCalibration();
 }
 
+function applySegmentSuggestions(seg) {
+  const segData = window._lastSegmentData;
+  if (!segData || !segData[seg]) return;
+  const cal = getCalibration();
+  Object.assign(cal, segData[seg].suggestions);
+  saveCalibration(cal);
+  refresh();
+  runCalibration();
+}
+
 function resetCalibration() {
   if (!confirm('Reset all model parameters to defaults? This will undo any calibration.')) return;
   localStorage.removeItem(CAL_KEY);
@@ -4241,13 +4409,25 @@ function resetCalibration() {
 function showActiveCalibration() {
   const cal = getCalibration();
   if (Object.keys(cal).length === 0) return;
+  const keys = Object.keys(cal);
+  const globalKeys = keys.filter(k => !k.includes('__'));
+  const segKeys = keys.filter(k => k.includes('__'));
+  const segsCalibrated = [...new Set(segKeys.map(k => k.split('__')[1]))];
+
+  let label = 'CALIBRATED';
+  let title = 'Custom calibration active';
+  if (segsCalibrated.length > 0) {
+    label += ' (' + segsCalibrated.join(', ') + ')';
+    title += ' — segment overrides: ' + segsCalibrated.join(', ');
+  }
+
   const status = document.querySelector('.live-status') || document.getElementById('loadingMsg');
   if (status && !document.getElementById('calBadge')) {
     const badge = document.createElement('span');
     badge.id = 'calBadge';
     badge.style.cssText = 'margin-left:8px;background:var(--accent);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;';
-    badge.textContent = 'CALIBRATED';
-    badge.title = 'Custom calibration active — model parameters have been adjusted from defaults';
+    badge.textContent = label;
+    badge.title = title;
     status.parentNode.insertBefore(badge, status.nextSibling);
   }
 }
