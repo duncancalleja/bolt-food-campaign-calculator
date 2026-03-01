@@ -275,21 +275,6 @@
     font-size: 13px; pointer-events: none;
   }
 
-  .data-sources { margin: 0 32px; padding: 12px 20px; background: var(--surface); border: 1px solid var(--border); border-top: none; border-radius: 0 0 12px 12px; }
-  .ds-toggle { font-size: 12px; color: var(--text-dim); cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px; }
-  .ds-toggle:hover { color: var(--text); }
-  .ds-body { display: none; margin-top: 10px; }
-  .ds-body.open { display: block; }
-  .ds-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
-  .ds-row label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; font-weight: 600; min-width: 160px; }
-  .ds-row input { flex: 1; min-width: 200px; background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 5px 10px; font-size: 12px; outline: none; font-family: monospace; }
-  .ds-row input:focus { border-color: var(--accent); }
-  .ds-row .ds-status { font-size: 11px; font-weight: 600; min-width: 60px; }
-  .ds-ok { color: #2ecc71; }
-  .ds-pending { color: var(--text-dim); }
-  .ds-row button { padding: 4px 12px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: var(--surface2); color: var(--text); }
-  .ds-row button:hover { border-color: var(--accent); color: var(--accent); }
-
   @media (max-width: 768px) {
     .header, .filter-bar, .summary-cards, .main-content { padding-left: 16px; padding-right: 16px; }
     .summary-cards { grid-template-columns: 1fr 1fr; }
@@ -311,29 +296,6 @@
   <span class="badge" id="dataStatus" style="background:var(--accent-dim);color:var(--accent)">Loading...</span>
   <button id="btnRefresh" onclick="loadLiveData()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:4px">&#x21bb; Refresh</button>
   <a href="campaign-cost-calculator.html" class="nav-link">← Cost Calculator</a>
-</div>
-
-<div class="data-sources">
-  <div class="ds-toggle" onclick="document.getElementById('dsBody').classList.toggle('open'); this.querySelector('span').textContent = document.getElementById('dsBody').classList.contains('open') ? '▾' : '▸'">
-    <span>▸</span> Data Sources
-  </div>
-  <div class="ds-body" id="dsBody">
-    <div class="ds-row">
-      <label>Looker Merchant Data</label>
-      <input type="text" id="lookerMerchantUrl" placeholder="Published CSV URL from Google Sheet (merchant-level overview)" oninput="saveLookerUrl(LOOKER_MERCHANT_KEY,'lookerMerchantUrl')">
-      <span class="ds-status ds-pending" id="dsMerchantStatus">not set</span>
-      <button onclick="loadLookerMerchant()">Load</button>
-    </div>
-    <div class="ds-row">
-      <label>Looker Campaigns Data</label>
-      <input type="text" id="lookerCampaignsUrl" placeholder="Published CSV URL from Google Sheet (campaigns breakdown)" oninput="saveLookerUrl(LOOKER_CAMPAIGNS_KEY,'lookerCampaignsUrl')">
-      <span class="ds-status ds-pending" id="dsCampaignsStatus">not set</span>
-      <button onclick="loadLookerCampaigns()">Load</button>
-    </div>
-    <div style="font-size:11px;color:var(--text-dim);margin-top:4px">
-      Paste the published CSV URLs from your Looker data Google Sheets. These update the provider lookup and load actual campaign spend for accuracy tracking.
-    </div>
-  </div>
 </div>
 
 <div class="filter-bar">
@@ -566,158 +528,6 @@ async function pushSnapshotToSheet(snap) {
   } catch (err) {
     console.warn('Sheet push failed:', err.message);
   }
-}
-
-// ─── Looker Data Sources ───
-const LOOKER_MERCHANT_KEY = 'am_spend_looker_merchant_url';
-const LOOKER_CAMPAIGNS_KEY = 'am_spend_looker_campaigns_url';
-function getLookerMerchantUrl() { return (localStorage.getItem(LOOKER_MERCHANT_KEY) || '').trim(); }
-function getLookerCampaignsUrl() { return (localStorage.getItem(LOOKER_CAMPAIGNS_KEY) || '').trim(); }
-function saveLookerUrl(key, inputId) {
-  const url = document.getElementById(inputId).value.trim();
-  localStorage.setItem(key, url);
-}
-function loadLookerUrls() {
-  const u1 = getLookerMerchantUrl();
-  const u2 = getLookerCampaignsUrl();
-  if (u1) document.getElementById('lookerMerchantUrl').value = u1;
-  if (u2) document.getElementById('lookerCampaignsUrl').value = u2;
-}
-
-let _LOOKER_ACTUALS = [];
-
-function parseCampaignName(name) {
-  const result = { type: 'Unknown', discount: 0, discountCap: 0, mov: 0 };
-  if (!name) return result;
-  const n = name.toLowerCase();
-
-  if (n.includes('bolt plus') || n.includes('bolt_plus')) {
-    result.type = 'Free Delivery';
-    const capM = name.match(/up\s*to\s*€?([\d.]+)/i);
-    if (capM) result.discountCap = parseFloat(capM[1]);
-    return result;
-  }
-  if (n.includes('free delivery') || n.includes('free_delivery')) {
-    result.type = 'Free Delivery';
-    const capM = name.match(/up\s*to\s*€?([\d.]+)/i);
-    if (capM) result.discountCap = parseFloat(capM[1]);
-    return result;
-  }
-
-  const mdMatch = name.match(/MD\s+(\d+)%/i) || name.match(/(\d+)%\s*%?\s*Menu\s*Discount/i);
-  if (mdMatch) {
-    result.type = 'Menu Discount';
-    result.discount = parseInt(mdMatch[1]);
-  }
-
-  const itemPortal = name.match(/(?:portal-)?item-(\d+)pc/i);
-  if (itemPortal) {
-    result.type = 'Item Discount';
-    result.discount = parseInt(itemPortal[1]);
-  }
-
-  if (!mdMatch && !itemPortal) {
-    const portalMenu = name.match(/portal-(\d+)pc-menu/i);
-    if (portalMenu) {
-      result.type = 'Menu Discount';
-      result.discount = parseInt(portalMenu[1]);
-    }
-  }
-
-  const movMatch = name.match(/mov-(\d+)/i) || name.match(/mov\s+(\d+)/i);
-  if (movMatch) result.mov = parseInt(movMatch[1]);
-
-  const capMatch = name.match(/upto-(\d+)/i) || name.match(/up\s*to\s*€?([\d.]+)/i);
-  if (capMatch) result.discountCap = parseFloat(capMatch[1] || capMatch[2]);
-
-  if (result.type === 'Unknown') {
-    if (n.includes('smart promo') || n.includes('sp_')) result.type = 'Menu Discount';
-    else if (n.includes('engagement') || n.includes('provider targeting')) result.type = 'Menu Discount';
-  }
-
-  return result;
-}
-
-function parseLookerMerchantCSV(text) {
-  const rows = parseCSV(text);
-  if (rows.length < 2) return {};
-  const headers = rows[0].map(h => h.trim());
-  const pidIdx = headers.indexOf('Provider ID');
-  const pnameIdx = headers.indexOf('Provider Name');
-  const amIdx = headers.indexOf('Account Manager Name');
-  const segIdx = headers.indexOf('Business Segment V2');
-  const ordersIdx = headers.findIndex(h => h.includes('Merchant Delivered Orders Count'));
-  const gmvIdx = headers.findIndex(h => h.includes('Total GMV Before Discounts'));
-  const campDiscIdx = headers.findIndex(h => h === 'Campaigns Discount, €' || h.includes('Campaigns Discount'));
-  const campBoltIdx = headers.findIndex(h => h === 'Campaigns Spend by Bolt, €' || h.includes('Campaigns Spend by Bolt'));
-  const campMerchIdx = headers.findIndex(h => h === 'Campaigns Spend by Merchant, €' || h.includes('Campaigns Spend by Merchant'));
-  const campOrdIdx = headers.findIndex(h => h.includes('Merchant Campaign Orders Count'));
-
-  if (pidIdx < 0) return {};
-
-  const pn = s => {
-    if (!s) return 0;
-    return parseFloat(String(s).replace(/[€$£%,\s]/g, '') || '0') || 0;
-  };
-
-  const lookup = {};
-  for (let i = 1; i < rows.length; i++) {
-    const r = rows[i];
-    const pid = (r[pidIdx] || '').trim();
-    if (!pid || !/^\d+$/.test(pid)) continue;
-    const orders = ordersIdx >= 0 ? parseInt(pn(r[ordersIdx])) || 0 : 0;
-    const gmv = gmvIdx >= 0 ? pn(r[gmvIdx]) : 0;
-    const aov = orders > 0 ? Math.round(gmv / orders * 100) / 100 : 0;
-    lookup[pid] = [
-      amIdx >= 0 ? (r[amIdx] || '').trim() : 'Unknown',
-      orders, Math.round(gmv), aov,
-      segIdx >= 0 ? (r[segIdx] || '').trim() : ''
-    ];
-    if (campDiscIdx >= 0) {
-      lookup[pid].push(pn(r[campDiscIdx]));
-      lookup[pid].push(campBoltIdx >= 0 ? pn(r[campBoltIdx]) : 0);
-      lookup[pid].push(campMerchIdx >= 0 ? pn(r[campMerchIdx]) : 0);
-      lookup[pid].push(campOrdIdx >= 0 ? parseInt(pn(r[campOrdIdx])) || 0 : 0);
-    }
-  }
-  return lookup;
-}
-
-function parseLookerCampaignsCSV(text) {
-  const rows = parseCSV(text);
-  if (rows.length < 2) return [];
-  const headers = rows[0].map(h => h.trim());
-  const weekIdx = headers.indexOf('Week');
-  const nameIdx = headers.indexOf('Name');
-  const objIdx = headers.indexOf('Spend Objective');
-  const costShareIdx = headers.indexOf('Cost Share Percentage');
-  const idIdx = headers.indexOf('ID');
-  const totalIdx = headers.findIndex(h => h === 'Total Cost');
-  const boltIdx = headers.findIndex(h => h === 'Bolt Spend');
-  const provIdx = headers.findIndex(h => h === 'Provider Spend');
-
-  const pn = s => parseFloat(String(s || '0').replace(/[€$£%,\s]/g, '') || '0') || 0;
-
-  const actuals = [];
-  for (let i = 1; i < rows.length; i++) {
-    const r = rows[i];
-    const name = nameIdx >= 0 ? (r[nameIdx] || '').trim() : '';
-    const objective = objIdx >= 0 ? (r[objIdx] || '').trim() : '';
-    if (objective === 'bolt_plus_campaign') continue;
-
-    actuals.push({
-      week: weekIdx >= 0 ? (r[weekIdx] || '').trim() : '',
-      name,
-      objective,
-      costShare: costShareIdx >= 0 ? pn(r[costShareIdx]) : 0,
-      id: idIdx >= 0 ? (r[idIdx] || '').trim() : '',
-      totalCost: totalIdx >= 0 ? pn(r[totalIdx]) : 0,
-      boltSpend: boltIdx >= 0 ? pn(r[boltIdx]) : 0,
-      provSpend: provIdx >= 0 ? pn(r[provIdx]) : 0,
-      parsed: parseCampaignName(name)
-    });
-  }
-  return actuals;
 }
 
 // ─── Multi-select dropdown helpers ───
@@ -1095,8 +905,7 @@ function initFilters() {
 
 // ─── Provider Lookup (from merchant-level overview) ───
 // Format: { "pid": ["am", orders8wk, gmv8wk, aov, "segment"], ... }
-// Loaded dynamically from Looker data; fallback hardcoded below
-let _PROVIDER_LOOKUP = {
+const _PROVIDER_LOOKUP = {
 '976':['Rico Spagnol',274,6960,25.4,'SMB (AM Segment)'],
 '1025':['Duncan Calleja',0,0,0,'SMB (AM Segment)'],
 '1028':['Duncan Calleja',392,15964,40.72,'SMB (AM Segment)'],
@@ -3703,71 +3512,6 @@ const CORS_PROXIES = [
 
 let _OPS_CAMPAIGNS = [];
 
-async function fetchWithProxies(rawUrl) {
-  for (const proxyFn of CORS_PROXIES) {
-    try {
-      const url = proxyFn(rawUrl) + (proxyFn(rawUrl).includes('?') ? '&' : '?') + '_t=' + Date.now();
-      const resp = await fetch(url);
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      return await resp.text();
-    } catch (e) { continue; }
-  }
-  throw new Error('All proxies failed');
-}
-
-async function loadLookerMerchant() {
-  const url = getLookerMerchantUrl();
-  if (!url) { alert('Paste the merchant data published CSV URL first.'); return; }
-  const st = document.getElementById('dsMerchantStatus');
-  st.textContent = 'loading...'; st.className = 'ds-status ds-pending';
-  try {
-    const text = await fetchWithProxies(url);
-    const lookup = parseLookerMerchantCSV(text);
-    const count = Object.keys(lookup).length;
-    if (count === 0) throw new Error('No providers parsed');
-    _PROVIDER_LOOKUP = lookup;
-    st.textContent = count + ' providers'; st.className = 'ds-status ds-ok';
-    if (_OPS_CAMPAIGNS.length > 0) {
-      resetFilters(); initFilters(); refresh();
-    }
-    console.log('Looker merchant data loaded:', count, 'providers');
-  } catch (err) {
-    st.textContent = 'error'; st.className = 'ds-status';
-    st.style.color = '#e74c3c';
-    console.error('Looker merchant load failed:', err);
-    alert('Failed to load merchant data: ' + err.message);
-  }
-}
-
-async function loadLookerCampaigns() {
-  const url = getLookerCampaignsUrl();
-  if (!url) { alert('Paste the campaigns data published CSV URL first.'); return; }
-  const st = document.getElementById('dsCampaignsStatus');
-  st.textContent = 'loading...'; st.className = 'ds-status ds-pending';
-  try {
-    const text = await fetchWithProxies(url);
-    const actuals = parseLookerCampaignsCSV(text);
-    if (actuals.length === 0) throw new Error('No campaigns parsed');
-    _LOOKER_ACTUALS = actuals;
-    st.textContent = actuals.length + ' campaigns'; st.className = 'ds-status ds-ok';
-
-    const weekTotals = {};
-    actuals.forEach(a => {
-      if (!weekTotals[a.week]) weekTotals[a.week] = { total: 0, bolt: 0, prov: 0 };
-      weekTotals[a.week].total += a.totalCost;
-      weekTotals[a.week].bolt += a.boltSpend;
-      weekTotals[a.week].prov += a.provSpend;
-    });
-    console.log('Looker campaigns loaded:', actuals.length, 'campaigns across', Object.keys(weekTotals).length, 'weeks');
-    console.table(weekTotals);
-  } catch (err) {
-    st.textContent = 'error'; st.className = 'ds-status';
-    st.style.color = '#e74c3c';
-    console.error('Looker campaigns load failed:', err);
-    alert('Failed to load campaigns data: ' + err.message);
-  }
-}
-
 function parseCSV(text) {
   const rows = [];
   let current = '';
@@ -4512,20 +4256,8 @@ renderSnapshots();
 showActiveCalibration();
 loadBudget();
 loadSheetUrl();
-loadLookerUrls();
 
-async function initAll() {
-  const merchantUrl = getLookerMerchantUrl();
-  if (merchantUrl) {
-    try { await loadLookerMerchant(); } catch(e) { console.warn('Merchant data auto-load failed:', e); }
-  }
-  const campaignsUrl = getLookerCampaignsUrl();
-  if (campaignsUrl) {
-    try { await loadLookerCampaigns(); } catch(e) { console.warn('Campaigns data auto-load failed:', e); }
-  }
-  await loadLiveData();
-}
-initAll();
+loadLiveData();
 </script>
 </body>
 </html>
