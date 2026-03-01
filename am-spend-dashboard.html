@@ -113,6 +113,13 @@
   .sp-history td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
   .sp-history tr:hover td { background: var(--surface2); }
   .sp-empty { color: var(--text-dim); font-size: 13px; padding: 12px 0; }
+  .sp-sheet-url { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .sp-sheet-url label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; font-weight: 600; white-space: nowrap; }
+  .sp-sheet-url input { flex: 1; min-width: 240px; background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 6px 10px; font-size: 12px; outline: none; font-family: monospace; }
+  .sp-sheet-url input:focus { border-color: var(--accent); }
+  .sp-sheet-url .url-status { font-size: 11px; font-weight: 600; }
+  .sp-sheet-url .url-ok { color: #2ecc71; }
+  .sp-sheet-url .url-err { color: #e74c3c; }
   .sp-compare-wrap { margin-top: 16px; }
   .sp-compare-wrap h4 { font-size: 13px; font-weight: 700; margin: 0 0 8px; color: var(--text); }
   .accuracy-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin-bottom: 16px; }
@@ -414,6 +421,11 @@
       <button onclick="runCalibration()" style="border-color:var(--accent);color:var(--accent)">🔧 Calibrate Model</button>
       <button onclick="resetCalibration()" style="font-size:12px">↩ Reset to Defaults</button>
     </div>
+    <div class="sp-sheet-url">
+      <label>Google Sheet Webhook URL</label>
+      <input type="text" id="sheetWebhookUrl" placeholder="Paste your Apps Script web app URL here..." oninput="saveSheetUrl()">
+      <span id="sheetUrlStatus"></span>
+    </div>
     <div id="calibrationPanel" style="display:none"></div>
     <div class="sp-history" id="snapshotHistory"></div>
     <div class="sp-compare-wrap" id="compareWrap" style="display:none"></div>
@@ -470,6 +482,53 @@ const BUDGET_KEY = 'am_spend_bolt_budget';
 function getBudget() { return parseFloat(localStorage.getItem(BUDGET_KEY)) || 0; }
 function saveBudget() { localStorage.setItem(BUDGET_KEY, document.getElementById('boltBudget').value || '0'); }
 function loadBudget() { const b = getBudget(); if (b > 0) document.getElementById('boltBudget').value = b; }
+
+// ─── Google Sheet webhook ───
+const SHEET_URL_KEY = 'am_spend_sheet_webhook';
+function getSheetUrl() { return (localStorage.getItem(SHEET_URL_KEY) || '').trim(); }
+function saveSheetUrl() {
+  const url = document.getElementById('sheetWebhookUrl').value.trim();
+  localStorage.setItem(SHEET_URL_KEY, url);
+  const st = document.getElementById('sheetUrlStatus');
+  if (!url) { st.textContent = ''; return; }
+  if (url.startsWith('https://script.google.com/')) {
+    st.textContent = 'Linked';
+    st.className = 'url-status url-ok';
+  } else {
+    st.textContent = 'Invalid URL';
+    st.className = 'url-status url-err';
+  }
+}
+function loadSheetUrl() {
+  const url = getSheetUrl();
+  if (url) { document.getElementById('sheetWebhookUrl').value = url; saveSheetUrl(); }
+}
+
+async function pushSnapshotToSheet(snap) {
+  const url = getSheetUrl();
+  if (!url) return;
+  const payload = {
+    date: snap.date,
+    isoWeek: snap.isoWeek,
+    campaigns: snap.campaigns.map(c => ({
+      pid: c.pid, pname: c.pname, am: c.am, type: c.type,
+      discount: c.discount, costShare: c.costShare,
+      mov: c.mov || 0, discountCap: c.discountCap || 0,
+      week: c.week,
+      estTotal: c.estTotal, estBolt: c.estBolt, estProv: c.estProv
+    }))
+  };
+  try {
+    await fetch(url, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(payload)
+    });
+    console.log('Snapshot pushed to Google Sheet (' + snap.campaigns.length + ' rows)');
+  } catch (err) {
+    console.warn('Sheet push failed:', err.message);
+  }
+}
 
 // ─── Multi-select dropdown helpers ───
 function toggleMS(trigger) {
@@ -3648,6 +3707,7 @@ function takeSnapshot() {
     return {
       pid: c[1], pname: c[3], type: c[4], discount: c[5],
       costShare: c[6], am: c[11], week: c[0],
+      mov: c[9] || 0, discountCap: c[8] || 0,
       estTotal: Math.round(est.total), estBolt: Math.round(est.bolt), estProv: Math.round(est.prov)
     };
   });
@@ -3669,6 +3729,7 @@ function takeSnapshot() {
   snaps.unshift(snap);
   saveSnapshots(snaps);
   renderSnapshots();
+  pushSnapshotToSheet(snap);
   alert(`Snapshot saved: ${dateStr} (Week ${weekNum}) — ${campaigns.length} campaigns, est. total €${totals.total.toLocaleString()}/wk`);
 }
 
@@ -4194,6 +4255,7 @@ function showActiveCalibration() {
 renderSnapshots();
 showActiveCalibration();
 loadBudget();
+loadSheetUrl();
 
 loadLiveData();
 </script>
