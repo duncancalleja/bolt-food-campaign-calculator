@@ -387,6 +387,7 @@
           <option value="menu_discount">Menu Discount (% off entire menu)</option>
           <option value="item_discount">Item Discount (% off specific items)</option>
           <option value="free_delivery">Free Delivery (capped)</option>
+          <option value="bolt_plus_fd">Bolt+ Free Delivery</option>
         </select>
       </div>
 
@@ -405,6 +406,25 @@
           <div class="input-prefix">
             <span class="prefix">&euro;</span>
             <input type="number" id="fdCap" value="3.5" min="0.5" step="0.5" oninput="calculate()">
+          </div>
+        </div>
+      </div>
+
+      <div id="audienceRow" style="display:none;">
+        <div class="row">
+          <div class="field">
+            <label>Target Audience</label>
+            <select id="targetAudience" onchange="onAudienceChange(); calculate()">
+              <option value="all">All Users</option>
+              <option value="bolt_plus">Bolt+ Subscribers Only</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Bolt+ Penetration</label>
+            <div class="range-display">
+              <input type="range" id="boltPlusPct" min="5" max="60" value="25" step="1" oninput="syncRange('boltPlusPct','boltPlusPctVal','%'); calculate()">
+              <span class="range-val" id="boltPlusPctVal">25%</span>
+            </div>
           </div>
         </div>
       </div>
@@ -511,6 +531,9 @@ const REDEMPTION = { menu_discount: 0.72, item_discount: 0.38, free_delivery: 0.
 const UPLIFT = { 5:.03, 10:.06, 15:.10, 20:.14, 25:.19, 30:.24, 35:.28, 40:.32, 45:.36, 50:.40 };
 const UPLIFT_FD = 0.12;
 const AVG_DELIVERY_FEE = 2.80;
+const FULL_DELIVERY_FEE = 5.00;
+const BOLT_PLUS_PENETRATION = 0.25;
+const BOLT_PLUS_UPLIFT = 0.08;
 
 const SEGMENT_BENCHMARKS = {
   enterprise: { avgOrders: 850, avgAOV: 24.5 },
@@ -2803,8 +2826,28 @@ function syncRange(sid, did, suffix) {
 
 function onTypeChange() {
   const t = document.getElementById('discountType').value;
-  document.getElementById('discountRow').style.display = t === 'free_delivery' ? 'none' : 'block';
-  document.getElementById('fdRow').style.display = t === 'free_delivery' ? 'block' : 'none';
+  const isBoltPlusFD = t === 'bolt_plus_fd';
+  const isFD = t === 'free_delivery';
+  const isDiscount = t === 'menu_discount' || t === 'item_discount';
+
+  document.getElementById('discountRow').style.display = isDiscount ? 'block' : 'none';
+  document.getElementById('fdRow').style.display = isFD ? 'block' : 'none';
+  document.getElementById('audienceRow').style.display = isDiscount ? 'block' : 'none';
+
+  if (isBoltPlusFD) {
+    document.getElementById('costShare').value = 0;
+    syncRange('costShare', 'costShareVal', '%');
+    document.getElementById('costShare').disabled = true;
+  } else {
+    document.getElementById('costShare').disabled = false;
+  }
+
+  if (isBoltPlusFD) {
+    document.getElementById('targetAudience').value = 'bolt_plus';
+  }
+}
+
+function onAudienceChange() {
 }
 
 function fmt(n) { return '€' + Math.round(n).toLocaleString(); }
@@ -2852,7 +2895,13 @@ function movQualifyingRate(aov, mov, cv) {
   return { rate, condMean };
 }
 
-function est(orders, aov, disc, type, share, fdCap, mov, cv) {
+function est(orders, aov, disc, type, share, fdCap, mov, cv, opts) {
+  opts = opts || {};
+  const bpPen = opts.boltPlusPct || BOLT_PLUS_PENETRATION;
+  const audience = opts.audience || 'all';
+
+  const baseOrders = (type === 'bolt_plus_fd' || audience === 'bolt_plus')
+    ? orders * bpPen : orders;
   const gmv = orders * aov;
   mov = mov || 0;
   cv = cv || ORDER_VALUE_CV;
@@ -2861,10 +2910,18 @@ function est(orders, aov, disc, type, share, fdCap, mov, cv) {
   const { rate: qualifyingRate, condMean: effectiveAov } =
     mov > 0 ? movQualifyingRate(aov, mov, cv) : { rate: 1.0, condMean: aov };
 
-  if (type === 'free_delivery') {
+  if (type === 'bolt_plus_fd') {
+    uplift = BOLT_PLUS_UPLIFT;
+    redemption = 1.0;
+    const uo = baseOrders * (1 + uplift);
+    const dOrders = uo * redemption * qualifyingRate;
+    dpo = FULL_DELIVERY_FEE;
+    total = dOrders * dpo;
+    share = 0;
+  } else if (type === 'free_delivery') {
     uplift = UPLIFT_FD;
     redemption = REDEMPTION.free_delivery;
-    const uo = orders * (1 + uplift);
+    const uo = baseOrders * (1 + uplift);
     const dOrders = uo * redemption * qualifyingRate;
     const avgSave = Math.min(fdCap, AVG_DELIVERY_FEE);
     total = dOrders * avgSave;
@@ -2872,17 +2929,17 @@ function est(orders, aov, disc, type, share, fdCap, mov, cv) {
   } else {
     uplift = getUplift(disc);
     redemption = REDEMPTION[type];
-    const uo = orders * (1 + uplift);
+    const uo = baseOrders * (1 + uplift);
     const dOrders = uo * redemption * qualifyingRate;
     dpo = effectiveAov * (disc / 100);
     total = dOrders * dpo;
   }
 
-  const uo = orders * (1 + uplift);
+  const uo = baseOrders * (1 + uplift);
   return {
-    gmv, uplift, upliftedOrders: uo, upliftOrders: uo - orders,
-    redemption, dpo, total, provShare: total * share, boltShare: total * (1 - share), share,
-    mov, qualifyingRate, effectiveAov, cv
+    gmv, uplift, upliftedOrders: uo, upliftOrders: uo - baseOrders,
+    baseOrders, redemption, dpo, total, provShare: total * share, boltShare: total * (1 - share), share,
+    mov, qualifyingRate, effectiveAov, cv, audience, boltPlusPct: bpPen
   };
 }
 
@@ -2912,10 +2969,12 @@ function calculate() {
   const weeks = parseInt(document.getElementById('duration').value);
   const fdCap = parseFloat(document.getElementById('fdCap').value) || 3.5;
   const mov = parseFloat(document.getElementById('movValue').value) || 0;
+  const audience = document.getElementById('targetAudience').value;
+  const boltPlusPct = parseInt(document.getElementById('boltPlusPct').value) / 100;
 
   if (orders <= 0 || aov <= 0) return;
 
-  const r = est(orders, aov, disc, type, share, fdCap, mov, provCV);
+  const r = est(orders, aov, disc, type, share, fdCap, mov, provCV, { audience, boltPlusPct });
   const pw = r.provShare, bw = r.boltShare, tw = r.total;
   const pt = pw * weeks, bt = bw * weeks, gt = tw * weeks;
 
@@ -2923,12 +2982,15 @@ function calculate() {
   document.getElementById('resultsWrap').style.display = 'block';
   document.getElementById('providerIdDisplay').textContent = pid;
 
-  const tl = type === 'menu_discount' ? `${disc}% Menu Discount` :
-             type === 'item_discount' ? `${disc}% Item Discount` :
+  const audienceLabel = (r.audience === 'bolt_plus' || type === 'bolt_plus_fd')
+    ? ` [Bolt+ only, ${Math.round(r.boltPlusPct*100)}% of orders]` : '';
+  const tl = type === 'menu_discount' ? `${disc}% Menu Discount${audienceLabel}` :
+             type === 'item_discount' ? `${disc}% Item Discount${audienceLabel}` :
+             type === 'bolt_plus_fd' ? `Bolt+ Free Delivery${audienceLabel}` :
              `Free Delivery (cap €${fdCap})`;
-  const sl = share === 1 ? '100% provider-funded' :
-             share === 0 ? '100% Bolt-funded' :
-             `${Math.round(share*100)}% provider / ${Math.round((1-share)*100)}% Bolt`;
+  const sl = r.share === 1 ? '100% provider-funded' :
+             r.share === 0 ? '100% Bolt-funded' :
+             `${Math.round(r.share*100)}% provider / ${Math.round((1-r.share)*100)}% Bolt`;
 
   const srcTag = currentSource === 'uploaded'
     ? '<span class="assumption-tag tag-uploaded">Provider Data</span>'
@@ -2941,7 +3003,7 @@ function calculate() {
     `${currentSource === 'uploaded' ? ' (from uploaded data)' : ''}.`;
 
   document.getElementById('providerCostWeek').textContent = fmt(pw);
-  document.getElementById('providerCostSub').textContent = `${fmt(pt)} total (${weeks}w) · ${pct(pw / r.gmv)} of provider weekly GMV`;
+  document.getElementById('providerCostSub').textContent = pw > 0 ? `${fmt(pt)} total (${weeks}w) · ${pct(pw / r.gmv)} of provider weekly GMV` : 'No provider cost';
 
   document.getElementById('boltCostWeek').textContent = fmt(bw);
   document.getElementById('boltCostSub').textContent = `${fmt(bt)} total (${weeks}w)`;
@@ -2954,9 +3016,9 @@ function calculate() {
   const bW = Math.max(r.boltShare > 0 ? 8 : 0, r.boltShare / tot * 100);
   const pW = Math.max(r.provShare > 0 ? 8 : 0, r.provShare / tot * 100);
   document.getElementById('barBolt').style.width = bW + '%';
-  document.getElementById('barBolt').textContent = r.boltShare > 0 ? `Bolt ${Math.round((1-share)*100)}%` : '';
+  document.getElementById('barBolt').textContent = r.boltShare > 0 ? `Bolt ${Math.round((1-r.share)*100)}%` : '';
   document.getElementById('barProvider').style.width = pW + '%';
-  document.getElementById('barProvider').textContent = r.provShare > 0 ? `Provider ${Math.round(share*100)}%` : '';
+  document.getElementById('barProvider').textContent = r.provShare > 0 ? `Provider ${Math.round(r.share*100)}%` : '';
 
   // Breakdown
   const cvSource = (currentSource === 'uploaded' && _selectedProvider && _selectedProvider.cv !== ORDER_VALUE_CV)
@@ -2967,18 +3029,22 @@ function calculate() {
     <div class="breakdown-item"><span class="bi-label">Orders ≥ €${mov} MOV</span><span class="bi-value" style="color:${r.qualifyingRate < 0.9 ? 'var(--provider)' : 'var(--accent)'};">${pct(r.qualifyingRate)} (~${Math.round(r.upliftedOrders * r.redemption * r.qualifyingRate)} of ${Math.round(r.upliftedOrders * r.redemption)} discounted)</span></div>
     <div class="breakdown-item"><span class="bi-label">Avg. value of qualifying orders</span><span class="bi-value">€${r.effectiveAov.toFixed(2)}${r.effectiveAov > aov * 1.01 ? ' (above AOV)' : ''}</span></div>` : '';
 
+  const bpInfo = (type === 'bolt_plus_fd' || r.audience === 'bolt_plus')
+    ? `<div class="breakdown-item"><span class="bi-label">Bolt+ Penetration</span><span class="bi-value" style="color:var(--bolt);">${Math.round(r.boltPlusPct*100)}% \u2192 ${Math.round(r.baseOrders)} Bolt+ orders/wk (of ${orders} total)</span></div>` : '';
+
   document.getElementById('breakdownContent').innerHTML = `
     <div class="breakdown-item"><span class="bi-label">Provider Weekly GMV</span><span class="bi-value">${fmt(r.gmv)}</span></div>
     <div class="breakdown-item"><span class="bi-label">Base Weekly Orders</span><span class="bi-value">${orders.toLocaleString()}</span></div>
+    ${bpInfo}
     <div class="breakdown-item"><span class="bi-label">Expected Order Uplift</span><span class="bi-value" style="color:var(--accent);">+${pct(r.uplift)} (+${Math.round(r.upliftOrders)} orders)</span></div>
     <div class="breakdown-item"><span class="bi-label">Orders During Campaign / week</span><span class="bi-value">${Math.round(r.upliftedOrders).toLocaleString()}</span></div>
     <div class="breakdown-item"><span class="bi-label">Redemption Rate</span><span class="bi-value">${pct(r.redemption)}</span></div>${movBreakdown}
     <div class="breakdown-item"><span class="bi-label">Orders With Discount Applied</span><span class="bi-value">${Math.round(r.upliftedOrders * r.redemption * r.qualifyingRate).toLocaleString()}</span></div>
-    <div class="breakdown-item"><span class="bi-label">Avg. Discount Per Order</span><span class="bi-value">${fmtDec(r.dpo)}</span></div>
+    <div class="breakdown-item"><span class="bi-label">${type === 'bolt_plus_fd' ? 'Delivery Fee Per Order' : 'Avg. Discount Per Order'}</span><span class="bi-value">${fmtDec(r.dpo)}</span></div>
     <div class="divider"></div>
-    <div class="breakdown-item"><span class="bi-label"><strong>Total Discount Cost / week</strong></span><span class="bi-value total-val"><strong>${fmt(tw)}</strong></span></div>
-    <div class="breakdown-item"><span class="bi-label">Provider Share (${Math.round(share*100)}%)</span><span class="bi-value provider-val">${fmt(pw)}</span></div>
-    <div class="breakdown-item"><span class="bi-label">Bolt Share (${Math.round((1-share)*100)}%)</span><span class="bi-value bolt-val">${fmt(bw)}</span></div>
+    <div class="breakdown-item"><span class="bi-label"><strong>Total ${type === 'bolt_plus_fd' ? 'Delivery' : 'Discount'} Cost / week</strong></span><span class="bi-value total-val"><strong>${fmt(tw)}</strong></span></div>
+    <div class="breakdown-item"><span class="bi-label">Provider Share (${Math.round(r.share*100)}%)</span><span class="bi-value provider-val">${fmt(pw)}</span></div>
+    <div class="breakdown-item"><span class="bi-label">Bolt Share (${Math.round((1-r.share)*100)}%)</span><span class="bi-value bolt-val">${fmt(bw)}</span></div>
     ${weeks > 1 ? `<div class="divider"></div>
     <div class="breakdown-item"><span class="bi-label"><strong>Total over ${weeks} weeks</strong></span><span class="bi-value total-val"><strong>${fmt(gt)}</strong></span></div>
     <div class="breakdown-item"><span class="bi-label">Provider total</span><span class="bi-value provider-val">${fmt(pt)}</span></div>
@@ -2986,29 +3052,38 @@ function calculate() {
   `;
 
   // Scenarios
+  const estOpts = { audience, boltPlusPct };
   let scHtml = `<div class="scenario-row">
-    <span class="sh">${type==='free_delivery'?'FD Cap':'Discount'}</span>
+    <span class="sh">${type==='bolt_plus_fd'?'Bolt+ %':type==='free_delivery'?'FD Cap':'Discount'}</span>
     <span class="sh num">Uplift</span>
     <span class="sh num">Total/wk</span>
-    <span class="sh num">Provider/wk</span>
-    <span class="sh num">Provider (${weeks}w)</span>
+    <span class="sh num">Bolt/wk</span>
+    <span class="sh num">Bolt (${weeks}w)</span>
   </div>`;
 
-  if (type === 'free_delivery') {
+  if (type === 'bolt_plus_fd') {
+    [10,15,20,25,30,40,50].forEach(p => {
+      const s = est(orders, aov, disc, type, 0, fdCap, mov, provCV, { audience: 'bolt_plus', boltPlusPct: p/100 });
+      scHtml += `<div class="scenario-row" style="${p===Math.round(boltPlusPct*100)?'color:var(--accent);font-weight:600':''}">
+        <span>${p}%</span><span class="num">+${pct(s.uplift)}</span>
+        <span class="num">${fmt(s.total)}</span><span class="num">${fmt(s.boltShare)}</span>
+        <span class="num">${fmt(s.boltShare*weeks)}</span></div>`;
+    });
+  } else if (type === 'free_delivery') {
     [2,2.5,3,3.5,4,5].forEach(c => {
-      const s = est(orders, aov, disc, type, share, c, mov, provCV);
+      const s = est(orders, aov, disc, type, share, c, mov, provCV, estOpts);
       scHtml += `<div class="scenario-row" style="${c===fdCap?'color:var(--accent);font-weight:600':''}">
         <span>€${c.toFixed(1)}</span><span class="num">+${pct(s.uplift)}</span>
-        <span class="num">${fmt(s.total)}</span><span class="num">${fmt(s.provShare)}</span>
-        <span class="num">${fmt(s.provShare*weeks)}</span></div>`;
+        <span class="num">${fmt(s.total)}</span><span class="num">${fmt(s.boltShare)}</span>
+        <span class="num">${fmt(s.boltShare*weeks)}</span></div>`;
     });
   } else {
     [5,10,15,20,25,30,40,50].forEach(d => {
-      const s = est(orders, aov, d, type, share, fdCap, mov, provCV);
+      const s = est(orders, aov, d, type, share, fdCap, mov, provCV, estOpts);
       scHtml += `<div class="scenario-row" style="${d===disc?'color:var(--accent);font-weight:600':''}">
         <span>${d}%</span><span class="num">+${pct(s.uplift)}</span>
-        <span class="num">${fmt(s.total)}</span><span class="num">${fmt(s.provShare)}</span>
-        <span class="num">${fmt(s.provShare*weeks)}</span></div>`;
+        <span class="num">${fmt(s.total)}</span><span class="num">${fmt(s.boltShare)}</span>
+        <span class="num">${fmt(s.boltShare*weeks)}</span></div>`;
     });
   }
   document.getElementById('scenariosContent').innerHTML = scHtml;
@@ -3034,7 +3109,7 @@ function calculate() {
 
   ['enterprise','mm','smb','stores'].forEach(sk => {
     const sb = SEGMENT_BENCHMARKS[sk];
-    const sr = est(sb.avgOrders, sb.avgAOV, disc, type, share, fdCap, mov, provCV);
+    const sr = est(sb.avgOrders, sb.avgAOV, disc, type, share, fdCap, mov, provCV, estOpts);
     const isCurrent = sk === segment;
     segHtml += `<div class="scenario-row" style="${isCurrent ? 'color:var(--bolt);' : ''}">
       <span>${segNames[sk]} avg${isCurrent ? ' (selected)' : ''}</span>
