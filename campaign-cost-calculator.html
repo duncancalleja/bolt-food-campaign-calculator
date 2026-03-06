@@ -3168,34 +3168,45 @@ function calculate() {
   // ROI & Investment Context
   const incGMVwk = r.incrementalGMV;
   const incGMVtotal = incGMVwk * weeks;
-  const costPctOfIncGMV = incGMVwk > 0 ? (tw / incGMVwk) * 100 : 0;
-  const provCostPctOfIncGMV = incGMVwk > 0 ? (pw / incGMVwk) * 100 : 0;
-  const roiMultiple = incGMVtotal > 0 ? incGMVtotal / gt : 0;
-  const breakEvenOrders = r.dpo > 0 ? Math.ceil(tw / aov) : 0;
+  const margin = 0.30;
+  const incProfitWk = r.upliftOrders * aov * margin;
+  const incProfitTotal = incProfitWk * weeks;
+  const costPerExtraOrder = r.upliftOrders > 0 ? tw / r.upliftOrders : 0;
+  const provCostPerExtraOrder = r.upliftOrders > 0 ? pw / r.upliftOrders : 0;
+  const provROI = pw > 0 ? (incProfitTotal / (pw * weeks)) : (incProfitWk > 0 ? 99 : 0);
+  const breakEvenOrders = pw > 0 ? Math.ceil(pw / (aov * margin)) : 0;
 
   const roiPanel = document.getElementById('roiPanel');
   if (incGMVwk > 0) {
     roiPanel.style.display = 'block';
-    const roiColor = roiMultiple >= 3 ? 'var(--accent)' : roiMultiple >= 1.5 ? 'var(--provider)' : 'var(--danger)';
-    const verdict = roiMultiple >= 5 ? 'Excellent ROI' : roiMultiple >= 3 ? 'Strong ROI' : roiMultiple >= 1.5 ? 'Moderate ROI' : 'Low ROI — consider lower discount or higher cost share';
+    const roiColor = provROI >= 2 ? 'var(--accent)' : provROI >= 1 ? 'var(--provider)' : 'var(--danger)';
+    const verdict = provROI >= 3 ? 'Excellent — campaign pays for itself many times over'
+      : provROI >= 2 ? 'Strong — provider profits well from this campaign'
+      : provROI >= 1 ? 'Positive — provider earns more than they spend'
+      : provROI >= 0.5 ? 'Marginal — campaign is close to break-even for provider'
+      : 'Below break-even — consider lower discount or higher Bolt cost share';
+    const profitLabel = pw > 0 ? 'Provider Profit ROI' : 'Provider Profit ROI';
+    const profitDisplay = pw > 0 ? `${provROI.toFixed(1)}x` : 'No cost to provider';
+    const profitSub = pw > 0 ? verdict : 'Bolt covers 100% of the cost';
     document.getElementById('roiContent').innerHTML = `
       <div class="result-grid" style="margin-bottom:0;">
         <div class="result-card">
-          <div class="label">Incremental GMV / week</div>
+          <div class="label">Extra Revenue / week</div>
           <div class="value" style="color:var(--accent);font-size:20px;">${fmt(incGMVwk)}</div>
-          <div class="sub">${fmt(incGMVtotal)} over ${weeks} week${weeks>1?'s':''} · +${Math.round(r.upliftOrders)} extra orders/wk</div>
+          <div class="sub">+${Math.round(r.upliftOrders)} extra orders/wk · ${fmt(incGMVtotal)} over ${weeks} week${weeks>1?'s':''}</div>
         </div>
         <div class="result-card">
-          <div class="label">GMV Return per €1 Spent</div>
-          <div class="value" style="color:${roiColor};font-size:20px;">€${roiMultiple.toFixed(1)}</div>
-          <div class="sub">${verdict}</div>
+          <div class="label">${profitLabel}</div>
+          <div class="value" style="color:${roiColor};font-size:20px;">${profitDisplay}</div>
+          <div class="sub">${profitSub}</div>
         </div>
       </div>
       <div style="margin-top:12px;">
-        <div class="breakdown-item"><span class="bi-label">Total campaign cost as % of incremental GMV</span><span class="bi-value" style="color:${costPctOfIncGMV > 60 ? 'var(--danger)' : 'var(--accent)'};">${costPctOfIncGMV.toFixed(1)}%</span></div>
-        <div class="breakdown-item"><span class="bi-label">Provider cost as % of incremental GMV</span><span class="bi-value">${provCostPctOfIncGMV.toFixed(1)}%</span></div>
-        <div class="breakdown-item"><span class="bi-label">Extra orders needed to cover total cost (at €${aov} AOV)</span><span class="bi-value">${breakEvenOrders} orders/wk</span></div>
-        <div class="breakdown-item"><span class="bi-label">Expected uplift delivers</span><span class="bi-value" style="color:${r.upliftOrders >= breakEvenOrders ? 'var(--accent)' : 'var(--danger)'};">${Math.round(r.upliftOrders)} orders/wk ${r.upliftOrders >= breakEvenOrders ? '(covers cost)' : '(below break-even)'}</span></div>
+        <div class="breakdown-item"><span class="bi-label">Cost per extra order (total)</span><span class="bi-value">${fmtDec(costPerExtraOrder)}</span></div>
+        <div class="breakdown-item"><span class="bi-label">Cost per extra order (provider pays)</span><span class="bi-value">${pw > 0 ? fmtDec(provCostPerExtraOrder) : '€0 (Bolt covers)'}</span></div>
+        <div class="breakdown-item"><span class="bi-label">Est. profit per extra order (at ~30% margin)</span><span class="bi-value" style="color:var(--accent);">${fmtDec(aov * margin)}</span></div>
+        ${pw > 0 ? `<div class="breakdown-item"><span class="bi-label">Extra orders to break even for provider</span><span class="bi-value">${breakEvenOrders} orders/wk</span></div>
+        <div class="breakdown-item"><span class="bi-label">Expected uplift delivers</span><span class="bi-value" style="color:${r.upliftOrders >= breakEvenOrders ? 'var(--accent)' : 'var(--danger)'};">${Math.round(r.upliftOrders)} orders/wk ${r.upliftOrders >= breakEvenOrders ? '— covers provider cost' : '— below break-even'}</span></div>` : ''}
       </div>`;
   } else {
     roiPanel.style.display = 'none';
