@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Campaign Spend by Account Manager</title>
+<title>AM Portfolio Overview — Bolt Food Malta</title>
 <style>
   :root {
     --bg: #0f1117;
@@ -33,7 +33,7 @@
   .header h1 { font-size: 20px; font-weight: 600; }
   .header .badge {
     font-size: 11px; padding: 3px 8px; border-radius: 4px;
-    background: var(--bolt-dim); color: var(--bolt);
+    background: var(--accent-dim); color: var(--accent);
     font-weight: 600; text-transform: uppercase; letter-spacing: .5px;
   }
   .header .nav-link {
@@ -42,280 +42,30 @@
   }
   .header .nav-link:hover { text-decoration: underline; }
 
-  .filter-bar {
-    padding: 14px 32px; background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-  }
-  .filter-bar label { font-size: 12px; color: var(--text-dim); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
-  .filter-bar select, .filter-bar input {
-    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
-    border-radius: 8px; padding: 8px 12px; font-size: 13px; outline: none;
-  }
-  .filter-bar select:focus, .filter-bar input:focus { border-color: var(--accent); }
-  .filter-group { display: flex; flex-direction: column; gap: 4px; }
-
-  .multi-select { position: relative; min-width: 140px; }
-  .multi-select .ms-trigger {
-    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
-    border-radius: 8px; padding: 8px 12px; font-size: 13px; cursor: pointer;
-    display: flex; align-items: center; justify-content: space-between; gap: 6px;
-    user-select: none; white-space: nowrap;
-  }
-  .multi-select .ms-trigger:hover { border-color: var(--accent); }
-  .multi-select.open .ms-trigger { border-color: var(--accent); }
-  .multi-select .ms-trigger::after { content: '▾'; font-size: 11px; color: var(--text-dim); }
-  .multi-select .ms-dropdown {
-    display: none; position: absolute; top: calc(100% + 4px); left: 0; min-width: 100%;
-    background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
-    padding: 6px 0; z-index: 100; max-height: 260px; overflow-y: auto;
-    box-shadow: 0 8px 24px rgba(0,0,0,.4);
-  }
-  .multi-select.open .ms-dropdown { display: block; }
-  .multi-select .ms-option {
-    display: flex; align-items: center; gap: 8px; padding: 6px 12px;
-    font-size: 13px; cursor: pointer; white-space: nowrap;
-  }
-  .multi-select .ms-option:hover { background: var(--surface); }
-  .multi-select .ms-option input[type="checkbox"] {
-    accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer;
-  }
-  .multi-select .ms-divider { height: 1px; background: var(--border); margin: 4px 0; }
-  .ms-badge {
-    background: var(--accent); color: #fff; font-size: 10px; font-weight: 700;
-    padding: 1px 6px; border-radius: 10px; margin-left: 2px;
-  }
-
-  .snapshot-panel {
-    margin: 24px 32px; background: var(--surface); border: 1px solid var(--border);
-    border-radius: 12px; padding: 20px 24px;
-  }
-  .snapshot-panel .sp-header {
-    display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;
-    cursor: pointer; user-select: none;
-  }
-  .snapshot-panel .sp-header h3 { margin: 0; font-size: 15px; font-weight: 700; color: var(--text); }
-  .snapshot-panel .sp-header .sp-toggle { font-size: 12px; color: var(--text-dim); }
-  .sp-body { display: none; }
-  .sp-body.open { display: block; }
-  .sp-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
-  .sp-actions button {
-    padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
-    cursor: pointer; border: 1px solid var(--border); background: var(--surface2); color: var(--text);
-    transition: all .15s;
-  }
-  .sp-actions button:hover { border-color: var(--accent); color: var(--accent); }
-  .sp-actions button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .sp-actions button.primary:hover { background: #e5a825; }
-  .sp-history { margin-top: 12px; }
-  .sp-history table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .sp-history th { text-align: left; padding: 8px 10px; border-bottom: 2px solid var(--border); color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
-  .sp-history td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
-  .sp-history tr:hover td { background: var(--surface2); }
-  .sp-empty { color: var(--text-dim); font-size: 13px; padding: 12px 0; }
-  .sp-sheet-url { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
-  .sp-sheet-url label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; font-weight: 600; white-space: nowrap; }
-  .sp-sheet-url input { flex: 1; min-width: 240px; background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 6px 10px; font-size: 12px; outline: none; font-family: monospace; }
-  .sp-sheet-url input:focus { border-color: var(--accent); }
-  .sp-sheet-url .url-status { font-size: 11px; font-weight: 600; }
-  .sp-sheet-url .url-ok { color: #2ecc71; }
-  .sp-sheet-url .url-err { color: #e74c3c; }
-  .sp-compare-wrap { margin-top: 16px; }
-  .sp-compare-wrap h4 { font-size: 13px; font-weight: 700; margin: 0 0 8px; color: var(--text); }
-  .accuracy-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin-bottom: 16px; }
-  .accuracy-card { background: var(--surface2); border-radius: 8px; padding: 12px; border: 1px solid var(--border); }
-  .accuracy-card .ac-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; }
-  .accuracy-card .ac-value { font-size: 20px; font-weight: 700; margin-top: 4px; }
-  .delta-pos { color: #e74c3c; }
-  .delta-neg { color: var(--accent); }
-  .delta-ok { color: #2ecc71; }
-
   .summary-cards {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 16px; padding: 24px 32px;
   }
   .s-card {
     background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-    padding: 20px;
+    padding: 18px;
   }
-  .s-card .s-label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
-  .s-card .s-value { font-size: 28px; font-weight: 700; }
+  .s-card .s-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+  .s-card .s-value { font-size: 26px; font-weight: 700; }
   .s-card .s-sub { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+  .s-card.accent .s-value { color: var(--accent); }
   .s-card.bolt .s-value { color: var(--bolt); }
   .s-card.prov .s-value { color: var(--provider); }
-  .s-card.accent .s-value { color: var(--accent); }
+  .s-card.danger .s-value { color: var(--danger); }
 
-  .budget-input-wrap {
-    display: flex; align-items: center; gap: 6px; margin-bottom: 10px;
+  .portfolio-section { padding: 0 32px 32px; }
+  .portfolio-section .section-title {
+    font-size: 16px; font-weight: 600; margin: 0 0 16px;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   }
-  .budget-input-wrap label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; font-weight: 600; }
-  .budget-input-wrap input {
-    width: 100px; background: var(--surface2); border: 1px solid var(--border);
-    color: var(--text); border-radius: 6px; padding: 5px 8px; font-size: 14px;
-    font-weight: 700; outline: none; text-align: right;
-  }
-  .budget-input-wrap input:focus { border-color: var(--accent); }
-  .budget-input-wrap .prefix { color: var(--text-dim); font-weight: 600; font-size: 14px; }
-  .budget-bar { height: 6px; background: var(--surface2); border-radius: 3px; margin-top: 8px; overflow: hidden; }
-  .budget-bar-fill { height: 100%; border-radius: 3px; transition: width .4s ease; }
-  .budget-bar-fill.ok { background: var(--accent); }
-  .budget-bar-fill.warn { background: #e67e22; }
-  .budget-bar-fill.over { background: #e74c3c; }
-  .budget-am-bar {
-    height: 4px; background: var(--surface); border-radius: 2px; margin-top: 4px; overflow: hidden;
-  }
-  .budget-am-fill { height: 100%; border-radius: 2px; transition: width .4s; }
-
-  .main-content { padding: 0 32px 32px; }
-
-  .section-title {
-    font-size: 16px; font-weight: 600; margin: 24px 0 16px;
-    display: flex; align-items: center; gap: 8px;
-  }
-  .section-title .count {
+  .count {
     font-size: 11px; background: var(--surface2); color: var(--text-dim);
     padding: 2px 8px; border-radius: 10px;
-  }
-
-  .chart-container {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-    padding: 24px; margin-bottom: 24px;
-  }
-  .bar-row {
-    display: grid; grid-template-columns: 130px 1fr 90px 90px 110px; gap: 10px;
-    align-items: center; padding: 10px 0;
-    border-bottom: 1px solid var(--border);
-  }
-  .bar-row.bar-header { border-bottom: 2px solid var(--border); padding: 6px 0; }
-  .bar-row:last-child { border-bottom: none; }
-  .bar-label { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .bar-col-header { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-dim); font-weight: 600; text-align: right; }
-  .bar-track {
-    height: 32px; background: var(--surface2); border-radius: 6px; overflow: hidden;
-    display: flex; position: relative;
-  }
-  .bar-fill-bolt {
-    height: 100%; background: var(--bolt); border-radius: 6px 0 0 6px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 11px; font-weight: 600; color: #fff; min-width: 0;
-    transition: width .4s ease;
-  }
-  .bar-fill-prov {
-    height: 100%; background: var(--provider); border-radius: 0 6px 6px 0;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 11px; font-weight: 600; color: #000; min-width: 0;
-    transition: width .4s ease;
-  }
-  .bar-total { font-size: 14px; font-weight: 700; text-align: right; }
-
-  .am-table-wrap {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-    overflow: hidden;
-  }
-  .am-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .am-table thead th {
-    background: var(--surface2); padding: 12px 14px; text-align: left;
-    font-size: 11px; text-transform: uppercase; letter-spacing: .5px;
-    color: var(--text-dim); font-weight: 600; position: sticky; top: 0;
-    cursor: pointer; user-select: none;
-  }
-  .am-table thead th:hover { color: var(--accent); }
-  .am-table thead th .sort-arrow { font-size: 10px; margin-left: 4px; }
-  .am-table tbody td {
-    padding: 10px 14px; border-bottom: 1px solid var(--border);
-  }
-  .am-table tbody tr:hover { background: rgba(52,211,153,.04); }
-  .am-table tbody tr.am-header-row {
-    background: var(--surface2); cursor: pointer;
-  }
-  .am-table tbody tr.am-header-row:hover { background: rgba(52,211,153,.08); }
-  .am-table tbody tr.am-header-row td { font-weight: 600; padding: 14px; }
-  .am-table tbody tr.campaign-row td { padding-left: 28px; font-size: 12px; }
-  .am-table tbody tr.campaign-row { background: rgba(0,0,0,.15); }
-
-  .tag {
-    display: inline-block; padding: 2px 8px; border-radius: 4px;
-    font-size: 11px; font-weight: 600;
-  }
-  .tag-delivery { background: var(--accent-dim); color: var(--accent); }
-  .tag-menu { background: var(--bolt-dim); color: var(--bolt); }
-  .tag-item { background: var(--provider-dim); color: var(--provider); }
-
-  .cost-bolt { color: var(--bolt); font-weight: 600; }
-  .cost-prov { color: var(--provider); font-weight: 600; }
-
-  .toggle-icon { display: inline-block; width: 16px; transition: transform .2s; }
-  .expanded .toggle-icon { transform: rotate(90deg); }
-
-  .legend {
-    display: flex; gap: 16px; margin-bottom: 16px; font-size: 12px;
-  }
-  .legend-dot {
-    width: 12px; height: 12px; border-radius: 3px; display: inline-block;
-    vertical-align: middle; margin-right: 4px;
-  }
-
-  .view-toggle {
-    display: flex; gap: 4px; background: var(--surface2); border-radius: 8px; padding: 3px;
-  }
-  .view-btn {
-    padding: 6px 14px; border-radius: 6px; border: none; background: none;
-    color: var(--text-dim); font-size: 12px; font-weight: 600; cursor: pointer;
-  }
-  .view-btn.active { background: var(--accent); color: #fff; }
-
-  .search-box {
-    position: relative;
-  }
-  .search-box input {
-    padding-left: 32px;
-  }
-  .search-box::before {
-    content: '🔍'; position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
-    font-size: 13px; pointer-events: none;
-  }
-
-  .provider-modal-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 9000;
-    display: flex; align-items: center; justify-content: center; padding: 20px;
-  }
-  .provider-modal {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
-    max-width: 800px; width: 100%; max-height: 90vh; overflow-y: auto; padding: 0;
-  }
-  .pm-header {
-    position: sticky; top: 0; background: var(--surface); padding: 20px 24px 16px;
-    border-bottom: 1px solid var(--border); z-index: 1;
-  }
-  .pm-header h3 { font-size: 18px; font-weight: 700; margin: 0; }
-  .pm-header .pm-sub { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
-  .pm-close {
-    position: absolute; top: 16px; right: 20px; background: none; border: none;
-    color: var(--text-dim); font-size: 20px; cursor: pointer; padding: 4px 8px;
-  }
-  .pm-close:hover { color: var(--text); }
-  .pm-body { padding: 16px 24px 24px; }
-  .pm-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
-  .pm-stat { background: var(--surface2); border-radius: 8px; padding: 12px; border: 1px solid var(--border); }
-  .pm-stat .pm-stat-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; }
-  .pm-stat .pm-stat-val { font-size: 18px; font-weight: 700; margin-top: 2px; }
-  .pm-campaigns { margin-top: 16px; }
-  .pm-campaigns h4 { font-size: 13px; font-weight: 700; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-dim); }
-  .pm-camp-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  .pm-camp-table th { text-align: left; padding: 6px 8px; border-bottom: 2px solid var(--border); font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; }
-  .pm-camp-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
-  .pm-camp-table tr:hover td { background: var(--surface2); }
-  .pm-week-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 6px; margin-bottom: 16px; }
-  .pm-week-card { background: var(--surface2); border-radius: 6px; padding: 8px; text-align: center; border: 1px solid var(--border); }
-  .pm-week-card .wk-num { font-size: 11px; color: var(--text-dim); }
-  .pm-week-card .wk-val { font-size: 14px; font-weight: 700; margin-top: 2px; }
-
-  .portfolio-section {
-    padding: 0 32px;
-  }
-  .portfolio-section .section-title {
-    font-size: 16px; font-weight: 600; margin: 24px 0 16px;
-    display: flex; align-items: center; gap: 8px;
   }
   .portfolio-table-wrap {
     background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
@@ -329,9 +79,7 @@
     white-space: nowrap;
   }
   .portfolio-table thead th.right { text-align: right; }
-  .portfolio-table tbody td {
-    padding: 10px 12px; border-bottom: 1px solid var(--border);
-  }
+  .portfolio-table tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
   .portfolio-table tbody td.right { text-align: right; font-variant-numeric: tabular-nums; }
   .portfolio-table tbody tr:hover { background: rgba(52,211,153,.04); }
   .portfolio-table tbody tr:last-child td { border-bottom: none; }
@@ -340,6 +88,7 @@
     background: var(--surface2); font-size: 13px;
   }
   .portfolio-table tfoot td.right { text-align: right; font-variant-numeric: tabular-nums; }
+
   .seg-badge {
     display: inline-block; padding: 2px 7px; border-radius: 4px;
     font-size: 11px; font-weight: 600; margin: 0 1px;
@@ -347,15 +96,13 @@
   .seg-smb { background: rgba(99,102,241,.12); color: #818cf8; }
   .seg-mm { background: rgba(245,158,11,.12); color: #fbbf24; }
   .seg-ent { background: rgba(52,211,153,.12); color: #34d399; }
+
   .mismatch-badge {
     display: inline-flex; align-items: center; gap: 4px;
     padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700;
     background: rgba(239,68,68,.12); color: #ef4444; cursor: pointer;
   }
   .mismatch-badge:hover { background: rgba(239,68,68,.2); }
-  .seg-mismatch { background: rgba(239,68,68,.08) !important; }
-  .mismatch-row td { font-size: 12px; padding: 6px 12px !important; }
-  .mismatch-row td:first-child { padding-left: 24px !important; }
   .mismatch-rows { display: none; }
   .mismatch-rows.open { display: table-row-group; }
   .mismatch-pill {
@@ -364,970 +111,80 @@
   }
   .mismatch-pill.wrong { background: rgba(239,68,68,.15); color: #f87171; }
   .mismatch-pill.expected { background: rgba(52,211,153,.12); color: var(--accent); }
-  .gmv-bar-wrap {
-    display: flex; align-items: center; gap: 8px;
-  }
+
+  .gmv-bar-wrap { display: flex; align-items: center; gap: 8px; }
   .gmv-bar-track {
     flex: 1; height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden;
     min-width: 60px;
   }
   .gmv-bar-fill { height: 100%; border-radius: 4px; background: var(--accent); transition: width .4s ease; }
 
+  .upload-bar {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .upload-bar button {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .upload-bar button:hover { border-color: var(--accent); color: var(--accent); }
+  .upload-bar button.clear { color: var(--text-dim); }
+
   @media (max-width: 768px) {
-    .header, .filter-bar, .summary-cards, .main-content, .portfolio-section { padding-left: 16px; padding-right: 16px; }
+    .header, .summary-cards, .portfolio-section { padding-left: 16px; padding-right: 16px; }
     .summary-cards { grid-template-columns: 1fr 1fr; }
-    .bar-row { grid-template-columns: 90px 1fr 70px 70px 90px; }
   }
 </style>
 </head>
 <body>
 
-<div id="loadingOverlay" style="position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
-  <div style="width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite"></div>
-  <div style="color:var(--text-dim);font-size:14px" id="loadingMsg">Fetching live data from Google Sheet...</div>
-</div>
-<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
-
 <div class="header">
-  <h1>Campaign Spend by Account Manager</h1>
-  <span class="badge">OPS Dashboard</span>
-  <span class="badge" id="dataStatus" style="background:var(--accent-dim);color:var(--accent)">Loading...</span>
-  <span id="lastUpdated" style="font-size:11px;color:var(--text-dim);display:none"></span>
-  <button id="btnRefresh" onclick="loadLiveData()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:4px">&#x21bb; Refresh</button>
-  <a href="am-portfolio.html" class="nav-link">AM Portfolio →</a>
-  <a href="campaign-cost-calculator.html" class="nav-link">← Cost Calculator</a>
+  <h1>AM Portfolio Overview</h1>
+  <span class="badge">Bolt Food Malta</span>
+  <a href="am-spend-dashboard.html" class="nav-link">Campaign Spend Dashboard &rarr;</a>
+  <a href="campaign-cost-calculator.html" class="nav-link" style="margin-left:0">Cost Calculator &rarr;</a>
 </div>
 
-<div class="filter-bar">
-  <div class="filter-group">
-    <label>Week</label>
-    <div class="multi-select" id="filterWeek">
-      <div class="ms-trigger" onclick="toggleMS(this)">All Weeks</div>
-      <div class="ms-dropdown"></div>
-    </div>
-  </div>
-  <div class="filter-group">
-    <label>Campaign Type</label>
-    <div class="multi-select" id="filterType">
-      <div class="ms-trigger" onclick="toggleMS(this)">All Types</div>
-      <div class="ms-dropdown"></div>
-    </div>
-  </div>
-  <div class="filter-group">
-    <label>Investment Reason</label>
-    <div class="multi-select" id="filterReason">
-      <div class="ms-trigger" onclick="toggleMS(this)">All Reasons</div>
-      <div class="ms-dropdown"></div>
-    </div>
-  </div>
-  <div class="filter-group">
-    <label>Cost Bearer</label>
-    <select id="filterBearer" onchange="refresh()">
-      <option value="all">All</option>
-      <option value="bolt">Bolt-Funded Only</option>
-      <option value="provider">Provider-Funded Only</option>
-      <option value="shared">Shared Cost</option>
-    </select>
-  </div>
-  <div class="filter-group search-box">
-    <label>Search Provider</label>
-    <input type="text" id="filterSearch" placeholder="Name or ID..." oninput="refresh()">
-  </div>
-</div>
+<div class="summary-cards" id="summaryCards"></div>
 
-<div class="summary-cards">
-  <div class="s-card accent">
-    <div class="s-label">Total Campaigns</div>
-    <div class="s-value" id="sTotalCampaigns">0</div>
-    <div class="s-sub" id="sTotalProviders">0 providers</div>
-  </div>
-  <div class="s-card">
-    <div class="s-label">Total Estimated Cost / Week</div>
-    <div class="s-value" id="sTotalCost">€0</div>
-    <div class="s-sub" id="sTotalCostSub">per week across all campaigns</div>
-  </div>
-  <div class="s-card bolt">
-    <div class="budget-input-wrap">
-      <label>Weekly Bolt Budget</label>
-      <span class="prefix">€</span>
-      <input type="number" id="boltBudget" placeholder="0" min="0" step="100" oninput="saveBudget(); refresh()">
-    </div>
-    <div class="s-label">Bolt Share / Week</div>
-    <div class="s-value" id="sBoltCost">€0</div>
-    <div class="s-sub" id="sBoltPct">0% of total</div>
-    <div class="budget-bar" id="budgetBarWrap" style="display:none"><div class="budget-bar-fill ok" id="budgetBarFill"></div></div>
-    <div class="s-sub" id="budgetSub" style="display:none"></div>
-  </div>
-  <div class="s-card prov">
-    <div class="s-label">Provider Share / Week</div>
-    <div class="s-value" id="sProvCost">€0</div>
-    <div class="s-sub" id="sProvPct">0% of total</div>
-  </div>
-</div>
-
-<div class="main-content">
+<div class="portfolio-section">
   <div class="section-title">
-    Spend by Account Manager
-    <span class="count" id="amCount">0 AMs</span>
-    <div style="margin-left:auto">
-      <div class="view-toggle">
-        <button class="view-btn active" onclick="setView('chart')" id="btnChart">Chart</button>
-        <button class="view-btn" onclick="setView('table')" id="btnTable">Table</button>
-      </div>
+    Portfolio by Account Manager
+    <span class="count" id="portfolioCount">Loading...</span>
+    <div style="margin-left:auto" class="upload-bar">
+      <span id="brandGroupStatus" style="font-size:11px;color:var(--text-dim)"></span>
+      <button onclick="document.getElementById('uploadBrandGroup').click()">&#x2B06; Upload Brands &amp; Groups CSV</button>
+      <input type="file" id="uploadBrandGroup" accept=".csv" style="display:none" onchange="handleBrandGroupUpload(this)">
+      <button id="btnClearBG" class="clear" onclick="clearBrandGroupData()" style="display:none">Clear Upload</button>
     </div>
   </div>
 
-  <div class="legend">
-    <span><span class="legend-dot" style="background:var(--bolt)"></span> Bolt Share</span>
-    <span><span class="legend-dot" style="background:var(--provider)"></span> Provider Share</span>
-  </div>
-
-  <div id="chartView" class="chart-container"></div>
-
-  <div id="tableView" class="am-table-wrap" style="display:none; max-height: 70vh; overflow-y: auto;">
-    <table class="am-table">
+  <div class="portfolio-table-wrap">
+    <table class="portfolio-table">
       <thead>
         <tr>
-          <th onclick="sortTable(0)">Account Manager <span class="sort-arrow"></span></th>
-          <th onclick="sortTable(1)"># Campaigns <span class="sort-arrow"></span></th>
-          <th onclick="sortTable(2)">Campaign Type <span class="sort-arrow"></span></th>
-          <th onclick="sortTable(3)">Provider <span class="sort-arrow"></span></th>
-          <th onclick="sortTable(4)">Discount <span class="sort-arrow"></span></th>
-          <th onclick="sortTable(5)">Cost Share <span class="sort-arrow"></span></th>
-          <th onclick="sortTable(6)">Total / Week <span class="sort-arrow"></span></th>
-          <th onclick="sortTable(7)">Bolt / Week <span class="sort-arrow"></span></th>
-          <th onclick="sortTable(8)">Provider / Week <span class="sort-arrow"></span></th>
-          <th>Reason</th>
+          <th>Account Manager</th>
+          <th class="right">Accounts</th>
+          <th class="right">Brands</th>
+          <th class="right">Groups</th>
+          <th class="right">SMB</th>
+          <th class="right">Mid-Market</th>
+          <th class="right">Enterprise</th>
+          <th class="right">Mismatched</th>
+          <th class="right">8wk GMV</th>
+          <th class="right">8wk Orders</th>
+          <th class="right">Avg AOV</th>
+          <th>GMV Share</th>
         </tr>
       </thead>
-      <tbody id="tableBody"></tbody>
+      <tbody id="portfolioBody"></tbody>
+      <tfoot id="portfolioFoot"></tfoot>
     </table>
   </div>
 </div>
 
-<div class="snapshot-panel">
-  <div class="sp-header" onclick="document.getElementById('spBody').classList.toggle('open'); this.querySelector('.sp-toggle').textContent = document.getElementById('spBody').classList.contains('open') ? '▾ collapse' : '▸ expand'">
-    <h3>Estimate Snapshots &amp; Accuracy Tracker</h3>
-    <span class="sp-toggle">▸ expand</span>
-  </div>
-  <div class="sp-body" id="spBody">
-    <div class="sp-actions">
-      <button class="primary" onclick="takeSnapshot()">📸 Snapshot Now</button>
-      <button onclick="exportSnapshots()">⬇ Export All</button>
-      <button onclick="document.getElementById('importSnap').click()">⬆ Import</button>
-      <input type="file" id="importSnap" accept=".json" style="display:none" onchange="importSnapshots(this)">
-      <button onclick="document.getElementById('uploadActuals').click()">📊 Upload Actuals CSV</button>
-      <input type="file" id="uploadActuals" accept=".csv" style="display:none" onchange="uploadActuals(this)">
-      <button onclick="runCalibration()" style="border-color:var(--accent);color:var(--accent)">🔧 Calibrate Model</button>
-      <button onclick="resetCalibration()" style="font-size:12px">↩ Reset to Defaults</button>
-    </div>
-    <div class="sp-sheet-url">
-      <label>Google Sheet Webhook URL</label>
-      <input type="text" id="sheetWebhookUrl" placeholder="Paste your Apps Script web app URL here..." oninput="saveSheetUrl()">
-      <span id="sheetUrlStatus"></span>
-    </div>
-    <div id="calibrationPanel" style="display:none"></div>
-    <div class="sp-history" id="snapshotHistory"></div>
-    <div class="sp-compare-wrap" id="compareWrap" style="display:none"></div>
-  </div>
-</div>
-
-<div id="providerModal" class="provider-modal-overlay" style="display:none" onclick="if(event.target===this)closeProviderModal()"></div>
-
 <script>
-const WEEKS_IN_DATA = 8;
-const _BASE_REDEMPTION = { menu_discount: 0.72, item_discount: 0.38, free_delivery: 0.85 };
-const _BASE_UPLIFT = { 5:.03, 10:.06, 15:.10, 20:.14, 25:.19, 30:.24, 35:.28, 40:.32, 45:.36, 50:.40 };
-const _BASE_UPLIFT_FD = 0.12;
-const AVG_DELIVERY_FEE = 2.80;
-const FULL_DELIVERY_FEE = 5.00;
-const ORDER_VALUE_CV = 0.45;
-const _BASE_ITEM_BASKET_SHARE = 0.30;
-
-const CAL_KEY = 'am_spend_calibration';
-function getCalibration() {
-  try { return JSON.parse(localStorage.getItem(CAL_KEY) || '{}'); } catch { return {}; }
-}
-function saveCalibration(cal) { localStorage.setItem(CAL_KEY, JSON.stringify(cal)); }
-
-const SEGMENTS = ['Enterprise', 'Mid-market', 'SMB'];
-function normalizeSegment(seg) {
-  if (!seg) return 'SMB';
-  if (seg.includes('Enterprise')) return 'Enterprise';
-  if (seg.includes('Mid-market') || seg.includes('Mid market')) return 'Mid-market';
-  return 'SMB';
-}
-
-const PARAM_DEFAULTS = {
-  redemption_menu: _BASE_REDEMPTION.menu_discount,
-  redemption_item: _BASE_REDEMPTION.item_discount,
-  redemption_fd: _BASE_REDEMPTION.free_delivery,
-  uplift_fd: _BASE_UPLIFT_FD,
-  item_basket_share: _BASE_ITEM_BASKET_SHARE,
-  uplift_scale: 1.0
-};
-
-function getParam(name, segment) {
-  const cal = getCalibration();
-  if (segment) {
-    const seg = normalizeSegment(segment);
-    const segKey = name + '__' + seg;
-    if (cal[segKey] !== undefined) return cal[segKey];
-  }
-  if (cal[name] !== undefined) return cal[name];
-  return PARAM_DEFAULTS[name];
-}
-
-function getRedemption(type, segment) {
-  if (type === 'menu_discount') return getParam('redemption_menu', segment);
-  if (type === 'item_discount') return getParam('redemption_item', segment);
-  if (type === 'free_delivery') return getParam('redemption_fd', segment);
-  return 0;
-}
-
-function getUpliftScaled(disc, segment) {
-  const scale = getParam('uplift_scale', segment);
-  const keys = Object.keys(_BASE_UPLIFT).map(Number).sort((a,b) => a - b);
-  if (disc <= 0) return 0;
-  if (disc >= keys[keys.length-1]) return _BASE_UPLIFT[keys[keys.length-1]] * scale;
-  for (let i = 0; i < keys.length - 1; i++) {
-    if (disc >= keys[i] && disc < keys[i+1]) {
-      const ratio = (disc - keys[i]) / (keys[i+1] - keys[i]);
-      return (_BASE_UPLIFT[keys[i]] + ratio * (_BASE_UPLIFT[keys[i+1]] - _BASE_UPLIFT[keys[i]])) * scale;
-    }
-  }
-  return 0;
-}
-
-const REDEMPTION = {
-  get menu_discount() { return getParam('redemption_menu'); },
-  get item_discount() { return getParam('redemption_item'); },
-  get free_delivery() { return getParam('redemption_fd'); }
-};
-const UPLIFT = new Proxy(_BASE_UPLIFT, {
-  get(target, prop) {
-    if (prop === Symbol.toPrimitive || typeof prop === 'symbol') return target[prop];
-    const num = Number(prop);
-    if (!isNaN(num) && target[num] !== undefined) return target[num] * getParam('uplift_scale');
-    return target[prop];
-  }
-});
-function getUpliftFD(segment) { return getParam('uplift_fd', segment); }
-function getItemBasketShare(segment) { return getParam('item_basket_share', segment); }
-
-const BUDGET_KEY = 'am_spend_bolt_budget';
-function getBudget() { return parseFloat(localStorage.getItem(BUDGET_KEY)) || 0; }
-function saveBudget() { localStorage.setItem(BUDGET_KEY, document.getElementById('boltBudget').value || '0'); }
-function loadBudget() { const b = getBudget(); if (b > 0) document.getElementById('boltBudget').value = b; }
-
-// ─── Google Sheet webhook ───
-const SHEET_URL_KEY = 'am_spend_sheet_webhook';
-function getSheetUrl() { return (localStorage.getItem(SHEET_URL_KEY) || '').trim(); }
-function saveSheetUrl() {
-  const url = document.getElementById('sheetWebhookUrl').value.trim();
-  localStorage.setItem(SHEET_URL_KEY, url);
-  const st = document.getElementById('sheetUrlStatus');
-  if (!url) { st.textContent = ''; return; }
-  if (url.startsWith('https://script.google.com/')) {
-    st.textContent = 'Linked';
-    st.className = 'url-status url-ok';
-  } else {
-    st.textContent = 'Invalid URL';
-    st.className = 'url-status url-err';
-  }
-}
-function loadSheetUrl() {
-  const url = getSheetUrl();
-  if (url) { document.getElementById('sheetWebhookUrl').value = url; saveSheetUrl(); }
-}
-
-async function pushSnapshotToSheet(snap) {
-  const url = getSheetUrl();
-  if (!url) return;
-  const payload = {
-    date: snap.date,
-    isoWeek: snap.isoWeek,
-    campaigns: snap.campaigns.map(c => ({
-      pid: c.pid, pname: c.pname, am: c.am, type: c.type,
-      discount: c.discount, costShare: c.costShare,
-      mov: c.mov || 0, discountCap: c.discountCap || 0,
-      week: c.week,
-      estTotal: c.estTotal, estBolt: c.estBolt, estProv: c.estProv
-    }))
-  };
-  try {
-    await fetch(url, {
-      method: 'POST', mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify(payload)
-    });
-    console.log('Snapshot pushed to Google Sheet (' + snap.campaigns.length + ' rows)');
-  } catch (err) {
-    console.warn('Sheet push failed:', err.message);
-  }
-}
-
-// ─── Multi-select dropdown helpers ───
-function toggleMS(trigger) {
-  const ms = trigger.closest('.multi-select');
-  document.querySelectorAll('.multi-select.open').forEach(el => { if (el !== ms) el.classList.remove('open'); });
-  ms.classList.toggle('open');
-}
-document.addEventListener('click', e => {
-  if (!e.target.closest('.multi-select')) document.querySelectorAll('.multi-select.open').forEach(el => el.classList.remove('open'));
-});
-
-function populateMS(id, items, allLabel) {
-  const ms = document.getElementById(id);
-  const dd = ms.querySelector('.ms-dropdown');
-  dd.innerHTML = '';
-  const allOpt = document.createElement('div');
-  allOpt.className = 'ms-option';
-  allOpt.innerHTML = `<input type="checkbox" checked data-value="__all__"><span>${allLabel}</span>`;
-  allOpt.querySelector('input').addEventListener('change', function() {
-    const boxes = dd.querySelectorAll('input[type="checkbox"]:not([data-value="__all__"])');
-    boxes.forEach(b => b.checked = this.checked);
-    updateMSTrigger(id, allLabel);
-    refresh();
-  });
-  dd.appendChild(allOpt);
-  dd.appendChild(Object.assign(document.createElement('div'), { className: 'ms-divider' }));
-  items.forEach(item => {
-    const opt = document.createElement('div');
-    opt.className = 'ms-option';
-    opt.innerHTML = `<input type="checkbox" checked data-value="${item.value}"><span>${item.label}</span>`;
-    opt.querySelector('input').addEventListener('change', function() {
-      const boxes = dd.querySelectorAll('input[type="checkbox"]:not([data-value="__all__"])');
-      const allBox = dd.querySelector('input[data-value="__all__"]');
-      const allChecked = [...boxes].every(b => b.checked);
-      const noneChecked = [...boxes].every(b => !b.checked);
-      allBox.checked = allChecked;
-      if (noneChecked) { allBox.checked = true; boxes.forEach(b => b.checked = true); }
-      updateMSTrigger(id, allLabel);
-      refresh();
-    });
-    dd.appendChild(opt);
-  });
-}
-
-function updateMSTrigger(id, allLabel) {
-  const ms = document.getElementById(id);
-  const trigger = ms.querySelector('.ms-trigger');
-  const boxes = ms.querySelectorAll('.ms-dropdown input[type="checkbox"]:not([data-value="__all__"])');
-  const checked = [...boxes].filter(b => b.checked);
-  if (checked.length === 0 || checked.length === boxes.length) {
-    trigger.innerHTML = allLabel;
-  } else if (checked.length === 1) {
-    trigger.innerHTML = checked[0].nextElementSibling.textContent;
-  } else {
-    trigger.innerHTML = `${checked.length} selected<span class="ms-badge">${checked.length}</span>`;
-  }
-}
-
-function getMSValues(id) {
-  const ms = document.getElementById(id);
-  const allBox = ms.querySelector('input[data-value="__all__"]');
-  if (allBox && allBox.checked) return null;
-  const boxes = ms.querySelectorAll('.ms-dropdown input[type="checkbox"]:not([data-value="__all__"])');
-  return [...boxes].filter(b => b.checked).map(b => b.dataset.value);
-}
-
-function normCdf(x) {
-  const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741;
-  const a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
-  const sign = x < 0 ? -1 : 1;
-  x = Math.abs(x) / Math.SQRT2;
-  const t = 1.0 / (1.0 + p * x);
-  const y = 1.0 - (((((a5*t + a4)*t) + a3)*t + a2)*t + a1)*t * Math.exp(-x*x);
-  return 0.5 * (1.0 + sign * y);
-}
-
-function logNormParams(mean, cv) {
-  const sigma2 = Math.log(1 + cv * cv);
-  return { mu: Math.log(mean) - sigma2 / 2, sigma: Math.sqrt(sigma2) };
-}
-
-function movQualifyingRate(aov, mov, cv) {
-  if (mov <= 0 || aov <= 0) return { rate: 1.0, condMean: aov };
-  const { mu, sigma } = logNormParams(aov, cv);
-  const z = (Math.log(mov) - mu) / sigma;
-  const rate = Math.max(0.01, 1 - normCdf(z));
-  const zAdj = (Math.log(mov) - mu - sigma * sigma) / sigma;
-  const condMean = rate > 0.001 ? aov * (1 - normCdf(zAdj)) / rate : mov;
-  return { rate, condMean };
-}
-
-function getUplift(d) {
-  if (d <= 0) return 0;
-  const scale = getParam('uplift_scale');
-  const keys = Object.keys(_BASE_UPLIFT).map(Number).sort((a,b) => a - b);
-  if (d >= keys[keys.length-1]) return _BASE_UPLIFT[keys[keys.length-1]] * scale;
-  for (let i = 0; i < keys.length - 1; i++) {
-    if (d >= keys[i] && d < keys[i+1]) {
-      const ratio = (d - keys[i]) / (keys[i+1] - keys[i]);
-      return (_BASE_UPLIFT[keys[i]] + ratio * (_BASE_UPLIFT[keys[i+1]] - _BASE_UPLIFT[keys[i]])) * scale;
-    }
-  }
-  return 0;
-}
-
-function estimateCampaignCost(c) {
-  const weeklyOrders = c[12] / WEEKS_IN_DATA;
-  const aov = c[14];
-  const campType = c[4];
-  const bonusPct = c[5];
-  const costSharePct = c[6];
-  const discountCap = c[8];
-  const mov = c[9] || 0;
-  const segment = c[15] || '';
-
-  if (weeklyOrders <= 0) return { total: 0, bolt: 0, prov: 0 };
-
-  const { rate: qualifyingRate, condMean: effectiveAov } =
-    mov > 0 ? movQualifyingRate(aov, mov, ORDER_VALUE_CV) : { rate: 1.0, condMean: aov };
-
-  let total = 0;
-
-  if (campType.includes('Free') && campType.includes('Delivery')) {
-    const uplift = getUpliftFD(segment);
-    const redemption = getRedemption('free_delivery', segment);
-    const upliftedOrders = weeklyOrders * (1 + uplift);
-    const dOrders = upliftedOrders * redemption * qualifyingRate;
-
-    let avgSave;
-    if (campType === 'Free Full Delivery') {
-      avgSave = FULL_DELIVERY_FEE;
-    } else if (campType === 'Free Delivery (capped)' && discountCap > 0) {
-      avgSave = Math.min(discountCap, AVG_DELIVERY_FEE);
-    } else {
-      avgSave = AVG_DELIVERY_FEE;
-    }
-    total = dOrders * avgSave;
-  } else if (campType === 'Menu Discount') {
-    const disc = bonusPct;
-    const uplift = getUpliftScaled(disc, segment);
-    const redemption = getRedemption('menu_discount', segment);
-    const upliftedOrders = weeklyOrders * (1 + uplift);
-    const dOrders = upliftedOrders * redemption * qualifyingRate;
-    const dpo = effectiveAov * (disc / 100);
-    total = dOrders * dpo;
-  } else if (campType === 'Item Discount') {
-    const disc = bonusPct;
-    const uplift = getUpliftScaled(disc, segment);
-    const redemption = getRedemption('item_discount', segment);
-    const upliftedOrders = weeklyOrders * (1 + uplift);
-    const dOrders = upliftedOrders * redemption * qualifyingRate;
-    const dpo = effectiveAov * getItemBasketShare(segment) * (disc / 100);
-    total = dOrders * dpo;
-  }
-
-  const provShare = total * (costSharePct / 100);
-  const boltShare = total * (1 - costSharePct / 100);
-
-  return { total, bolt: boltShare, prov: provShare };
-}
-
-function fmt(n) { return '€' + Math.round(n).toLocaleString(); }
-function pct(n) { return (n * 100).toFixed(1) + '%'; }
-
-function getCampTypeTag(t) {
-  if (t.includes('Delivery')) return `<span class="tag tag-delivery">${t}</span>`;
-  if (t.includes('Menu')) return `<span class="tag tag-menu">${t}</span>`;
-  if (t.includes('Item')) return `<span class="tag tag-item">${t}</span>`;
-  return `<span class="tag">${t}</span>`;
-}
-
-let currentView = 'chart';
-let sortCol = -1, sortAsc = true;
-
-function setView(v) {
-  currentView = v;
-  document.getElementById('btnChart').classList.toggle('active', v === 'chart');
-  document.getElementById('btnTable').classList.toggle('active', v === 'table');
-  document.getElementById('chartView').style.display = v === 'chart' ? '' : 'none';
-  document.getElementById('tableView').style.display = v === 'table' ? '' : 'none';
-}
-
-function getFiltered() {
-  const weeks = getMSValues('filterWeek');
-  const types = getMSValues('filterType');
-  const reasons = getMSValues('filterReason');
-  const bearer = document.getElementById('filterBearer').value;
-  const search = document.getElementById('filterSearch').value.toLowerCase().trim();
-
-  return _OPS_CAMPAIGNS.filter(c => {
-    if (weeks && !weeks.includes(String(c[0]))) return false;
-    if (types && !types.includes(c[4])) return false;
-    if (reasons && !reasons.includes(c[10])) return false;
-    if (bearer === 'bolt' && c[6] !== 0) return false;
-    if (bearer === 'provider' && c[6] !== 100) return false;
-    if (bearer === 'shared' && (c[6] === 0 || c[6] === 100)) return false;
-    if (search) {
-      const nameMatch = c[3].toLowerCase().includes(search);
-      const idMatch = String(c[1]).includes(search);
-      const amMatch = c[11].toLowerCase().includes(search);
-      if (!nameMatch && !idMatch && !amMatch) return false;
-    }
-    return true;
-  });
-}
-
-// ─── Brand & Group CSV Upload ───
-const BG_KEY = 'am_spend_brand_group';
-let _brandGroupMap = {};
-
-function getBrandGroupData() {
-  try { return JSON.parse(localStorage.getItem(BG_KEY) || '{}'); } catch { return {}; }
-}
-function saveBrandGroupData(data) {
-  localStorage.setItem(BG_KEY, JSON.stringify(data));
-  _brandGroupMap = data;
-}
-function loadBrandGroupData() {
-  _brandGroupMap = getBrandGroupData();
-  updateBGStatus();
-}
-function clearBrandGroupData() {
-  localStorage.removeItem(BG_KEY);
-  _brandGroupMap = {};
-  updateBGStatus();
-  renderPortfolio();
-}
-function updateBGStatus() {
-  const count = Object.keys(_brandGroupMap).length;
-  const el = document.getElementById('brandGroupStatus');
-  const btn = document.getElementById('btnClearBG');
-  if (count > 0) {
-    el.textContent = count + ' providers mapped';
-    el.style.color = 'var(--accent)';
-    btn.style.display = '';
-  } else {
-    el.textContent = '';
-    btn.style.display = 'none';
-  }
-}
-
-function findCol(headers, ...candidates) {
-  for (const cand of candidates) {
-    const idx = headers.findIndex(h => h.toLowerCase().replace(/[^a-z0-9]/g, '') === cand.replace(/[^a-z0-9]/g, ''));
-    if (idx >= 0) return idx;
-  }
-  return -1;
-}
-
-function handleBrandGroupUpload(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    const text = e.target.result;
-    const rows = parseCSV(text);
-    if (rows.length < 2) { alert('CSV has no data rows.'); input.value = ''; return; }
-
-    const headers = rows[0].map(h => h.trim());
-    const pidCol = findCol(headers, 'providerid', 'pid', 'provider_id', 'id', 'entityid', 'entity_id');
-    const brandCol = findCol(headers, 'brand', 'brandname', 'brand_name');
-    const groupCol = findCol(headers, 'group', 'groupname', 'group_name', 'restaurant_group', 'restaurantgroup');
-
-    if (pidCol < 0) {
-      alert('Could not find a Provider ID column. Expected one of: provider_id, pid, id, entity_id.\n\nHeaders found: ' + headers.join(', '));
-      input.value = '';
-      return;
-    }
-    if (brandCol < 0 && groupCol < 0) {
-      alert('Could not find Brand or Group columns. Expected: brand, brand_name, group, group_name.\n\nHeaders found: ' + headers.join(', '));
-      input.value = '';
-      return;
-    }
-
-    const data = getBrandGroupData();
-    let imported = 0;
-    for (let i = 1; i < rows.length; i++) {
-      const r = rows[i];
-      const pid = (r[pidCol] || '').trim().replace(/[^0-9]/g, '');
-      if (!pid) continue;
-      const brand = brandCol >= 0 ? (r[brandCol] || '').trim() : '';
-      const group = groupCol >= 0 ? (r[groupCol] || '').trim() : '';
-      if (!brand && !group) continue;
-      if (!data[pid]) data[pid] = {};
-      if (brand) data[pid].brand = brand;
-      if (group) data[pid].group = group;
-      imported++;
-    }
-
-    saveBrandGroupData(data);
-    updateBGStatus();
-    renderPortfolio();
-    alert('Imported ' + imported + ' provider mappings (' +
-      (brandCol >= 0 ? 'brands' : '') +
-      (brandCol >= 0 && groupCol >= 0 ? ' + ' : '') +
-      (groupCol >= 0 ? 'groups' : '') + ').');
-    input.value = '';
-  };
-  reader.readAsText(file);
-}
-
-const AM_SEGMENT_RULES = {
-  'Alena Tokareva':  { allowed: ['Enterprise'], label: 'ENT only' },
-  'Mariem Slimen':   { allowed: ['Mid-market'], label: 'MM only' },
-  'Yousef Moungad':  { allowed: ['Mid-market'], label: 'MM only' },
-  'Gulcin Erguven':  { allowed: ['Mid-market'], label: 'MM only' },
-  'Fiona Borg':      { allowed: null, label: 'Stores' },
-};
-
-function getProviderSeg(segRaw) {
-  if (!segRaw) return 'SMB';
-  if (segRaw.includes('Enterprise')) return 'Enterprise';
-  if (segRaw.includes('Mid-market') || segRaw.includes('Mid market')) return 'Mid-market';
-  return 'SMB';
-}
-
-function getProviderName(pid) {
-  if (typeof _BRAND_GROUP !== 'undefined' && _BRAND_GROUP[pid]) return _BRAND_GROUP[pid][0];
-  const camp = _OPS_CAMPAIGNS.find(c => String(c[1]) === String(pid));
-  return camp ? camp[3] : 'PID ' + pid;
-}
-
-function toggleMismatchRows(amId) {
-  const el = document.getElementById('mm_' + amId);
-  if (el) el.classList.toggle('open');
-}
-
-function renderPortfolio() {
-  const amPortfolio = {};
-  const brandsByAM = {};
-  const groupsByAM = {};
-  const mismatchesByAM = {};
-  const hasEmbeddedBG = typeof _BRAND_GROUP !== 'undefined' && Object.keys(_BRAND_GROUP).length > 0;
-  const hasUploadedBG = Object.keys(_brandGroupMap).length > 0;
-
-  for (const [pid, pdata] of Object.entries(_PROVIDER_LOOKUP)) {
-    const am = pdata[0];
-    const orders = pdata[1];
-    const gmv = pdata[2];
-    const segRaw = pdata[4] || '';
-    const seg = getProviderSeg(segRaw);
-
-    if (!amPortfolio[am]) {
-      amPortfolio[am] = { accounts: 0, smb: 0, mm: 0, ent: 0, gmv: 0, orders: 0, pids: [] };
-      brandsByAM[am] = new Set();
-      groupsByAM[am] = new Set();
-      mismatchesByAM[am] = [];
-    }
-    amPortfolio[am].accounts++;
-    amPortfolio[am].gmv += gmv;
-    amPortfolio[am].orders += orders;
-    amPortfolio[am].pids.push(pid);
-
-    if (seg === 'Enterprise') amPortfolio[am].ent++;
-    else if (seg === 'Mid-market') amPortfolio[am].mm++;
-    else amPortfolio[am].smb++;
-
-    const rule = AM_SEGMENT_RULES[am];
-    if (rule && rule.allowed && !rule.allowed.includes(seg)) {
-      mismatchesByAM[am].push({ pid, seg, orders, gmv });
-    }
-
-    if (hasUploadedBG && _brandGroupMap[pid]) {
-      if (_brandGroupMap[pid].brand) brandsByAM[am].add(_brandGroupMap[pid].brand.toLowerCase().trim());
-      if (_brandGroupMap[pid].group) groupsByAM[am].add(_brandGroupMap[pid].group.toLowerCase().trim());
-    } else if (hasEmbeddedBG && _BRAND_GROUP[pid]) {
-      if (_BRAND_GROUP[pid][0]) brandsByAM[am].add(_BRAND_GROUP[pid][0].toLowerCase().trim());
-      if (_BRAND_GROUP[pid][1]) groupsByAM[am].add(_BRAND_GROUP[pid][1].toLowerCase().trim());
-    }
-  }
-
-  const maxGMV = Math.max(...Object.values(amPortfolio).map(d => d.gmv), 1);
-  const amArr = Object.entries(amPortfolio).sort((a, b) => b[1].gmv - a[1].gmv);
-
-  let totalAccounts = 0, totalSMB = 0, totalMM = 0, totalENT = 0, totalGMV = 0, totalOrders = 0, totalMismatched = 0;
-  const allBrands = new Set();
-  const allGroups = new Set();
-
-  let html = '';
-  amArr.forEach(([am, d]) => {
-    const avgAov = d.orders > 0 ? d.gmv / d.orders : 0;
-    const brands = brandsByAM[am] ? brandsByAM[am].size : 0;
-    const groups = groupsByAM[am] ? groupsByAM[am].size : 0;
-    const pctBar = maxGMV > 0 ? (d.gmv / maxGMV * 100) : 0;
-    const mismatches = mismatchesByAM[am] || [];
-    const rule = AM_SEGMENT_RULES[am];
-    const amId = am.replace(/[^a-zA-Z0-9]/g, '_');
-
-    totalAccounts += d.accounts;
-    totalSMB += d.smb;
-    totalMM += d.mm;
-    totalENT += d.ent;
-    totalGMV += d.gmv;
-    totalOrders += d.orders;
-    totalMismatched += mismatches.length;
-    if (brandsByAM[am]) brandsByAM[am].forEach(b => allBrands.add(b));
-    if (groupsByAM[am]) groupsByAM[am].forEach(g => allGroups.add(g));
-
-    const brandCell = brands > 0 ? brands : '<span style="color:var(--text-dim)">—</span>';
-    const hasBG = hasEmbeddedBG || hasUploadedBG;
-    const groupCell = groups > 0 ? groups : '<span style="color:var(--text-dim)" title="' + (hasBG ? 'No groups for this AM' : 'Upload CSV to populate') + '">—</span>';
-
-    let mismatchCell;
-    if (mismatches.length > 0) {
-      mismatchCell = `<span class="mismatch-badge" onclick="toggleMismatchRows('${amId}')" title="Expected: ${rule.label}. Click to expand.">${mismatches.length}</span>`;
-    } else if (rule && rule.allowed) {
-      mismatchCell = '<span style="color:var(--accent);font-size:11px;font-weight:600" title="All accounts match ' + rule.label + '">OK</span>';
-    } else if (rule && !rule.allowed) {
-      mismatchCell = '<span style="color:var(--text-dim);font-size:11px" title="Fiona: Stores — no segment rule">' + rule.label + '</span>';
-    } else {
-      mismatchCell = '<span style="color:var(--text-dim)">—</span>';
-    }
-
-    const smb_highlight = (rule && rule.allowed && !rule.allowed.includes('SMB') && d.smb > 0);
-    const mm_highlight = (rule && rule.allowed && !rule.allowed.includes('Mid-market') && d.mm > 0);
-    const ent_highlight = (rule && rule.allowed && !rule.allowed.includes('Enterprise') && d.ent > 0);
-
-    const smbCell = d.smb > 0
-      ? '<span class="seg-badge seg-smb' + (smb_highlight ? ' seg-mismatch' : '') + '" style="' + (smb_highlight ? 'background:rgba(239,68,68,.15);color:#f87171' : '') + '">' + d.smb + '</span>'
-      : '<span style="color:var(--text-dim)">0</span>';
-    const mmCell = d.mm > 0
-      ? '<span class="seg-badge seg-mm' + (mm_highlight ? ' seg-mismatch' : '') + '" style="' + (mm_highlight ? 'background:rgba(239,68,68,.15);color:#f87171' : '') + '">' + d.mm + '</span>'
-      : '<span style="color:var(--text-dim)">0</span>';
-    const entCell = d.ent > 0
-      ? '<span class="seg-badge seg-ent' + (ent_highlight ? ' seg-mismatch' : '') + '" style="' + (ent_highlight ? 'background:rgba(239,68,68,.15);color:#f87171' : '') + '">' + d.ent + '</span>'
-      : '<span style="color:var(--text-dim)">0</span>';
-
-    const rowClass = mismatches.length > 0 ? ' style="border-left:3px solid #ef4444"' : '';
-
-    html += `<tr${rowClass}>
-      <td style="font-weight:600">${am}${rule ? '<span style="font-size:10px;color:var(--text-dim);font-weight:400;margin-left:6px">' + rule.label + '</span>' : ''}</td>
-      <td class="right">${d.accounts}</td>
-      <td class="right">${brandCell}</td>
-      <td class="right">${groupCell}</td>
-      <td class="right">${smbCell}</td>
-      <td class="right">${mmCell}</td>
-      <td class="right">${entCell}</td>
-      <td class="right">${mismatchCell}</td>
-      <td class="right" style="font-weight:600">${fmt(d.gmv)}</td>
-      <td class="right">${d.orders.toLocaleString()}</td>
-      <td class="right">${fmt(avgAov)}</td>
-      <td><div class="gmv-bar-wrap"><div class="gmv-bar-track"><div class="gmv-bar-fill" style="width:${pctBar}%"></div></div></div></td>
-    </tr>`;
-
-    if (mismatches.length > 0) {
-      html += `<tr id="mm_${amId}" class="mismatch-rows"><td colspan="12" style="padding:0">`;
-      html += `<table style="width:100%;border-collapse:collapse;font-size:12px;background:rgba(239,68,68,.03)">`;
-      html += `<tr style="border-bottom:1px solid var(--border)"><th style="padding:6px 12px 6px 24px;text-align:left;font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px">Provider</th><th style="padding:6px 12px;text-align:left;font-size:10px;color:var(--text-dim);text-transform:uppercase">PID</th><th style="padding:6px 12px;font-size:10px;color:var(--text-dim);text-transform:uppercase">Current Segment</th><th style="padding:6px 12px;font-size:10px;color:var(--text-dim);text-transform:uppercase">Expected</th><th style="padding:6px 12px;text-align:right;font-size:10px;color:var(--text-dim);text-transform:uppercase">8wk GMV</th><th style="padding:6px 12px;text-align:right;font-size:10px;color:var(--text-dim);text-transform:uppercase">8wk Orders</th></tr>`;
-      const sorted = [...mismatches].sort((a, b) => b.gmv - a.gmv);
-      sorted.forEach(m => {
-        const name = getProviderName(m.pid);
-        html += `<tr style="border-bottom:1px solid var(--border)">
-          <td style="padding:5px 12px 5px 24px;font-weight:500">${name}</td>
-          <td style="padding:5px 12px;color:var(--text-dim)">${m.pid}</td>
-          <td style="padding:5px 12px"><span class="mismatch-pill wrong">${m.seg}</span></td>
-          <td style="padding:5px 12px"><span class="mismatch-pill expected">${rule.allowed.join(' / ')}</span></td>
-          <td style="padding:5px 12px;text-align:right">${fmt(m.gmv)}</td>
-          <td style="padding:5px 12px;text-align:right">${m.orders.toLocaleString()}</td>
-        </tr>`;
-      });
-      html += `</table></td></tr>`;
-    }
-  });
-
-  document.getElementById('portfolioBody').innerHTML = html;
-  const countLabel = amArr.length + ' AMs · ' + totalAccounts + ' accounts';
-  document.getElementById('portfolioCount').textContent = totalMismatched > 0
-    ? countLabel + ' · ' + totalMismatched + ' mismatched'
-    : countLabel;
-
-  const totalAvgAov = totalOrders > 0 ? totalGMV / totalOrders : 0;
-  document.getElementById('portfolioFoot').innerHTML = `<tr>
-    <td>Total</td>
-    <td class="right">${totalAccounts}</td>
-    <td class="right">${allBrands.size > 0 ? allBrands.size : '—'}</td>
-    <td class="right">${allGroups.size > 0 ? allGroups.size : '—'}</td>
-    <td class="right"><span class="seg-badge seg-smb">${totalSMB}</span></td>
-    <td class="right"><span class="seg-badge seg-mm">${totalMM}</span></td>
-    <td class="right"><span class="seg-badge seg-ent">${totalENT}</span></td>
-    <td class="right">${totalMismatched > 0 ? '<span class="mismatch-badge" style="cursor:default">' + totalMismatched + '</span>' : '<span style="color:var(--accent);font-size:11px;font-weight:600">—</span>'}</td>
-    <td class="right">${fmt(totalGMV)}</td>
-    <td class="right">${totalOrders.toLocaleString()}</td>
-    <td class="right">${fmt(totalAvgAov)}</td>
-    <td></td>
-  </tr>`;
-
-  const hasBGAny = hasEmbeddedBG || hasUploadedBG;
-  document.getElementById('brandGroupHelp').style.display = hasBGAny ? 'none' : '';
-}
-
-function refresh() {
-  const filtered = getFiltered();
-  const amMap = {};
-  let totalCost = 0, totalBolt = 0, totalProv = 0;
-  const providerSet = new Set();
-
-  filtered.forEach(c => {
-    const am = c[11];
-    if (!amMap[am]) amMap[am] = { campaigns: [], totalCost: 0, boltCost: 0, provCost: 0 };
-    const est = estimateCampaignCost(c);
-    amMap[am].campaigns.push({ data: c, est });
-    amMap[am].totalCost += est.total;
-    amMap[am].boltCost += est.bolt;
-    amMap[am].provCost += est.prov;
-    totalCost += est.total;
-    totalBolt += est.bolt;
-    totalProv += est.prov;
-    providerSet.add(c[1]);
-  });
-
-  document.getElementById('sTotalCampaigns').textContent = filtered.length.toLocaleString();
-  document.getElementById('sTotalProviders').textContent = providerSet.size + ' unique providers';
-  document.getElementById('sTotalCost').textContent = fmt(totalCost);
-  document.getElementById('sTotalCostSub').textContent = fmt(totalCost * 4) + ' estimated per month';
-  document.getElementById('sBoltCost').textContent = fmt(totalBolt);
-  document.getElementById('sBoltPct').textContent = totalCost > 0 ? pct(totalBolt / totalCost) + ' of total' : '0%';
-  document.getElementById('sProvCost').textContent = fmt(totalProv);
-  document.getElementById('sProvPct').textContent = totalCost > 0 ? pct(totalProv / totalCost) + ' of total' : '0%';
-
-  const budget = getBudget();
-  const budgetBar = document.getElementById('budgetBarWrap');
-  const budgetFill = document.getElementById('budgetBarFill');
-  const budgetSub = document.getElementById('budgetSub');
-  if (budget > 0) {
-    const usedPct = totalBolt / budget;
-    const remaining = budget - totalBolt;
-    budgetBar.style.display = '';
-    budgetSub.style.display = '';
-    budgetFill.style.width = Math.min(usedPct * 100, 100) + '%';
-    budgetFill.className = 'budget-bar-fill ' + (usedPct > 1 ? 'over' : usedPct > 0.85 ? 'warn' : 'ok');
-    budgetSub.innerHTML = remaining >= 0
-      ? `<span style="color:var(--accent)">${fmt(remaining)} remaining</span> of ${fmt(budget)} budget (${(usedPct*100).toFixed(0)}% used)`
-      : `<span style="color:#e74c3c">${fmt(Math.abs(remaining))} over budget</span> of ${fmt(budget)} (${(usedPct*100).toFixed(0)}% used)`;
-  } else {
-    budgetBar.style.display = 'none';
-    budgetSub.style.display = 'none';
-  }
-
-  const amArr = Object.entries(amMap).sort((a, b) => b[1].totalCost - a[1].totalCost);
-  document.getElementById('amCount').textContent = amArr.length + ' AMs';
-
-  renderChart(amArr, totalCost, totalBolt, budget);
-  renderTable(amArr, budget);
-}
-
-function renderChart(amArr, totalCost, totalBolt, budget) {
-  const maxCost = amArr.length > 0 ? amArr[0][1].totalCost : 1;
-
-  let html = `<div class="bar-row bar-header">
-    <div class="bar-col-header" style="text-align:left">Account Manager</div>
-    <div></div>
-    <div class="bar-col-header">Total/wk</div>
-    <div class="bar-col-header" style="color:var(--provider)">Provider</div>
-    <div class="bar-col-header" style="color:var(--bolt)">Bolt${budget > 0 ? ' (% budget)' : ''}</div>
-  </div>`;
-
-  amArr.forEach(([am, d]) => {
-    const boltW = maxCost > 0 ? (d.boltCost / maxCost * 100) : 0;
-    const provW = maxCost > 0 ? (d.provCost / maxCost * 100) : 0;
-
-    let boltCell = `<div style="text-align:right"><div style="font-size:14px;font-weight:700;color:var(--bolt)">${fmt(d.boltCost)}</div>`;
-    if (budget > 0) {
-      const pctOfBudget = (d.boltCost / budget * 100).toFixed(1);
-      const pctColor = d.boltCost / budget > 0.25 ? '#e74c3c' : d.boltCost / budget > 0.15 ? '#e67e22' : 'var(--text-dim)';
-      boltCell += `<div style="font-size:10px;color:${pctColor};margin-top:1px">${pctOfBudget}%</div>`;
-    }
-    boltCell += '</div>';
-
-    html += `<div class="bar-row">
-      <div class="bar-label" title="${am}">${am}</div>
-      <div class="bar-track">
-        <div class="bar-fill-bolt" style="width:${boltW}%"></div>
-        <div class="bar-fill-prov" style="width:${provW}%"></div>
-      </div>
-      <div style="text-align:right;font-size:14px;font-weight:700">${fmt(d.totalCost)}</div>
-      <div style="text-align:right;font-size:14px;font-weight:700;color:var(--provider)">${fmt(d.provCost)}</div>
-      ${boltCell}
-    </div>`;
-  });
-  document.getElementById('chartView').innerHTML = html || '<div style="padding:20px;color:var(--text-dim);text-align:center">No data matches filters</div>';
-}
-
-function renderTable(amArr, budget) {
-  const totalBolt = amArr.reduce((s, [, d]) => s + d.boltCost, 0);
-  let html = '';
-  amArr.forEach(([am, d]) => {
-    const id = 'am_' + am.replace(/\s/g, '_');
-    let budgetCell = '';
-    if (budget > 0 && totalBolt > 0) {
-      const amBudget = budget * (d.boltCost / totalBolt);
-      const pctUsed = (d.boltCost / amBudget * 100).toFixed(0);
-      budgetCell = `<td style="font-size:11px;color:var(--text-dim)">${fmt(amBudget)} alloc.</td>`;
-    } else {
-      budgetCell = '<td></td>';
-    }
-    html += `<tr class="am-header-row expanded" onclick="toggleAM('${id}')">
-      <td><span class="toggle-icon">▶</span> ${am}</td>
-      <td>${d.campaigns.length}</td>
-      <td></td><td></td><td></td><td></td>
-      <td><strong>${fmt(d.totalCost)}</strong></td>
-      <td class="cost-bolt">${fmt(d.boltCost)}</td>
-      <td class="cost-prov">${fmt(d.provCost)}</td>
-      <td></td>
-    </tr>`;
-
-    const sorted = [...d.campaigns].sort((a, b) => b.est.total - a.est.total);
-    sorted.forEach(({ data: c, est }) => {
-      const disc = c[5] > 0 ? c[5] + '%' : '—';
-      const share = c[6] + '% / ' + (100 - c[6]) + '%';
-      const pname = c[3].replace(/'/g, '&#39;');
-      html += `<tr class="campaign-row ${id}">
-        <td style="color:var(--text-dim)">${am}</td>
-        <td></td>
-        <td>${getCampTypeTag(c[4])}</td>
-        <td title="ID: ${c[1]}"><a href="#" onclick="openProviderModal(${c[1]});return false" style="color:var(--accent);text-decoration:none;font-weight:500">${c[3]}</a></td>
-        <td>${disc}</td>
-        <td>${share}</td>
-        <td>${fmt(est.total)}</td>
-        <td class="cost-bolt">${fmt(est.bolt)}</td>
-        <td class="cost-prov">${fmt(est.prov)}</td>
-        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c[16]}">${c[10]}</td>
-      </tr>`;
-    });
-  });
-  document.getElementById('tableBody').innerHTML = html;
-}
-
-function toggleAM(id) {
-  const rows = document.querySelectorAll('.' + id);
-  const header = rows.length > 0 ? rows[0].previousElementSibling : null;
-  const visible = rows.length > 0 && rows[0].style.display !== 'none';
-  rows.forEach(r => r.style.display = visible ? 'none' : '');
-  if (header) header.classList.toggle('expanded', !visible);
-}
-
-function sortTable(col) {
-  sortAsc = sortCol === col ? !sortAsc : true;
-  sortCol = col;
-  refresh();
-}
-
-function initFilters() {
-  const weeks = new Set(), types = new Set(), reasons = new Set();
-  _OPS_CAMPAIGNS.forEach(c => {
-    weeks.add(c[0]);
-    types.add(c[4]);
-    if (c[10]) reasons.add(c[10]);
-  });
-
-  populateMS('filterWeek',
-    [...weeks].sort((a,b) => a - b).map(w => ({ value: String(w), label: 'Week ' + w })),
-    'All Weeks');
-  populateMS('filterType',
-    [...types].sort().map(t => ({ value: t, label: t })),
-    'All Types');
-  populateMS('filterReason',
-    [...reasons].sort().map(r => ({ value: r, label: r })),
-    'All Reasons');
-}
-
-// ─── Provider Lookup (from merchant-level overview) ───
-// Format: { "pid": ["am", orders8wk, gmv8wk, aov, "segment"], ... }
 const _PROVIDER_LOOKUP = {
 '976':['Rico Spagnol',274,6960,25.4,'SMB (AM Segment)'],
 '1025':['Duncan Calleja',0,0,0,'SMB (AM Segment)'],
@@ -3925,13 +2782,6 @@ const _PROVIDER_LOOKUP = {
 '191487':['Rico Spagnol',0,0,0,'SMB (AM Segment)']
 };
 
-
-const SHEET_RAW_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vROxo-4kBIljn5pUc6Ra5Rb_bwPiG782bzwsTsWBqm98mbpYPs17KL_CJ7YXTNci2tnH9mK8-yfYA4F/pub?gid=559236247&single=true&output=csv';
-const CORS_PROXIES = [
-  url => 'https://corsproxy.io/?' + encodeURIComponent(url),
-  url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
-  url => url
-];
 
 const _BRAND_GROUP = {
 '976':['THE SMOKEHOUSE','ESTONIAN HOUSE LTD'],
@@ -7357,7 +6207,68 @@ const _BRAND_GROUP = {
 '193605':['YUFU','NMP LIMITED'],
 };
 
-let _OPS_CAMPAIGNS = [];
+
+function fmt(n) { return '\u20ac' + Math.round(n).toLocaleString(); }
+
+const AM_SEGMENT_RULES = {
+  'Alena Tokareva':  { allowed: ['Enterprise'], label: 'ENT only' },
+  'Mariem Slimen':   { allowed: ['Mid-market'], label: 'MM only' },
+  'Yousef Moungad':  { allowed: ['Mid-market'], label: 'MM only' },
+  'Gulcin Erguven':  { allowed: ['Mid-market'], label: 'MM only' },
+  'Fiona Borg':      { allowed: null, label: 'Stores' },
+};
+
+function getProviderSeg(segRaw) {
+  if (!segRaw) return 'SMB';
+  if (segRaw.includes('Enterprise')) return 'Enterprise';
+  if (segRaw.includes('Mid-market') || segRaw.includes('Mid market')) return 'Mid-market';
+  return 'SMB';
+}
+
+function getProviderName(pid) {
+  if (typeof _BRAND_GROUP !== 'undefined' && _BRAND_GROUP[pid]) return _BRAND_GROUP[pid][0];
+  return 'PID ' + pid;
+}
+
+function toggleMismatchRows(amId) {
+  const el = document.getElementById('mm_' + amId);
+  if (el) el.classList.toggle('open');
+}
+
+// CSV upload support
+const BG_KEY = 'am_portfolio_brand_group';
+let _brandGroupMap = {};
+
+function getBrandGroupData() {
+  try { return JSON.parse(localStorage.getItem(BG_KEY) || '{}'); } catch { return {}; }
+}
+function saveBrandGroupData(data) {
+  localStorage.setItem(BG_KEY, JSON.stringify(data));
+  _brandGroupMap = data;
+}
+function loadBrandGroupData() {
+  _brandGroupMap = getBrandGroupData();
+  updateBGStatus();
+}
+function clearBrandGroupData() {
+  localStorage.removeItem(BG_KEY);
+  _brandGroupMap = {};
+  updateBGStatus();
+  renderPortfolio();
+}
+function updateBGStatus() {
+  const count = Object.keys(_brandGroupMap).length;
+  const el = document.getElementById('brandGroupStatus');
+  const btn = document.getElementById('btnClearBG');
+  if (count > 0) {
+    el.textContent = count + ' providers mapped (uploaded)';
+    el.style.color = 'var(--accent)';
+    btn.style.display = '';
+  } else {
+    el.textContent = '';
+    btn.style.display = 'none';
+  }
+}
 
 function parseCSV(text) {
   const rows = [];
@@ -7367,1040 +6278,237 @@ function parseCSV(text) {
   for (const line of lines) {
     if (inQuotes) {
       current += '\n' + line;
-      if ((line.match(/"/g) || []).length % 2 === 1) {
-        inQuotes = false;
-        rows.push(current);
-        current = '';
-      }
+      if ((line.match(/"/g) || []).length % 2 === 1) { inQuotes = false; rows.push(current); current = ''; }
     } else {
-      if ((line.match(/"/g) || []).length % 2 === 1) {
-        inQuotes = true;
-        current = line;
-      } else {
-        rows.push(line);
-      }
+      if ((line.match(/"/g) || []).length % 2 === 1) { inQuotes = true; current = line; }
+      else { rows.push(line); }
     }
   }
   if (current) rows.push(current);
-
   return rows.map(row => {
-    const fields = [];
-    let field = '';
-    let q = false;
+    const fields = []; let field = ''; let q = false;
     for (let i = 0; i < row.length; i++) {
       const ch = row[i];
-      if (q) {
-        if (ch === '"' && row[i+1] === '"') { field += '"'; i++; }
-        else if (ch === '"') { q = false; }
-        else { field += ch; }
-      } else {
-        if (ch === '"') { q = true; }
-        else if (ch === ',') { fields.push(field.trim()); field = ''; }
-        else { field += ch; }
-      }
+      if (q) { if (ch === '"' && row[i+1] === '"') { field += '"'; i++; } else if (ch === '"') { q = false; } else { field += ch; } }
+      else { if (ch === '"') { q = true; } else if (ch === ',') { fields.push(field.trim()); field = ''; } else { field += ch; } }
     }
     fields.push(field.trim());
     return fields;
   });
 }
 
-function safeFloat(s) {
-  if (!s) return 0;
-  const n = parseFloat(s.replace(/[^0-9.\-]/g, ''));
-  return isNaN(n) ? 0 : n;
-}
-
-function buildCampaigns(csvRows) {
-  // Skip first 3 header rows, data starts at row index 3
-  const dataRows = csvRows.slice(3);
-  const campaigns = [];
-
-  for (const r of dataRows) {
-    if (r.length < 12) continue;
-    const week = r[0].trim();
-    const pid = r[1].trim();
-    const city = r[2].trim();
-    const pname = r[3].trim();
-    const comment = (r[4] || '').trim().substring(0, 80);
-    const campType = (r[5] || '').trim();
-    const bonusPct = safeFloat(r[6]);
-    const costShare = safeFloat(r[7]);
-    const users = (r[8] || '').trim();
-    const discountCap = safeFloat(r[9]);
-    const mov = safeFloat(r[10]);
-    const invReason = (r[11] || '').trim();
-
-    if (!pid || !/^\d+$/.test(pid) || !campType) continue;
-
-    const pdata = _PROVIDER_LOOKUP[pid];
-    const am = pdata ? pdata[0] : 'Unknown';
-    const orders = pdata ? pdata[1] : 0;
-    const gmv = pdata ? pdata[2] : 0;
-    const aov = pdata ? pdata[3] : 0;
-    const segment = pdata ? pdata[4] : '';
-
-    // Same format: [week, pid, city, pname, type, bonus%, costShare%, users, discountCap, mov, invReason, am, orders8wk, gmv8wk, aov, segment, comment]
-    campaigns.push([
-      parseInt(week) || 0,
-      parseInt(pid),
-      city,
-      pname,
-      campType,
-      bonusPct,
-      costShare,
-      users,
-      discountCap,
-      mov,
-      invReason,
-      am,
-      orders,
-      gmv,
-      aov,
-      segment,
-      comment
-    ]);
+function findCol(headers, ...candidates) {
+  for (const cand of candidates) {
+    const idx = headers.findIndex(h => h.toLowerCase().replace(/[^a-z0-9]/g, '') === cand.replace(/[^a-z0-9]/g, ''));
+    if (idx >= 0) return idx;
   }
-
-  return campaigns;
+  return -1;
 }
 
-async function loadLiveData() {
-  const overlay = document.getElementById('loadingOverlay');
-  const status = document.getElementById('dataStatus');
-  const msg = document.getElementById('loadingMsg');
-
-  if (overlay) overlay.style.display = 'flex';
-  if (msg) msg.textContent = 'Fetching live data from Google Sheet...';
-  status.textContent = 'Loading...';
-  status.style.background = 'var(--accent-dim)';
-  status.style.color = 'var(--accent)';
-
-  let lastErr = null;
-  for (const proxyFn of CORS_PROXIES) {
-    try {
-      const url = proxyFn(SHEET_RAW_URL) + (proxyFn(SHEET_RAW_URL).includes('?') ? '&' : '?') + '_t=' + Date.now();
-      if (msg) msg.textContent = 'Fetching live data...';
-      const resp = await fetch(url);
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      const text = await resp.text();
-      const rows = parseCSV(text);
-      const campaigns = buildCampaigns(rows);
-
-      if (campaigns.length === 0) throw new Error('No campaign data parsed');
-
-      _OPS_CAMPAIGNS = campaigns;
-      resetFilters();
-      initFilters();
-      refresh();
-      autoSnapshotIfSunday();
-
-      const now = new Date();
-      const timeStr = now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-      const dateStr = now.toLocaleDateString([], {month:'short', day:'numeric'});
-      window._lastDataUpdate = now;
-      status.textContent = 'LIVE · ' + _OPS_CAMPAIGNS.length + ' campaigns';
-      status.title = 'Last updated: ' + dateStr + ' ' + timeStr;
-      const updEl = document.getElementById('lastUpdated');
-      updEl.textContent = 'Updated ' + dateStr + ' ' + timeStr;
-      updEl.style.display = '';
-      status.style.background = 'var(--accent-dim)';
-      status.style.color = 'var(--accent)';
-      lastErr = null;
-      break;
-    } catch (err) {
-      console.warn('Proxy attempt failed:', err.message);
-      lastErr = err;
-    }
-  }
-
-  if (lastErr) {
-    console.error('All fetch attempts failed:', lastErr);
-    status.textContent = 'FETCH ERROR';
-    status.style.background = 'var(--danger-dim)';
-    status.style.color = 'var(--danger)';
-    if (msg) msg.textContent = 'Error: ' + lastErr.message + '. Try refreshing.';
-    if (_OPS_CAMPAIGNS.length === 0 && overlay) {
-      setTimeout(() => {
-        if (overlay) overlay.style.display = 'none';
-      }, 4000);
-    }
-  }
-
-  if (_OPS_CAMPAIGNS.length > 0 && overlay) {
-    overlay.style.display = 'none';
-  }
-}
-
-function resetFilters() {
-  ['filterWeek','filterType','filterReason'].forEach(id => {
-    const dd = document.getElementById(id).querySelector('.ms-dropdown');
-    if (dd) dd.innerHTML = '';
-  });
-}
-
-// ─── Snapshot & Accuracy Tracker ───
-const SNAP_KEY = 'am_spend_snapshots';
-
-function getSnapshots() {
-  try { return JSON.parse(localStorage.getItem(SNAP_KEY) || '[]'); } catch { return []; }
-}
-
-function saveSnapshots(snaps) {
-  localStorage.setItem(SNAP_KEY, JSON.stringify(snaps));
-}
-
-function takeSnapshot() {
-  if (_OPS_CAMPAIGNS.length === 0) { alert('No campaign data loaded yet.'); return; }
-  const now = new Date();
-  const dateStr = now.toISOString().slice(0, 10);
-  const weekNum = getISOWeek(now);
-
-  const campaigns = _OPS_CAMPAIGNS.map(c => {
-    const est = estimateCampaignCost(c);
-    return {
-      pid: c[1], pname: c[3], type: c[4], discount: c[5],
-      costShare: c[6], am: c[11], week: c[0],
-      mov: c[9] || 0, discountCap: c[8] || 0,
-      segment: normalizeSegment(c[15]),
-      estTotal: Math.round(est.total), estBolt: Math.round(est.bolt), estProv: Math.round(est.prov)
-    };
-  });
-
-  const totals = campaigns.reduce((s, c) => ({
-    total: s.total + c.estTotal, bolt: s.bolt + c.estBolt, prov: s.prov + c.estProv
-  }), { total: 0, bolt: 0, prov: 0 });
-
-  const snap = {
-    id: Date.now(),
-    date: dateStr,
-    isoWeek: weekNum,
-    campaignCount: campaigns.length,
-    totals,
-    campaigns
-  };
-
-  const snaps = getSnapshots();
-  snaps.unshift(snap);
-  saveSnapshots(snaps);
-  renderSnapshots();
-  pushSnapshotToSheet(snap);
-  alert(`Snapshot saved: ${dateStr} (Week ${weekNum}) — ${campaigns.length} campaigns, est. total €${totals.total.toLocaleString()}/wk`);
-}
-
-function getISOWeek(d) {
-  const date = new Date(d.getTime());
-  date.setHours(0, 0, 0, 0);
-  date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
-  const week1 = new Date(date.getFullYear(), 0, 4);
-  return 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
-}
-
-function autoSnapshotIfSunday() {
-  const now = new Date();
-  if (now.getDay() !== 0) return;
-  const today = now.toISOString().slice(0, 10);
-  const snaps = getSnapshots();
-  if (snaps.some(s => s.date === today)) return;
-  takeSnapshot();
-}
-
-function renderSnapshots() {
-  const snaps = getSnapshots();
-  const el = document.getElementById('snapshotHistory');
-  if (snaps.length === 0) {
-    el.innerHTML = '<div class="sp-empty">No snapshots yet. Click "Snapshot Now" to save the current estimates, or they\'ll be saved automatically every Sunday.</div>';
-    return;
-  }
-  let html = '<table><thead><tr><th>Date</th><th>Week</th><th>Campaigns</th><th>Est. Total/wk</th><th>Est. Bolt/wk</th><th>Est. Provider/wk</th><th></th><th></th></tr></thead><tbody>';
-  snaps.forEach(s => {
-    html += `<tr>
-      <td>${s.date}</td>
-      <td>W${s.isoWeek}</td>
-      <td>${s.campaignCount}</td>
-      <td>€${s.totals.total.toLocaleString()}</td>
-      <td style="color:var(--bolt)">€${s.totals.bolt.toLocaleString()}</td>
-      <td style="color:var(--provider)">€${s.totals.prov.toLocaleString()}</td>
-      <td><button onclick="toggleSnapDetail(${s.id})" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap" title="View providers">▸ Providers</button></td>
-      <td><button onclick="deleteSnapshot(${s.id})" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px" title="Delete">✕</button></td>
-    </tr>`;
-    html += `<tr id="snapDetail_${s.id}" style="display:none"><td colspan="8" style="padding:0"><div id="snapDetailInner_${s.id}"></div></td></tr>`;
-  });
-  html += '</tbody></table>';
-  el.innerHTML = html;
-}
-
-function toggleSnapDetail(id) {
-  const row = document.getElementById('snapDetail_' + id);
-  const inner = document.getElementById('snapDetailInner_' + id);
-  const btn = row.previousElementSibling.querySelector('button');
-  const visible = row.style.display !== 'none';
-  row.style.display = visible ? 'none' : '';
-  btn.textContent = visible ? '▸ Providers' : '▾ Providers';
-  if (!visible && !inner.dataset.loaded) {
-    inner.dataset.loaded = '1';
-    renderSnapDetail(id, inner);
-  }
-}
-
-function renderSnapDetail(id, container) {
-  const snaps = getSnapshots();
-  const snap = snaps.find(s => s.id === id);
-  if (!snap || !snap.campaigns) { container.innerHTML = '<p style="padding:8px;color:var(--text-dim)">No campaign data in this snapshot.</p>'; return; }
-
-  const byAM = {};
-  snap.campaigns.forEach(c => {
-    if (!byAM[c.am]) byAM[c.am] = [];
-    byAM[c.am].push(c);
-  });
-
-  let html = '<div style="padding:12px 16px;max-height:400px;overflow-y:auto;background:var(--surface2);border-radius:0 0 8px 8px">';
-  html += '<table style="width:100%;border-collapse:collapse;font-size:12px">';
-  html += '<thead><tr style="position:sticky;top:0;background:var(--surface2);z-index:1">';
-  html += '<th style="text-align:left;padding:6px 8px;border-bottom:2px solid var(--border)">AM</th>';
-  html += '<th style="text-align:left;padding:6px 8px;border-bottom:2px solid var(--border)">Provider</th>';
-  html += '<th style="text-align:left;padding:6px 8px;border-bottom:2px solid var(--border)">Type</th>';
-  html += '<th style="text-align:right;padding:6px 8px;border-bottom:2px solid var(--border)">Disc.</th>';
-  html += '<th style="text-align:right;padding:6px 8px;border-bottom:2px solid var(--border)">Share</th>';
-  html += '<th style="text-align:right;padding:6px 8px;border-bottom:2px solid var(--border)">Est. Total/wk</th>';
-  html += '<th style="text-align:right;padding:6px 8px;border-bottom:2px solid var(--border);color:var(--bolt)">Bolt/wk</th>';
-  html += '<th style="text-align:right;padding:6px 8px;border-bottom:2px solid var(--border);color:var(--provider)">Provider/wk</th>';
-  html += '</tr></thead><tbody>';
-
-  const ams = Object.keys(byAM).sort();
-  ams.forEach(am => {
-    const camps = byAM[am];
-    const amTotal = camps.reduce((s, c) => s + c.estTotal, 0);
-    const amBolt = camps.reduce((s, c) => s + c.estBolt, 0);
-    const amProv = camps.reduce((s, c) => s + c.estProv, 0);
-    html += `<tr style="background:var(--surface);font-weight:600">
-      <td style="padding:6px 8px;border-bottom:1px solid var(--border)" colspan="5">${am} (${camps.length} campaigns)</td>
-      <td style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border)">€${amTotal.toLocaleString()}</td>
-      <td style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border);color:var(--bolt)">€${amBolt.toLocaleString()}</td>
-      <td style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border);color:var(--provider)">€${amProv.toLocaleString()}</td>
-    </tr>`;
-    camps.sort((a, b) => b.estTotal - a.estTotal).forEach(c => {
-      html += `<tr>
-        <td style="padding:4px 8px;border-bottom:1px solid var(--border);color:var(--text-dim)"></td>
-        <td style="padding:4px 8px;border-bottom:1px solid var(--border)">${c.pname} <span style="color:var(--text-dim);font-size:11px">(${c.pid})</span></td>
-        <td style="padding:4px 8px;border-bottom:1px solid var(--border)">${c.type}</td>
-        <td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border)">${c.discount}%</td>
-        <td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border)">${c.costShare}%</td>
-        <td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border)">€${c.estTotal.toLocaleString()}</td>
-        <td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border);color:var(--bolt)">€${c.estBolt.toLocaleString()}</td>
-        <td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border);color:var(--provider)">€${c.estProv.toLocaleString()}</td>
-      </tr>`;
-    });
-  });
-
-  html += '</tbody></table></div>';
-  container.innerHTML = html;
-}
-
-function deleteSnapshot(id) {
-  if (!confirm('Delete this snapshot?')) return;
-  const snaps = getSnapshots().filter(s => s.id !== id);
-  saveSnapshots(snaps);
-  renderSnapshots();
-}
-
-function exportSnapshots() {
-  const snaps = getSnapshots();
-  if (snaps.length === 0) { alert('No snapshots to export.'); return; }
-  const blob = new Blob([JSON.stringify(snaps, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `am-spend-snapshots-${new Date().toISOString().slice(0,10)}.json`;
-  a.click();
-}
-
-function importSnapshots(input) {
+function handleBrandGroupUpload(input) {
   const file = input.files[0];
   if (!file) return;
   const reader = new FileReader();
   reader.onload = function(e) {
-    try {
-      const imported = JSON.parse(e.target.result);
-      if (!Array.isArray(imported)) throw new Error('Invalid format');
-      const existing = getSnapshots();
-      const existingIds = new Set(existing.map(s => s.id));
-      let added = 0;
-      imported.forEach(s => {
-        if (!existingIds.has(s.id)) { existing.push(s); added++; }
-      });
-      existing.sort((a, b) => b.id - a.id);
-      saveSnapshots(existing);
-      renderSnapshots();
-      alert(`Imported ${added} new snapshot(s). ${imported.length - added} duplicates skipped.`);
-    } catch (err) {
-      alert('Failed to import: ' + err.message);
+    const text = e.target.result;
+    const rows = parseCSV(text);
+    if (rows.length < 2) { alert('CSV has no data rows.'); input.value = ''; return; }
+    const headers = rows[0].map(h => h.trim());
+    const pidCol = findCol(headers, 'providerid', 'pid', 'provider_id', 'id', 'entityid', 'entity_id');
+    const brandCol = findCol(headers, 'brand', 'brandname', 'brand_name');
+    const groupCol = findCol(headers, 'group', 'groupname', 'group_name', 'restaurant_group', 'restaurantgroup');
+    if (pidCol < 0) { alert('Could not find Provider ID column.\nHeaders: ' + headers.join(', ')); input.value = ''; return; }
+    if (brandCol < 0 && groupCol < 0) { alert('Could not find Brand or Group columns.\nHeaders: ' + headers.join(', ')); input.value = ''; return; }
+    const data = getBrandGroupData();
+    let imported = 0;
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i];
+      const pid = (r[pidCol] || '').trim().replace(/[^0-9]/g, '');
+      if (!pid) continue;
+      const brand = brandCol >= 0 ? (r[brandCol] || '').trim() : '';
+      const group = groupCol >= 0 ? (r[groupCol] || '').trim() : '';
+      if (!brand && !group) continue;
+      if (!data[pid]) data[pid] = {};
+      if (brand) data[pid].brand = brand;
+      if (group) data[pid].group = group;
+      imported++;
     }
+    saveBrandGroupData(data);
+    updateBGStatus();
+    renderPortfolio();
+    alert('Imported ' + imported + ' provider mappings.');
+    input.value = '';
   };
   reader.readAsText(file);
-  input.value = '';
 }
 
-function uploadActuals(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    try {
-      const text = e.target.result;
-      const lines = text.split('\n').filter(l => l.trim());
-      if (lines.length < 2) throw new Error('CSV appears empty');
+function renderPortfolio() {
+  const amPortfolio = {};
+  const brandsByAM = {};
+  const groupsByAM = {};
+  const mismatchesByAM = {};
+  const hasEmbeddedBG = typeof _BRAND_GROUP !== 'undefined' && Object.keys(_BRAND_GROUP).length > 0;
+  const hasUploadedBG = Object.keys(_brandGroupMap).length > 0;
 
-      const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
-      const pidCol = headers.findIndex(h => /provider.?id/i.test(h));
-      const boltCol = headers.findIndex(h => /spend.*bolt|bolt.*spend|bolt.*cost/i.test(h));
-      const provCol = headers.findIndex(h => /spend.*merchant|merchant.*spend|provider.*spend|provider.*cost/i.test(h));
-      const totalCol = headers.findIndex(h => /discount.*€|campaign.*discount|total.*discount/i.test(h));
+  for (const [pid, pdata] of Object.entries(_PROVIDER_LOOKUP)) {
+    const am = pdata[0];
+    const orders = pdata[1];
+    const gmv = pdata[2];
+    const segRaw = pdata[4] || '';
+    const seg = getProviderSeg(segRaw);
 
-      if (pidCol === -1) throw new Error('Could not find Provider ID column');
-      if (boltCol === -1 && provCol === -1 && totalCol === -1) throw new Error('Could not find spend columns (Bolt/Provider/Discount)');
-
-      const pn = s => {
-        if (!s) return 0;
-        return parseFloat(s.replace(/[€$£%,"]/g, '').trim()) || 0;
-      };
-
-      const actuals = {};
-      for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(',').map(c => c.replace(/"/g, '').trim());
-        const pid = cols[pidCol];
-        if (!pid || !/^\d+$/.test(pid)) continue;
-        actuals[pid] = {
-          bolt: boltCol >= 0 ? pn(cols[boltCol]) : 0,
-          prov: provCol >= 0 ? pn(cols[provCol]) : 0,
-          total: totalCol >= 0 ? pn(cols[totalCol]) : 0
-        };
-        if (!actuals[pid].total && (actuals[pid].bolt || actuals[pid].prov)) {
-          actuals[pid].total = actuals[pid].bolt + actuals[pid].prov;
-        }
-      }
-
-      persistActuals(actuals);
-      renderComparison(actuals);
-    } catch (err) {
-      alert('Failed to parse actuals: ' + err.message);
+    if (!amPortfolio[am]) {
+      amPortfolio[am] = { accounts: 0, smb: 0, mm: 0, ent: 0, gmv: 0, orders: 0 };
+      brandsByAM[am] = new Set();
+      groupsByAM[am] = new Set();
+      mismatchesByAM[am] = [];
     }
-  };
-  reader.readAsText(file);
-  input.value = '';
-}
+    amPortfolio[am].accounts++;
+    amPortfolio[am].gmv += gmv;
+    amPortfolio[am].orders += orders;
 
-const ACTUALS_KEY = 'am_spend_actuals';
-function getStoredActuals() { try { return JSON.parse(localStorage.getItem(ACTUALS_KEY) || '[]'); } catch { return []; } }
-function persistActuals(actuals) {
-  const stored = getStoredActuals();
-  const date = new Date().toISOString().slice(0, 10);
-  const snaps = getSnapshots();
-  const snapId = snaps.length > 0 ? snaps[0].id : null;
-  stored.push({ date, snapId, actuals });
-  localStorage.setItem(ACTUALS_KEY, JSON.stringify(stored));
-}
+    if (seg === 'Enterprise') amPortfolio[am].ent++;
+    else if (seg === 'Mid-market') amPortfolio[am].mm++;
+    else amPortfolio[am].smb++;
 
-let _lastActuals = null;
+    const rule = AM_SEGMENT_RULES[am];
+    if (rule && rule.allowed && !rule.allowed.includes(seg)) {
+      mismatchesByAM[am].push({ pid, seg, orders, gmv });
+    }
 
-function renderComparison(actuals, snapId) {
-  _lastActuals = actuals;
-  const snaps = getSnapshots();
-  const wrap = document.getElementById('compareWrap');
-
-  if (snaps.length === 0) {
-    wrap.style.display = 'block';
-    wrap.innerHTML = '<p style="color:var(--text-dim)">No snapshots to compare against. Take a snapshot first.</p>';
-    return;
+    if (hasUploadedBG && _brandGroupMap[pid]) {
+      if (_brandGroupMap[pid].brand) brandsByAM[am].add(_brandGroupMap[pid].brand.toLowerCase().trim());
+      if (_brandGroupMap[pid].group) groupsByAM[am].add(_brandGroupMap[pid].group.toLowerCase().trim());
+    } else if (hasEmbeddedBG && _BRAND_GROUP[pid]) {
+      if (_BRAND_GROUP[pid][0]) brandsByAM[am].add(_BRAND_GROUP[pid][0].toLowerCase().trim());
+      if (_BRAND_GROUP[pid][1]) groupsByAM[am].add(_BRAND_GROUP[pid][1].toLowerCase().trim());
+    }
   }
 
-  const snap = snapId ? snaps.find(s => s.id === snapId) : snaps[0];
-  if (!snap) return;
+  const maxGMV = Math.max(...Object.values(amPortfolio).map(d => d.gmv), 1);
+  const amArr = Object.entries(amPortfolio).sort((a, b) => b[1].gmv - a[1].gmv);
 
-  let matched = 0, totalEst = 0, totalAct = 0;
-  const rows = [];
+  let totalAccounts = 0, totalSMB = 0, totalMM = 0, totalENT = 0, totalGMV = 0, totalOrders = 0, totalMismatched = 0;
+  const allBrands = new Set();
+  const allGroups = new Set();
 
-  snap.campaigns.forEach(c => {
-    const act = actuals[String(c.pid)];
-    if (!act || act.total === 0) return;
-    matched++;
-    const est = c.estTotal;
-    const estBolt = c.estBolt;
-    const estProv = c.estProv;
-    const actual = Math.round(act.total);
-    const actBolt = Math.round(act.bolt);
-    const actProv = Math.round(act.prov);
-    const diff = est - actual;
-    const pctErr = actual > 0 ? ((diff / actual) * 100) : 0;
-    totalEst += est;
-    totalAct += actual;
-    rows.push({ ...c, actual, actBolt, actProv, diff, pctErr });
-  });
+  let html = '';
+  amArr.forEach(([am, d]) => {
+    const avgAov = d.orders > 0 ? d.gmv / d.orders : 0;
+    const brands = brandsByAM[am] ? brandsByAM[am].size : 0;
+    const groups = groupsByAM[am] ? groupsByAM[am].size : 0;
+    const pctBar = maxGMV > 0 ? (d.gmv / maxGMV * 100) : 0;
+    const mismatches = mismatchesByAM[am] || [];
+    const rule = AM_SEGMENT_RULES[am];
+    const amId = am.replace(/[^a-zA-Z0-9]/g, '_');
 
-  if (matched === 0) {
-    wrap.style.display = 'block';
-    wrap.innerHTML = '<p style="color:var(--text-dim)">No matching providers found between snapshot and actuals CSV. Make sure the CSV has a "Provider ID" column.</p>';
-    return;
-  }
+    totalAccounts += d.accounts;
+    totalSMB += d.smb;
+    totalMM += d.mm;
+    totalENT += d.ent;
+    totalGMV += d.gmv;
+    totalOrders += d.orders;
+    totalMismatched += mismatches.length;
+    if (brandsByAM[am]) brandsByAM[am].forEach(b => allBrands.add(b));
+    if (groupsByAM[am]) groupsByAM[am].forEach(g => allGroups.add(g));
 
-  const mape = rows.reduce((s, r) => s + Math.abs(r.pctErr), 0) / rows.length;
-  const bias = totalEst - totalAct;
-  const biasPct = totalAct > 0 ? ((bias / totalAct) * 100) : 0;
+    const brandCell = brands > 0 ? brands : '<span style="color:var(--text-dim)">\u2014</span>';
+    const hasBG = hasEmbeddedBG || hasUploadedBG;
+    const groupCell = groups > 0 ? groups : '<span style="color:var(--text-dim)">\u2014</span>';
 
-  let html = '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">';
-  html += `<h4 style="margin:0">Accuracy: Estimated vs Actual (${matched} providers matched)</h4>`;
-  html += '<select id="snapPicker" onchange="renderComparison(_lastActuals, parseInt(this.value))" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 10px;font-size:12px">';
-  snaps.forEach(s => {
-    html += `<option value="${s.id}" ${s.id === snap.id ? 'selected' : ''}>Snapshot ${s.date} (W${s.isoWeek})</option>`;
-  });
-  html += '</select></div>';
+    let mismatchCell;
+    if (mismatches.length > 0) {
+      mismatchCell = '<span class="mismatch-badge" onclick="toggleMismatchRows(\'' + amId + '\')" title="Expected: ' + rule.label + '. Click to expand.">' + mismatches.length + '</span>';
+    } else if (rule && rule.allowed) {
+      mismatchCell = '<span style="color:var(--accent);font-size:11px;font-weight:600" title="All accounts match ' + rule.label + '">OK</span>';
+    } else if (rule && !rule.allowed) {
+      mismatchCell = '<span style="color:var(--text-dim);font-size:11px">' + rule.label + '</span>';
+    } else {
+      mismatchCell = '<span style="color:var(--text-dim)">\u2014</span>';
+    }
 
-  html += '<div class="accuracy-cards">';
-  html += `<div class="accuracy-card"><div class="ac-label">Total Estimated/wk</div><div class="ac-value">€${totalEst.toLocaleString()}</div></div>`;
-  html += `<div class="accuracy-card"><div class="ac-label">Total Actual</div><div class="ac-value">€${totalAct.toLocaleString()}</div></div>`;
-  const biasClass = Math.abs(biasPct) < 15 ? 'delta-ok' : biasPct > 0 ? 'delta-pos' : 'delta-neg';
-  html += `<div class="accuracy-card"><div class="ac-label">Bias (Est − Actual)</div><div class="ac-value ${biasClass}">${bias >= 0 ? '+' : ''}€${bias.toLocaleString()} (${biasPct >= 0 ? '+' : ''}${biasPct.toFixed(1)}%)</div></div>`;
-  const mapeClass = mape < 20 ? 'delta-ok' : mape < 40 ? 'delta-neg' : 'delta-pos';
-  html += `<div class="accuracy-card"><div class="ac-label">MAPE (avg. error)</div><div class="ac-value ${mapeClass}">${mape.toFixed(1)}%</div></div>`;
-  html += '</div>';
+    const smb_hl = (rule && rule.allowed && !rule.allowed.includes('SMB') && d.smb > 0);
+    const mm_hl = (rule && rule.allowed && !rule.allowed.includes('Mid-market') && d.mm > 0);
+    const ent_hl = (rule && rule.allowed && !rule.allowed.includes('Enterprise') && d.ent > 0);
 
-  const byAM = {};
-  rows.forEach(r => {
-    if (!byAM[r.am]) byAM[r.am] = [];
-    byAM[r.am].push(r);
-  });
+    const smbCell = d.smb > 0
+      ? '<span class="seg-badge seg-smb" style="' + (smb_hl ? 'background:rgba(239,68,68,.15);color:#f87171' : '') + '">' + d.smb + '</span>'
+      : '<span style="color:var(--text-dim)">0</span>';
+    const mmCell = d.mm > 0
+      ? '<span class="seg-badge seg-mm" style="' + (mm_hl ? 'background:rgba(239,68,68,.15);color:#f87171' : '') + '">' + d.mm + '</span>'
+      : '<span style="color:var(--text-dim)">0</span>';
+    const entCell = d.ent > 0
+      ? '<span class="seg-badge seg-ent" style="' + (ent_hl ? 'background:rgba(239,68,68,.15);color:#f87171' : '') + '">' + d.ent + '</span>'
+      : '<span style="color:var(--text-dim)">0</span>';
 
-  const thStyle = 'text-align:right;padding:6px 8px;border-bottom:2px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:var(--text-dim)';
-  const thStyleL = thStyle.replace('right', 'left');
-  html += `<div style="max-height:500px;overflow-y:auto;margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="position:sticky;top:0;background:var(--surface);z-index:1">`;
-  html += `<th style="${thStyleL}">AM / Provider</th>`;
-  html += `<th style="${thStyleL}">Type</th>`;
-  html += `<th style="${thStyle}">Est. Total</th>`;
-  html += `<th style="${thStyle}">Actual Total</th>`;
-  html += `<th style="${thStyle}">Est. Bolt</th>`;
-  html += `<th style="${thStyle}">Act. Bolt</th>`;
-  html += `<th style="${thStyle}">Est. Prov</th>`;
-  html += `<th style="${thStyle}">Act. Prov</th>`;
-  html += `<th style="${thStyle}">Diff</th>`;
-  html += `<th style="${thStyle}">Error</th>`;
-  html += '</tr></thead><tbody>';
+    const rowStyle = mismatches.length > 0 ? ' style="border-left:3px solid #ef4444"' : '';
 
-  const tdR = 'text-align:right;padding:5px 8px;border-bottom:1px solid var(--border)';
-  const tdL = tdR.replace('right', 'left');
+    html += '<tr' + rowStyle + '>';
+    html += '<td style="font-weight:600">' + am + (rule ? '<span style="font-size:10px;color:var(--text-dim);font-weight:400;margin-left:6px">' + rule.label + '</span>' : '') + '</td>';
+    html += '<td class="right">' + d.accounts + '</td>';
+    html += '<td class="right">' + brandCell + '</td>';
+    html += '<td class="right">' + groupCell + '</td>';
+    html += '<td class="right">' + smbCell + '</td>';
+    html += '<td class="right">' + mmCell + '</td>';
+    html += '<td class="right">' + entCell + '</td>';
+    html += '<td class="right">' + mismatchCell + '</td>';
+    html += '<td class="right" style="font-weight:600">' + fmt(d.gmv) + '</td>';
+    html += '<td class="right">' + d.orders.toLocaleString() + '</td>';
+    html += '<td class="right">' + fmt(avgAov) + '</td>';
+    html += '<td><div class="gmv-bar-wrap"><div class="gmv-bar-track"><div class="gmv-bar-fill" style="width:' + pctBar + '%"></div></div></div></td>';
+    html += '</tr>';
 
-  Object.keys(byAM).sort().forEach(am => {
-    const amRows = byAM[am];
-    amRows.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
-    const amEst = amRows.reduce((s, r) => s + r.estTotal, 0);
-    const amAct = amRows.reduce((s, r) => s + r.actual, 0);
-    const amDiff = amEst - amAct;
-    const amPctErr = amAct > 0 ? ((amDiff / amAct) * 100) : 0;
-    const amClass = Math.abs(amPctErr) < 15 ? 'delta-ok' : amPctErr > 0 ? 'delta-pos' : 'delta-neg';
-
-    html += `<tr style="background:var(--surface2);font-weight:600">
-      <td style="${tdL}" colspan="2">${am} (${amRows.length} providers)</td>
-      <td style="${tdR}">€${amEst.toLocaleString()}</td>
-      <td style="${tdR}">€${amAct.toLocaleString()}</td>
-      <td style="${tdR}" colspan="4"></td>
-      <td style="${tdR}" class="${amClass}">${amDiff >= 0 ? '+' : ''}€${amDiff.toLocaleString()}</td>
-      <td style="${tdR}" class="${amClass}">${amPctErr >= 0 ? '+' : ''}${amPctErr.toFixed(1)}%</td>
-    </tr>`;
-
-    amRows.forEach(r => {
-      const errClass = Math.abs(r.pctErr) < 20 ? 'delta-ok' : r.pctErr > 0 ? 'delta-pos' : 'delta-neg';
-      html += `<tr>
-        <td style="${tdL};padding-left:20px">${r.pname} <span style="color:var(--text-dim);font-size:11px">(${r.pid})</span></td>
-        <td style="${tdL}">${r.type} ${r.discount}%</td>
-        <td style="${tdR}">€${r.estTotal.toLocaleString()}</td>
-        <td style="${tdR}">€${r.actual.toLocaleString()}</td>
-        <td style="${tdR};color:var(--bolt)">€${r.estBolt.toLocaleString()}</td>
-        <td style="${tdR};color:var(--bolt)">€${r.actBolt.toLocaleString()}</td>
-        <td style="${tdR};color:var(--provider)">€${r.estProv.toLocaleString()}</td>
-        <td style="${tdR};color:var(--provider)">€${r.actProv.toLocaleString()}</td>
-        <td style="${tdR}" class="${errClass}">${r.diff >= 0 ? '+' : ''}€${r.diff.toLocaleString()}</td>
-        <td style="${tdR}" class="${errClass}">${r.pctErr >= 0 ? '+' : ''}${r.pctErr.toFixed(1)}%</td>
-      </tr>`;
-    });
-  });
-
-  html += '</tbody></table></div>';
-  wrap.style.display = 'block';
-  wrap.innerHTML = html;
-}
-
-// ─── Calibration Engine ───
-function buildCalibrationData() {
-  const storedActuals = getStoredActuals();
-  const snaps = getSnapshots();
-  if (storedActuals.length === 0 || snaps.length === 0) return null;
-
-  const dataPoints = [];
-  storedActuals.forEach(sa => {
-    const snap = sa.snapId ? snaps.find(s => s.id === sa.snapId) : snaps[0];
-    if (!snap || !snap.campaigns) return;
-    snap.campaigns.forEach(c => {
-      const act = sa.actuals[String(c.pid)];
-      if (!act || act.total === 0) return;
-      dataPoints.push({
-        pid: c.pid, pname: c.pname, type: c.type,
-        discount: c.discount, costShare: c.costShare,
-        segment: c.segment || 'SMB',
-        estTotal: c.estTotal, actTotal: Math.round(act.total),
-        estBolt: c.estBolt, actBolt: Math.round(act.bolt),
-        estProv: c.estProv, actProv: Math.round(act.prov),
-        snapDate: snap.date
+    if (mismatches.length > 0) {
+      html += '<tr id="mm_' + amId + '" class="mismatch-rows"><td colspan="12" style="padding:0">';
+      html += '<table style="width:100%;border-collapse:collapse;font-size:12px;background:rgba(239,68,68,.03)">';
+      html += '<tr style="border-bottom:1px solid var(--border)"><th style="padding:6px 12px 6px 24px;text-align:left;font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px">Provider</th><th style="padding:6px 12px;text-align:left;font-size:10px;color:var(--text-dim);text-transform:uppercase">PID</th><th style="padding:6px 12px;font-size:10px;color:var(--text-dim);text-transform:uppercase">Current Segment</th><th style="padding:6px 12px;font-size:10px;color:var(--text-dim);text-transform:uppercase">Expected</th><th style="padding:6px 12px;text-align:right;font-size:10px;color:var(--text-dim);text-transform:uppercase">8wk GMV</th><th style="padding:6px 12px;text-align:right;font-size:10px;color:var(--text-dim);text-transform:uppercase">8wk Orders</th></tr>';
+      mismatches.sort((a, b) => b.gmv - a.gmv).forEach(m => {
+        const name = getProviderName(m.pid);
+        html += '<tr style="border-bottom:1px solid var(--border)">';
+        html += '<td style="padding:5px 12px 5px 24px;font-weight:500">' + name + '</td>';
+        html += '<td style="padding:5px 12px;color:var(--text-dim)">' + m.pid + '</td>';
+        html += '<td style="padding:5px 12px"><span class="mismatch-pill wrong">' + m.seg + '</span></td>';
+        html += '<td style="padding:5px 12px"><span class="mismatch-pill expected">' + rule.allowed.join(' / ') + '</span></td>';
+        html += '<td style="padding:5px 12px;text-align:right">' + fmt(m.gmv) + '</td>';
+        html += '<td style="padding:5px 12px;text-align:right">' + m.orders.toLocaleString() + '</td>';
+        html += '</tr>';
       });
-    });
-  });
-  return dataPoints.length > 0 ? dataPoints : null;
-}
-
-function calibrate(dataPoints) {
-  const byType = { 'Menu Discount': [], 'Item Discount': [], 'Free Delivery': [] };
-  dataPoints.forEach(dp => {
-    if (dp.type.includes('Free') && dp.type.includes('Delivery')) byType['Free Delivery'].push(dp);
-    else if (dp.type === 'Menu Discount') byType['Menu Discount'].push(dp);
-    else if (dp.type === 'Item Discount') byType['Item Discount'].push(dp);
-  });
-
-  const suggestions = {};
-
-  function ratio(points) {
-    const sumEst = points.reduce((s, p) => s + p.estTotal, 0);
-    const sumAct = points.reduce((s, p) => s + p.actTotal, 0);
-    return sumAct > 0 && sumEst > 0 ? sumAct / sumEst : 1;
-  }
-
-  // Global suggestions (same as before)
-  if (byType['Menu Discount'].length >= 2) {
-    const r = ratio(byType['Menu Discount']);
-    suggestions.redemption_menu = Math.round(_BASE_REDEMPTION.menu_discount * r * 1000) / 1000;
-  }
-  if (byType['Item Discount'].length >= 2) {
-    const r = ratio(byType['Item Discount']);
-    const combined = _BASE_REDEMPTION.item_discount * _BASE_ITEM_BASKET_SHARE;
-    const newCombined = combined * r;
-    suggestions.redemption_item = Math.round(Math.min(1, _BASE_REDEMPTION.item_discount * r) * 1000) / 1000;
-    suggestions.item_basket_share = Math.round(Math.min(1, newCombined / suggestions.redemption_item) * 1000) / 1000;
-  }
-  if (byType['Free Delivery'].length >= 2) {
-    const r = ratio(byType['Free Delivery']);
-    suggestions.redemption_fd = Math.round(_BASE_REDEMPTION.free_delivery * r * 1000) / 1000;
-  }
-  const allR = ratio(dataPoints);
-  if (Math.abs(allR - 1) > 0.05) {
-    suggestions.uplift_scale = Math.round(allR * 100) / 100;
-  }
-
-  // Per-segment suggestions
-  const segmentData = {};
-  SEGMENTS.forEach(seg => {
-    const segPoints = dataPoints.filter(dp => normalizeSegment(dp.segment) === seg);
-    if (segPoints.length < 2) return;
-
-    const segByType = { 'Menu Discount': [], 'Item Discount': [], 'Free Delivery': [] };
-    segPoints.forEach(dp => {
-      if (dp.type.includes('Free') && dp.type.includes('Delivery')) segByType['Free Delivery'].push(dp);
-      else if (dp.type === 'Menu Discount') segByType['Menu Discount'].push(dp);
-      else if (dp.type === 'Item Discount') segByType['Item Discount'].push(dp);
-    });
-
-    const segSuggestions = {};
-    if (segByType['Menu Discount'].length >= 2) {
-      const r = ratio(segByType['Menu Discount']);
-      segSuggestions['redemption_menu__' + seg] = Math.round(_BASE_REDEMPTION.menu_discount * r * 1000) / 1000;
-    }
-    if (segByType['Item Discount'].length >= 2) {
-      const r = ratio(segByType['Item Discount']);
-      segSuggestions['redemption_item__' + seg] = Math.round(Math.min(1, _BASE_REDEMPTION.item_discount * r) * 1000) / 1000;
-      segSuggestions['item_basket_share__' + seg] = Math.round(Math.min(1, _BASE_ITEM_BASKET_SHARE * r) * 1000) / 1000;
-    }
-    if (segByType['Free Delivery'].length >= 2) {
-      const r = ratio(segByType['Free Delivery']);
-      segSuggestions['redemption_fd__' + seg] = Math.round(_BASE_REDEMPTION.free_delivery * r * 1000) / 1000;
-    }
-    const segR = ratio(segPoints);
-    if (Math.abs(segR - 1) > 0.05) {
-      segSuggestions['uplift_scale__' + seg] = Math.round(segR * 100) / 100;
-    }
-
-    if (Object.keys(segSuggestions).length > 0) {
-      segmentData[seg] = {
-        suggestions: segSuggestions,
-        byType: segByType,
-        overall: { ratio: segR, count: segPoints.length }
-      };
+      html += '</table></td></tr>';
     }
   });
 
-  return { suggestions, byType, overall: { ratio: allR, count: dataPoints.length }, segmentData };
+  document.getElementById('portfolioBody').innerHTML = html;
+  document.getElementById('portfolioCount').textContent = totalMismatched > 0
+    ? amArr.length + ' AMs \u00b7 ' + totalAccounts + ' accounts \u00b7 ' + totalMismatched + ' mismatched'
+    : amArr.length + ' AMs \u00b7 ' + totalAccounts + ' accounts';
+
+  const totalAvgAov = totalOrders > 0 ? totalGMV / totalOrders : 0;
+  let foot = '<tr><td>Total</td>';
+  foot += '<td class="right">' + totalAccounts + '</td>';
+  foot += '<td class="right">' + (allBrands.size > 0 ? allBrands.size : '\u2014') + '</td>';
+  foot += '<td class="right">' + (allGroups.size > 0 ? allGroups.size : '\u2014') + '</td>';
+  foot += '<td class="right"><span class="seg-badge seg-smb">' + totalSMB + '</span></td>';
+  foot += '<td class="right"><span class="seg-badge seg-mm">' + totalMM + '</span></td>';
+  foot += '<td class="right"><span class="seg-badge seg-ent">' + totalENT + '</span></td>';
+  foot += '<td class="right">' + (totalMismatched > 0 ? '<span class="mismatch-badge" style="cursor:default">' + totalMismatched + '</span>' : '\u2014') + '</td>';
+  foot += '<td class="right">' + fmt(totalGMV) + '</td>';
+  foot += '<td class="right">' + totalOrders.toLocaleString() + '</td>';
+  foot += '<td class="right">' + fmt(totalAvgAov) + '</td>';
+  foot += '<td></td></tr>';
+  document.getElementById('portfolioFoot').innerHTML = foot;
+
+  // Summary cards
+  let cards = '';
+  cards += '<div class="s-card accent"><div class="s-label">Total Accounts</div><div class="s-value">' + totalAccounts + '</div><div class="s-sub">' + allBrands.size + ' brands \u00b7 ' + allGroups.size + ' groups</div></div>';
+  cards += '<div class="s-card bolt"><div class="s-label">Enterprise</div><div class="s-value">' + totalENT + '</div><div class="s-sub">' + fmt(amArr.filter(([am]) => AM_SEGMENT_RULES[am] && AM_SEGMENT_RULES[am].label === 'ENT only').reduce((s,[,d]) => s + d.gmv, 0)) + ' GMV</div></div>';
+  cards += '<div class="s-card prov"><div class="s-label">Mid-Market</div><div class="s-value">' + totalMM + '</div><div class="s-sub">' + fmt(amArr.filter(([am]) => AM_SEGMENT_RULES[am] && AM_SEGMENT_RULES[am].label === 'MM only').reduce((s,[,d]) => s + d.gmv, 0)) + ' GMV</div></div>';
+  cards += '<div class="s-card"><div class="s-label">SMB</div><div class="s-value">' + totalSMB + '</div><div class="s-sub">' + fmt(totalGMV) + ' total GMV</div></div>';
+  cards += '<div class="s-card danger"><div class="s-label">Mismatched Accounts</div><div class="s-value">' + totalMismatched + '</div><div class="s-sub">Wrong AM segment assignment</div></div>';
+  document.getElementById('summaryCards').innerHTML = cards;
 }
 
-function runCalibration() {
-  const dataPoints = buildCalibrationData();
-  const panel = document.getElementById('calibrationPanel');
-
-  if (!dataPoints) {
-    panel.style.display = 'block';
-    panel.innerHTML = '<div style="padding:16px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);margin-bottom:16px"><p style="color:var(--text-dim);margin:0">Not enough data to calibrate. You need at least one snapshot + actuals upload. Take a snapshot now, then upload the actual spend CSV from Looker after the campaigns run.</p></div>';
-    return;
-  }
-
-  const result = calibrate(dataPoints);
-  const cal = getCalibration();
-  const s = result.suggestions;
-
-  const paramDefs = [
-    { key: 'redemption_menu', label: 'Menu Discount Redemption', base: _BASE_REDEMPTION.menu_discount, fmt: v => (v * 100).toFixed(1) + '%' },
-    { key: 'redemption_item', label: 'Item Discount Redemption', base: _BASE_REDEMPTION.item_discount, fmt: v => (v * 100).toFixed(1) + '%' },
-    { key: 'redemption_fd', label: 'Free Delivery Redemption', base: _BASE_REDEMPTION.free_delivery, fmt: v => (v * 100).toFixed(1) + '%' },
-    { key: 'uplift_fd', label: 'Free Delivery Uplift', base: _BASE_UPLIFT_FD, fmt: v => (v * 100).toFixed(1) + '%' },
-    { key: 'item_basket_share', label: 'Item Discount Basket Share', base: _BASE_ITEM_BASKET_SHARE, fmt: v => (v * 100).toFixed(0) + '%' },
-    { key: 'uplift_scale', label: 'Uplift Curve Scale', base: 1.0, fmt: v => v.toFixed(2) + 'x' }
-  ];
-
-  let html = '<div style="padding:16px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);margin-bottom:16px">';
-  html += `<h4 style="margin:0 0 4px;font-size:14px">Model Calibration</h4>`;
-  html += `<p style="color:var(--text-dim);font-size:12px;margin:0 0 12px">Based on ${result.overall.count} provider comparisons across ${new Set(dataPoints.map(d => d.snapDate)).size} snapshot(s). Overall actual/estimated ratio: <strong>${result.overall.ratio.toFixed(2)}x</strong> ${result.overall.ratio < 0.9 ? '(model overestimates)' : result.overall.ratio > 1.1 ? '(model underestimates)' : '(close!)'}</p>`;
-
-  const types = ['Menu Discount', 'Item Discount', 'Free Delivery'];
-  html += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">';
-  types.forEach(t => {
-    const pts = result.byType[t];
-    if (pts.length === 0) { html += `<div style="flex:1;min-width:140px;padding:10px;border:1px solid var(--border);border-radius:8px"><div style="font-size:11px;color:var(--text-dim);text-transform:uppercase">${t}</div><div style="font-size:13px;color:var(--text-dim);margin-top:4px">No data yet</div></div>`; return; }
-    const sumE = pts.reduce((s, p) => s + p.estTotal, 0);
-    const sumA = pts.reduce((s, p) => s + p.actTotal, 0);
-    const r = sumA / sumE;
-    const rClass = Math.abs(r - 1) < 0.15 ? 'delta-ok' : r < 1 ? 'delta-neg' : 'delta-pos';
-    html += `<div style="flex:1;min-width:140px;padding:10px;border:1px solid var(--border);border-radius:8px">
-      <div style="font-size:11px;color:var(--text-dim);text-transform:uppercase">${t}</div>
-      <div style="font-size:18px;font-weight:700;margin-top:2px" class="${rClass}">${r.toFixed(2)}x</div>
-      <div style="font-size:11px;color:var(--text-dim)">${pts.length} providers · Est €${sumE.toLocaleString()} → Act €${sumA.toLocaleString()}</div>
-    </div>`;
-  });
-  html += '</div>';
-
-  html += '<table style="width:100%;border-collapse:collapse;font-size:13px">';
-  html += '<thead><tr><th style="text-align:left;padding:8px;border-bottom:2px solid var(--border)">Parameter</th><th style="text-align:right;padding:8px;border-bottom:2px solid var(--border)">Default</th><th style="text-align:right;padding:8px;border-bottom:2px solid var(--border)">Current</th><th style="text-align:right;padding:8px;border-bottom:2px solid var(--border)">Suggested</th><th style="padding:8px;border-bottom:2px solid var(--border)"></th></tr></thead><tbody>';
-
-  paramDefs.forEach(p => {
-    const current = cal[p.key] !== undefined ? cal[p.key] : p.base;
-    const suggested = s[p.key];
-    const hasSuggestion = suggested !== undefined && Math.abs(suggested - p.base) > 0.005;
-    const isChanged = cal[p.key] !== undefined;
-    html += `<tr>
-      <td style="padding:8px;border-bottom:1px solid var(--border)">${p.label}</td>
-      <td style="text-align:right;padding:8px;border-bottom:1px solid var(--border);color:var(--text-dim)">${p.fmt(p.base)}</td>
-      <td style="text-align:right;padding:8px;border-bottom:1px solid var(--border);${isChanged ? 'color:var(--accent);font-weight:600' : ''}">${p.fmt(current)}</td>
-      <td style="text-align:right;padding:8px;border-bottom:1px solid var(--border);font-weight:600;${hasSuggestion ? 'color:var(--accent)' : 'color:var(--text-dim)'}">${hasSuggestion ? p.fmt(suggested) : '—'}</td>
-      <td style="padding:8px;border-bottom:1px solid var(--border)">${hasSuggestion ? `<button onclick="applyParam('${p.key}',${suggested})" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer">Apply</button>` : ''}</td>
-    </tr>`;
-  });
-  html += '</tbody></table>';
-
-  const hasAnySuggestion = Object.keys(s).length > 0;
-  if (hasAnySuggestion) {
-    html += `<div style="margin-top:12px"><button onclick="applyAllSuggestions()" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer">Apply All Global Suggestions</button></div>`;
-  }
-
-  html += '</div>';
-
-  // Per-segment calibration
-  const segData = result.segmentData || {};
-  if (Object.keys(segData).length > 0) {
-    html += '<div style="padding:16px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);margin-bottom:16px">';
-    html += '<h4 style="margin:0 0 4px;font-size:14px">Segment-Specific Calibration</h4>';
-    html += '<p style="color:var(--text-dim);font-size:12px;margin:0 0 12px">Different segments behave differently. These overrides apply only to providers in that segment.</p>';
-
-    const segColors = { 'Enterprise': '#6366f1', 'Mid-market': '#f59e0b', 'SMB': '#34d399' };
-
-    SEGMENTS.forEach(seg => {
-      const sd = segData[seg];
-      if (!sd) {
-        html += `<div style="padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:10px">
-          <div style="font-size:12px;font-weight:700;color:${segColors[seg] || 'var(--text)'}">${seg}</div>
-          <div style="font-size:11px;color:var(--text-dim);margin-top:2px">Not enough data (need 2+ providers with actuals)</div>
-        </div>`;
-        return;
-      }
-
-      const segR = sd.overall.ratio;
-      const rClass = Math.abs(segR - 1) < 0.15 ? 'delta-ok' : segR < 1 ? 'delta-neg' : 'delta-pos';
-
-      html += `<div style="padding:12px;border:1px solid var(--border);border-radius:8px;margin-bottom:10px;border-left:3px solid ${segColors[seg] || 'var(--border)'}">`;
-      html += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <div style="font-size:13px;font-weight:700;color:${segColors[seg] || 'var(--text)'}">${seg}</div>
-        <div style="font-size:12px"><span class="${rClass}" style="font-weight:700">${segR.toFixed(2)}x</span> <span style="color:var(--text-dim)">(${sd.overall.count} providers)</span></div>
-      </div>`;
-
-      // Segment type breakdown
-      html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">';
-      types.forEach(t => {
-        const pts = sd.byType[t];
-        if (pts.length === 0) return;
-        const sumE = pts.reduce((s, p) => s + p.estTotal, 0);
-        const sumA = pts.reduce((s, p) => s + p.actTotal, 0);
-        const r = sumA / sumE;
-        const rc = Math.abs(r - 1) < 0.15 ? 'delta-ok' : r < 1 ? 'delta-neg' : 'delta-pos';
-        html += `<div style="font-size:11px;padding:4px 8px;border:1px solid var(--border);border-radius:6px">
-          ${t}: <span class="${rc}" style="font-weight:600">${r.toFixed(2)}x</span> <span style="color:var(--text-dim)">(${pts.length})</span>
-        </div>`;
-      });
-      html += '</div>';
-
-      // Segment parameter suggestions
-      const segSugg = sd.suggestions;
-      const segKeys = Object.keys(segSugg);
-      if (segKeys.length > 0) {
-        html += '<table style="width:100%;border-collapse:collapse;font-size:12px">';
-        html += '<thead><tr><th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--border);font-size:10px;color:var(--text-dim)">Parameter</th><th style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border);font-size:10px;color:var(--text-dim)">Default</th><th style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border);font-size:10px;color:var(--text-dim)">Current</th><th style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border);font-size:10px;color:var(--text-dim)">Suggested</th><th style="padding:4px;border-bottom:1px solid var(--border)"></th></tr></thead><tbody>';
-
-        segKeys.forEach(sk => {
-          const baseName = sk.split('__')[0];
-          const pd = paramDefs.find(p => p.key === baseName);
-          if (!pd) return;
-          const current = cal[sk] !== undefined ? cal[sk] : pd.base;
-          const suggested = segSugg[sk];
-          const hasSugg = suggested !== undefined && Math.abs(suggested - pd.base) > 0.005;
-          const isChg = cal[sk] !== undefined;
-          html += `<tr>
-            <td style="padding:4px 8px;border-bottom:1px solid var(--border)">${pd.label}</td>
-            <td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border);color:var(--text-dim)">${pd.fmt(pd.base)}</td>
-            <td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border);${isChg ? 'color:var(--accent);font-weight:600' : ''}">${pd.fmt(current)}</td>
-            <td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border);font-weight:600;${hasSugg ? 'color:var(--accent)' : 'color:var(--text-dim)'}">${hasSugg ? pd.fmt(suggested) : '—'}</td>
-            <td style="padding:4px 8px;border-bottom:1px solid var(--border)">${hasSugg ? `<button onclick="applyParam('${sk}',${suggested})" style="background:${segColors[seg]};color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:10px;font-weight:600;cursor:pointer">Apply</button>` : ''}</td>
-          </tr>`;
-        });
-        html += '</tbody></table>';
-
-        html += `<div style="margin-top:6px"><button onclick="applySegmentSuggestions('${seg}')" style="background:${segColors[seg]};color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:11px;font-weight:600;cursor:pointer">Apply All ${seg}</button></div>`;
-      }
-
-      html += '</div>';
-    });
-
-    html += '</div>';
-  }
-
-  panel.style.display = 'block';
-  panel.innerHTML = html;
-
-  window._lastCalibrationSuggestions = s;
-  window._lastSegmentData = segData;
-}
-
-function applyParam(key, value) {
-  const cal = getCalibration();
-  cal[key] = value;
-  saveCalibration(cal);
-  refresh();
-  runCalibration();
-}
-
-function applyAllSuggestions() {
-  const s = window._lastCalibrationSuggestions;
-  if (!s) return;
-  const cal = getCalibration();
-  Object.assign(cal, s);
-  saveCalibration(cal);
-  refresh();
-  runCalibration();
-}
-
-function applySegmentSuggestions(seg) {
-  const segData = window._lastSegmentData;
-  if (!segData || !segData[seg]) return;
-  const cal = getCalibration();
-  Object.assign(cal, segData[seg].suggestions);
-  saveCalibration(cal);
-  refresh();
-  runCalibration();
-}
-
-function resetCalibration() {
-  if (!confirm('Reset all model parameters to defaults? This will undo any calibration.')) return;
-  localStorage.removeItem(CAL_KEY);
-  refresh();
-  const panel = document.getElementById('calibrationPanel');
-  panel.style.display = 'none';
-}
-
-function showActiveCalibration() {
-  const cal = getCalibration();
-  if (Object.keys(cal).length === 0) return;
-  const keys = Object.keys(cal);
-  const globalKeys = keys.filter(k => !k.includes('__'));
-  const segKeys = keys.filter(k => k.includes('__'));
-  const segsCalibrated = [...new Set(segKeys.map(k => k.split('__')[1]))];
-
-  let label = 'CALIBRATED';
-  let title = 'Custom calibration active';
-  if (segsCalibrated.length > 0) {
-    label += ' (' + segsCalibrated.join(', ') + ')';
-    title += ' — segment overrides: ' + segsCalibrated.join(', ');
-  }
-
-  const status = document.querySelector('.live-status') || document.getElementById('loadingMsg');
-  if (status && !document.getElementById('calBadge')) {
-    const badge = document.createElement('span');
-    badge.id = 'calBadge';
-    badge.style.cssText = 'margin-left:8px;background:var(--accent);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;';
-    badge.textContent = label;
-    badge.title = title;
-    status.parentNode.insertBefore(badge, status.nextSibling);
-  }
-}
-
-// ─── Provider Drill-Down Modal ───
-function openProviderModal(pid) {
-  const pidStr = String(pid);
-  const pdata = _PROVIDER_LOOKUP[pidStr];
-  const provCampaigns = _OPS_CAMPAIGNS.filter(c => String(c[1]) === pidStr);
-
-  if (provCampaigns.length === 0) { alert('No campaigns found for provider ' + pidStr); return; }
-
-  const pname = provCampaigns[0][3];
-  const am = pdata ? pdata[0] : 'Unknown';
-  const segment = pdata ? pdata[4] : '';
-  const totalOrders = pdata ? pdata[1] : 0;
-  const totalGmv = pdata ? pdata[2] : 0;
-  const aov = pdata ? pdata[3] : 0;
-
-  let totalEst = 0, totalBolt = 0, totalProv = 0;
-  const weekMap = {};
-  const campDetails = [];
-
-  provCampaigns.forEach(c => {
-    const est = estimateCampaignCost(c);
-    totalEst += est.total;
-    totalBolt += est.bolt;
-    totalProv += est.prov;
-    const wk = c[0];
-    if (!weekMap[wk]) weekMap[wk] = { total: 0, bolt: 0, prov: 0, count: 0 };
-    weekMap[wk].total += est.total;
-    weekMap[wk].bolt += est.bolt;
-    weekMap[wk].prov += est.prov;
-    weekMap[wk].count++;
-    campDetails.push({ data: c, est });
-  });
-
-  // Check snapshot history for this provider
-  const snaps = getSnapshots();
-  const storedActuals = getStoredActuals();
-  const history = [];
-  snaps.forEach(snap => {
-    const sc = snap.campaigns ? snap.campaigns.find(c => String(c.pid) === pidStr) : null;
-    if (!sc) return;
-    let actual = null;
-    storedActuals.forEach(sa => {
-      if (sa.actuals && sa.actuals[pidStr]) actual = sa.actuals[pidStr];
-    });
-    history.push({ date: snap.date, week: snap.isoWeek, est: sc.estTotal, actual: actual ? Math.round(actual.total) : null });
-  });
-
-  let html = `<div class="provider-modal">
-    <div class="pm-header">
-      <button class="pm-close" onclick="closeProviderModal()">&times;</button>
-      <h3>${pname}</h3>
-      <div class="pm-sub">ID: ${pidStr} · AM: ${am} · ${segment || 'Unknown Segment'}</div>
-    </div>
-    <div class="pm-body">`;
-
-  // Stats cards
-  html += '<div class="pm-stats">';
-  html += `<div class="pm-stat"><div class="pm-stat-label">Campaigns</div><div class="pm-stat-val">${provCampaigns.length}</div></div>`;
-  html += `<div class="pm-stat"><div class="pm-stat-label">Est Total/wk</div><div class="pm-stat-val">${fmt(totalEst)}</div></div>`;
-  html += `<div class="pm-stat"><div class="pm-stat-label">Est Bolt/wk</div><div class="pm-stat-val" style="color:var(--bolt)">${fmt(totalBolt)}</div></div>`;
-  html += `<div class="pm-stat"><div class="pm-stat-label">Est Provider/wk</div><div class="pm-stat-val" style="color:var(--provider)">${fmt(totalProv)}</div></div>`;
-  html += `<div class="pm-stat"><div class="pm-stat-label">Orders (8wk)</div><div class="pm-stat-val">${totalOrders.toLocaleString()}</div></div>`;
-  html += `<div class="pm-stat"><div class="pm-stat-label">AOV</div><div class="pm-stat-val">${fmt(aov)}</div></div>`;
-  html += '</div>';
-
-  // Weekly spend trend
-  const weeks = Object.keys(weekMap).sort((a, b) => a - b);
-  if (weeks.length > 1) {
-    html += '<div class="pm-campaigns"><h4>Weekly Spend Trend</h4></div>';
-    const maxWk = Math.max(...weeks.map(w => weekMap[w].total));
-    html += '<div class="pm-week-grid">';
-    weeks.forEach(wk => {
-      const wd = weekMap[wk];
-      const barH = maxWk > 0 ? Math.max(4, wd.total / maxWk * 40) : 4;
-      html += `<div class="pm-week-card">
-        <div class="wk-num">Wk ${wk}</div>
-        <div style="margin:4px auto;width:24px;background:var(--border);border-radius:2px;height:44px;display:flex;flex-direction:column-reverse;overflow:hidden">
-          <div style="height:${barH}px;background:var(--bolt);border-radius:0 0 2px 2px"></div>
-          <div style="height:${maxWk > 0 ? Math.max(1, wd.prov / maxWk * 40) : 1}px;background:var(--provider)"></div>
-        </div>
-        <div class="wk-val">${fmt(wd.total)}</div>
-        <div style="font-size:9px;color:var(--text-dim)">${wd.count} camp.</div>
-      </div>`;
-    });
-    html += '</div>';
-  }
-
-  // Historical accuracy (if snapshot data exists)
-  if (history.length > 0) {
-    html += '<div class="pm-campaigns"><h4>Snapshot History</h4></div>';
-    html += '<table class="pm-camp-table"><thead><tr><th>Date</th><th>Week</th><th style="text-align:right">Estimated</th><th style="text-align:right">Actual</th><th style="text-align:right">Accuracy</th></tr></thead><tbody>';
-    history.forEach(h => {
-      let accCell = '<span style="color:var(--text-dim)">—</span>';
-      if (h.actual !== null) {
-        const ratio = h.est > 0 ? h.actual / h.est : 0;
-        const rClass = Math.abs(ratio - 1) < 0.15 ? 'delta-ok' : ratio < 1 ? 'delta-neg' : 'delta-pos';
-        accCell = `<span class="${rClass}" style="font-weight:600">${(ratio * 100).toFixed(0)}%</span>`;
-      }
-      html += `<tr>
-        <td>${h.date}</td><td>W${h.week}</td>
-        <td style="text-align:right">${fmt(h.est)}</td>
-        <td style="text-align:right">${h.actual !== null ? fmt(h.actual) : '<span style="color:var(--text-dim)">pending</span>'}</td>
-        <td style="text-align:right">${accCell}</td>
-      </tr>`;
-    });
-    html += '</tbody></table>';
-  }
-
-  // Campaign breakdown
-  html += '<div class="pm-campaigns"><h4>Active Campaigns</h4></div>';
-  html += '<table class="pm-camp-table"><thead><tr><th>Week</th><th>Type</th><th>Discount</th><th>Cost Share</th><th>MOV</th><th style="text-align:right">Est Total</th><th style="text-align:right">Bolt</th><th style="text-align:right">Provider</th></tr></thead><tbody>';
-  campDetails.sort((a, b) => b.est.total - a.est.total).forEach(({ data: c, est }) => {
-    const disc = c[5] > 0 ? c[5] + '%' : '—';
-    const share = c[6] + '% / ' + (100 - c[6]) + '%';
-    const mov = c[9] > 0 ? '€' + c[9] : '—';
-    html += `<tr>
-      <td>W${c[0]}</td>
-      <td>${getCampTypeTag(c[4])}</td>
-      <td>${disc}</td>
-      <td>${share}</td>
-      <td>${mov}</td>
-      <td style="text-align:right;font-weight:600">${fmt(est.total)}</td>
-      <td style="text-align:right;color:var(--bolt)">${fmt(est.bolt)}</td>
-      <td style="text-align:right;color:var(--provider)">${fmt(est.prov)}</td>
-    </tr>`;
-  });
-  html += '</tbody></table>';
-
-  html += '</div></div>';
-
-  const modal = document.getElementById('providerModal');
-  modal.innerHTML = html;
-  modal.style.display = 'flex';
-  document.body.style.overflow = 'hidden';
-}
-
-function closeProviderModal() {
-  document.getElementById('providerModal').style.display = 'none';
-  document.body.style.overflow = '';
-}
-
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeProviderModal();
-});
-
-renderSnapshots();
-showActiveCalibration();
-loadBudget();
-loadSheetUrl();
 loadBrandGroupData();
-
-loadLiveData();
+renderPortfolio();
 </script>
 </body>
 </html>
