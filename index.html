@@ -161,7 +161,7 @@
   .range-display .range-val { min-width: 42px; text-align: right; font-weight: 600; font-size: 14px; }
 
   .scenario-row {
-    display: grid; grid-template-columns: 1fr auto auto auto auto;
+    display: grid; grid-template-columns: 1fr auto auto auto auto auto;
     gap: 10px; align-items: center; padding: 8px 0;
     border-bottom: 1px solid var(--border); font-size: 13px;
   }
@@ -3261,41 +3261,59 @@ function calculate() {
     <div class="breakdown-item"><span class="bi-label">Bolt total</span><span class="bi-value bolt-val">${fmt(bt)}</span></div>` : ''}
   `;
 
-  // Scenarios
+  // Scenarios — compute all first to find best ROI
   const estOpts = { audience, boltPlusPct };
+  const RM = 4; // repeat multiplier, must match REPEAT_MULTIPLIER above
+
+  function scenarioROI(s, wks) {
+    const ltGMV = s.incrementalGMV * wks * RM;
+    const totalCost = s.total * wks;
+    return totalCost > 0 ? ltGMV * 0.30 / totalCost : 0;
+  }
+
+  let scenarios = [];
+  if (type === 'bolt_plus_fd') {
+    [10,15,20,25,30,40,50].forEach(p => {
+      const s = est(orders, aov, disc, type, 0, fdCap, mov, provCV, itemShare, { audience: 'bolt_plus', boltPlusPct: p/100 });
+      scenarios.push({ label: p + '%', s, isCurrent: p === Math.round(boltPlusPct*100), roi: scenarioROI(s, weeks) });
+    });
+  } else if (type === 'free_delivery') {
+    [2,2.5,3,3.5,4,5].forEach(c => {
+      const s = est(orders, aov, disc, type, share, c, mov, provCV, itemShare, estOpts);
+      scenarios.push({ label: '€' + c.toFixed(1), s, isCurrent: c === fdCap, roi: scenarioROI(s, weeks) });
+    });
+  } else {
+    [5,10,15,20,25,30,40,50].forEach(d => {
+      const s = est(orders, aov, d, type, share, fdCap, mov, provCV, itemShare, estOpts);
+      scenarios.push({ label: d + '%', s, isCurrent: d === disc, roi: scenarioROI(s, weeks) });
+    });
+  }
+
+  const bestROI = Math.max(...scenarios.map(x => x.roi));
+
   let scHtml = `<div class="scenario-row">
     <span class="sh">${type==='bolt_plus_fd'?'Bolt+ %':type==='free_delivery'?'FD Cap':'Discount'}</span>
     <span class="sh num">Uplift</span>
     <span class="sh num">Total/wk</span>
     <span class="sh num">Bolt/wk</span>
     <span class="sh num">Bolt (${weeks}w)</span>
+    <span class="sh num">ROI</span>
   </div>`;
 
-  if (type === 'bolt_plus_fd') {
-    [10,15,20,25,30,40,50].forEach(p => {
-      const s = est(orders, aov, disc, type, 0, fdCap, mov, provCV, itemShare, { audience: 'bolt_plus', boltPlusPct: p/100 });
-      scHtml += `<div class="scenario-row" style="${p===Math.round(boltPlusPct*100)?'color:var(--accent);font-weight:600':''}">
-        <span>${p}%</span><span class="num">+${pct(s.uplift)}</span>
-        <span class="num">${fmt(s.total)}</span><span class="num">${fmt(s.boltShare)}</span>
-        <span class="num">${fmt(s.boltShare*weeks)}</span></div>`;
-    });
-  } else if (type === 'free_delivery') {
-    [2,2.5,3,3.5,4,5].forEach(c => {
-      const s = est(orders, aov, disc, type, share, c, mov, provCV, itemShare, estOpts);
-      scHtml += `<div class="scenario-row" style="${c===fdCap?'color:var(--accent);font-weight:600':''}">
-        <span>€${c.toFixed(1)}</span><span class="num">+${pct(s.uplift)}</span>
-        <span class="num">${fmt(s.total)}</span><span class="num">${fmt(s.boltShare)}</span>
-        <span class="num">${fmt(s.boltShare*weeks)}</span></div>`;
-    });
-  } else {
-    [5,10,15,20,25,30,40,50].forEach(d => {
-      const s = est(orders, aov, d, type, share, fdCap, mov, provCV, itemShare, estOpts);
-      scHtml += `<div class="scenario-row" style="${d===disc?'color:var(--accent);font-weight:600':''}">
-        <span>${d}%</span><span class="num">+${pct(s.uplift)}</span>
-        <span class="num">${fmt(s.total)}</span><span class="num">${fmt(s.boltShare)}</span>
-        <span class="num">${fmt(s.boltShare*weeks)}</span></div>`;
-    });
-  }
+  scenarios.forEach(sc => {
+    const isBest = sc.roi === bestROI && sc.roi > 0;
+    const style = isBest
+      ? 'background:rgba(52,211,153,.12);border-radius:6px;color:var(--accent);font-weight:600'
+      : sc.isCurrent ? 'color:var(--accent);font-weight:600' : '';
+    const roiColor = sc.roi >= 3 ? 'var(--accent)' : sc.roi >= 1.5 ? 'var(--provider)' : 'var(--danger)';
+    const tag = isBest ? ' ★' : '';
+    scHtml += `<div class="scenario-row" style="${style}">
+      <span>${sc.label}${tag}</span><span class="num">+${pct(sc.s.uplift)}</span>
+      <span class="num">${fmt(sc.s.total)}</span><span class="num">${fmt(sc.s.boltShare)}</span>
+      <span class="num">${fmt(sc.s.boltShare*weeks)}</span>
+      <span class="num" style="color:${roiColor};font-weight:600;">${sc.roi.toFixed(1)}x</span></div>`;
+  });
+
   document.getElementById('scenariosContent').innerHTML = scHtml;
 
   // Segment comparison (segment already set at top of calculate)
