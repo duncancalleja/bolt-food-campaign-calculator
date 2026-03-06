@@ -2774,7 +2774,7 @@ function onProviderPick() {
   if (!p) return;
 
   currentSource = 'uploaded';
-  _selectedProvider = { orders: Math.round(p.avgOrders), aov: p.avgAOV, gmv: Math.round(p.avgGMV), cv: p.estimatedCV || ORDER_VALUE_CV };
+  _selectedProvider = { orders: Math.round(p.avgOrders), aov: p.avgAOV, gmv: Math.round(p.avgGMV), cv: p.estimatedCV || ORDER_VALUE_CV, commission: p.commission || 0 };
 
   document.getElementById('statOrders').textContent = Math.round(p.avgOrders).toLocaleString();
   document.getElementById('statAOV').textContent = '€' + p.avgAOV.toFixed(2);
@@ -2943,8 +2943,10 @@ function renderStack() {
     const sumProv = campaignStack.reduce((s, c) => s + c.provCampaign, 0);
     const sumBolt = campaignStack.reduce((s, c) => s + c.boltCampaign, 0);
     const sumIncGMV = campaignStack.reduce((s, c) => s + c.incGMVCampaign, 0);
-    const sumIncProfit = sumIncGMV * 0.30;
-    const combinedProvROI = sumProv > 0 ? sumIncProfit / sumProv : (sumIncProfit > 0 ? 99 : 0);
+    const sumProvProfit = sumIncGMV * 0.30;
+    const sumBoltComm = sumIncGMV * 0.25;
+    const combinedProvROI = sumProv > 0 ? sumProvProfit / sumProv : (sumProvProfit > 0 ? 99 : 0);
+    const combinedBoltROI = sumBolt > 0 ? sumBoltComm / sumBolt : (sumBoltComm > 0 ? 99 : 0);
 
     totalsEl.style.display = 'block';
     totalsEl.innerHTML = `
@@ -2952,7 +2954,8 @@ function renderStack() {
       <div class="st-row"><span class="st-label">Combined Provider Cost</span><span class="st-value provider-val">${fmt(sumProv)}</span></div>
       <div class="st-row"><span class="st-label">Combined Bolt Cost</span><span class="st-value bolt-val">${fmt(sumBolt)}</span></div>
       <div class="st-row"><span class="st-label">Combined Extra Revenue</span><span class="st-value" style="color:var(--accent);">${fmt(sumIncGMV)}</span></div>
-      <div class="st-row st-grand"><span class="st-label">Combined Provider Profit ROI</span><span class="st-value" style="color:${combinedProvROI >= 1 ? 'var(--accent)' : 'var(--danger)'};">${sumProv > 0 ? combinedProvROI.toFixed(1) + 'x' : 'No cost to provider'}</span></div>`;
+      <div class="st-row"><span class="st-label">Provider Profit ROI</span><span class="st-value" style="color:${combinedProvROI >= 1 ? 'var(--accent)' : 'var(--danger)'};">${sumProv > 0 ? combinedProvROI.toFixed(1) + 'x' : 'Free'}</span></div>
+      <div class="st-row st-grand"><span class="st-label">Bolt Commission ROI</span><span class="st-value" style="color:${combinedBoltROI >= 1 ? 'var(--accent)' : 'var(--danger)'};">${sumBolt > 0 ? combinedBoltROI.toFixed(1) + 'x' : 'Free'}</span></div>`;
   } else {
     totalsEl.style.display = 'none';
   }
@@ -3169,45 +3172,57 @@ function calculate() {
   // ROI & Investment Context
   const incGMVwk = r.incrementalGMV;
   const incGMVtotal = incGMVwk * weeks;
-  const margin = 0.30;
-  const incProfitWk = r.upliftOrders * aov * margin;
-  const incProfitTotal = incProfitWk * weeks;
+  const provMargin = 0.30;
+  const commRate = (_selectedProvider && _selectedProvider.commission) ? _selectedProvider.commission / 100 : 0.25;
+  const incProvProfitWk = r.upliftOrders * aov * provMargin;
+  const incBoltCommWk = r.upliftOrders * aov * commRate;
   const costPerExtraOrder = r.upliftOrders > 0 ? tw / r.upliftOrders : 0;
   const provCostPerExtraOrder = r.upliftOrders > 0 ? pw / r.upliftOrders : 0;
-  const provROI = pw > 0 ? (incProfitTotal / (pw * weeks)) : (incProfitWk > 0 ? 99 : 0);
-  const breakEvenOrders = pw > 0 ? Math.ceil(pw / (aov * margin)) : 0;
+  const boltCostPerExtraOrder = r.upliftOrders > 0 ? bw / r.upliftOrders : 0;
+  const provROI = pw > 0 ? incProvProfitWk / pw : (incProvProfitWk > 0 ? 99 : 0);
+  const boltROI = bw > 0 ? incBoltCommWk / bw : (incBoltCommWk > 0 ? 99 : 0);
+  const provBreakEven = pw > 0 ? Math.ceil(pw / (aov * provMargin)) : 0;
+  const boltBreakEven = bw > 0 ? Math.ceil(bw / (aov * commRate)) : 0;
 
   const roiPanel = document.getElementById('roiPanel');
   if (incGMVwk > 0) {
     roiPanel.style.display = 'block';
-    const roiColor = provROI >= 2 ? 'var(--accent)' : provROI >= 1 ? 'var(--provider)' : 'var(--danger)';
-    const verdict = provROI >= 3 ? 'Excellent — campaign pays for itself many times over'
-      : provROI >= 2 ? 'Strong — provider profits well from this campaign'
-      : provROI >= 1 ? 'Positive — provider earns more than they spend'
-      : provROI >= 0.5 ? 'Marginal — campaign is close to break-even for provider'
-      : 'Below break-even — consider lower discount or higher Bolt cost share';
-    const profitLabel = pw > 0 ? 'Provider Profit ROI' : 'Provider Profit ROI';
-    const profitDisplay = pw > 0 ? `${provROI.toFixed(1)}x` : 'No cost to provider';
-    const profitSub = pw > 0 ? verdict : 'Bolt covers 100% of the cost';
+    const provRoiColor = provROI >= 2 ? 'var(--accent)' : provROI >= 1 ? 'var(--provider)' : 'var(--danger)';
+    const provVerdict = pw <= 0 ? 'No cost to provider'
+      : provROI >= 3 ? 'Excellent' : provROI >= 2 ? 'Strong' : provROI >= 1 ? 'Positive' : provROI >= 0.5 ? 'Marginal' : 'Below break-even';
+    const boltRoiColor = boltROI >= 2 ? 'var(--accent)' : boltROI >= 1 ? 'var(--bolt)' : 'var(--danger)';
+    const boltVerdict = bw <= 0 ? 'No cost to Bolt'
+      : boltROI >= 3 ? 'Excellent' : boltROI >= 2 ? 'Strong' : boltROI >= 1 ? 'Positive' : boltROI >= 0.5 ? 'Marginal' : 'Below break-even';
+    const commLabel = (_selectedProvider && _selectedProvider.commission) ? `${_selectedProvider.commission}% from data` : '25% default';
+
     document.getElementById('roiContent').innerHTML = `
       <div class="result-grid" style="margin-bottom:0;">
         <div class="result-card">
           <div class="label">Extra Revenue / week</div>
           <div class="value" style="color:var(--accent);font-size:20px;">${fmt(incGMVwk)}</div>
-          <div class="sub">+${Math.round(r.upliftOrders)} extra orders/wk · ${fmt(incGMVtotal)} over ${weeks} week${weeks>1?'s':''}</div>
+          <div class="sub">+${Math.round(r.upliftOrders)} extra orders/wk · ${fmt(incGMVtotal)} over ${weeks} wk${weeks>1?'s':''}</div>
         </div>
         <div class="result-card">
-          <div class="label">${profitLabel}</div>
-          <div class="value" style="color:${roiColor};font-size:20px;">${profitDisplay}</div>
-          <div class="sub">${profitSub}</div>
+          <div class="label">Provider ROI (at ~30% margin)</div>
+          <div class="value" style="color:${provRoiColor};font-size:20px;">${pw > 0 ? provROI.toFixed(1) + 'x' : 'Free'}</div>
+          <div class="sub">${provVerdict}</div>
+        </div>
+        <div class="result-card">
+          <div class="label">Bolt ROI (at ${commLabel} commission)</div>
+          <div class="value" style="color:${boltRoiColor};font-size:20px;">${bw > 0 ? boltROI.toFixed(1) + 'x' : 'Free'}</div>
+          <div class="sub">${boltVerdict}</div>
         </div>
       </div>
       <div style="margin-top:12px;">
-        <div class="breakdown-item"><span class="bi-label">Cost per extra order (total)</span><span class="bi-value">${fmtDec(costPerExtraOrder)}</span></div>
-        <div class="breakdown-item"><span class="bi-label">Cost per extra order (provider pays)</span><span class="bi-value">${pw > 0 ? fmtDec(provCostPerExtraOrder) : '€0 (Bolt covers)'}</span></div>
-        <div class="breakdown-item"><span class="bi-label">Est. profit per extra order (at ~30% margin)</span><span class="bi-value" style="color:var(--accent);">${fmtDec(aov * margin)}</span></div>
-        ${pw > 0 ? `<div class="breakdown-item"><span class="bi-label">Extra orders to break even for provider</span><span class="bi-value">${breakEvenOrders} orders/wk</span></div>
-        <div class="breakdown-item"><span class="bi-label">Expected uplift delivers</span><span class="bi-value" style="color:${r.upliftOrders >= breakEvenOrders ? 'var(--accent)' : 'var(--danger)'};">${Math.round(r.upliftOrders)} orders/wk ${r.upliftOrders >= breakEvenOrders ? '— covers provider cost' : '— below break-even'}</span></div>` : ''}
+        <div class="breakdown-item"><span class="bi-label">Cost per extra order — total</span><span class="bi-value">${fmtDec(costPerExtraOrder)}</span></div>
+        <div class="breakdown-item"><span class="bi-label">Cost per extra order — provider</span><span class="bi-value">${pw > 0 ? fmtDec(provCostPerExtraOrder) : '€0'}</span></div>
+        <div class="breakdown-item"><span class="bi-label">Cost per extra order — Bolt</span><span class="bi-value">${bw > 0 ? fmtDec(boltCostPerExtraOrder) : '€0'}</span></div>
+        <div class="divider"></div>
+        <div class="breakdown-item"><span class="bi-label">Provider profit per extra order (~30% margin)</span><span class="bi-value" style="color:var(--provider);">${fmtDec(aov * provMargin)}</span></div>
+        <div class="breakdown-item"><span class="bi-label">Bolt commission per extra order (${commLabel})</span><span class="bi-value" style="color:var(--bolt);">${fmtDec(aov * commRate)}</span></div>
+        ${pw > 0 ? `<div class="divider"></div>
+        <div class="breakdown-item"><span class="bi-label">Provider break-even</span><span class="bi-value" style="color:${r.upliftOrders >= provBreakEven ? 'var(--accent)' : 'var(--danger)'};">${provBreakEven} orders/wk needed · uplift delivers ${Math.round(r.upliftOrders)} ${r.upliftOrders >= provBreakEven ? '(covered)' : '(short)'}</span></div>` : ''}
+        ${bw > 0 ? `<div class="breakdown-item"><span class="bi-label">Bolt break-even</span><span class="bi-value" style="color:${r.upliftOrders >= boltBreakEven ? 'var(--accent)' : 'var(--danger)'};">${boltBreakEven} orders/wk needed · uplift delivers ${Math.round(r.upliftOrders)} ${r.upliftOrders >= boltBreakEven ? '(covered)' : '(short)'}</span></div>` : ''}
       </div>`;
   } else {
     roiPanel.style.display = 'none';
