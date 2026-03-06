@@ -3166,59 +3166,61 @@ function calculate() {
   document.getElementById('barProvider').textContent = r.provShare > 0 ? `Provider ${Math.round(r.share*100)}%` : '';
 
   // ROI & Investment Context
+  // Campaigns acquire customers who keep ordering. Repeat multiplier = estimated
+  // future orders per new customer acquired (industry standard 3-5x for food delivery).
+  const REPEAT_MULTIPLIER = 4;
   const incGMVwk = r.incrementalGMV;
   const incGMVtotal = incGMVwk * weeks;
+  const lifetimeGMV = incGMVtotal * REPEAT_MULTIPLIER;
   const provMargin = 0.30;
   const commRate = (_selectedProvider && _selectedProvider.commission) ? _selectedProvider.commission / 100 : 0.25;
-  const incProvProfitWk = r.upliftOrders * aov * provMargin;
-  const incBoltCommWk = r.upliftOrders * aov * commRate;
+  const provLifetimeProfit = lifetimeGMV * provMargin;
+  const boltLifetimeComm = lifetimeGMV * commRate;
+  const provROI = (pw * weeks) > 0 ? provLifetimeProfit / (pw * weeks) : (provLifetimeProfit > 0 ? 99 : 0);
+  const boltROI = (bw * weeks) > 0 ? boltLifetimeComm / (bw * weeks) : (boltLifetimeComm > 0 ? 99 : 0);
   const costPerExtraOrder = r.upliftOrders > 0 ? tw / r.upliftOrders : 0;
   const provCostPerExtraOrder = r.upliftOrders > 0 ? pw / r.upliftOrders : 0;
   const boltCostPerExtraOrder = r.upliftOrders > 0 ? bw / r.upliftOrders : 0;
-  const provROI = pw > 0 ? incProvProfitWk / pw : (incProvProfitWk > 0 ? 99 : 0);
-  const boltROI = bw > 0 ? incBoltCommWk / bw : (incBoltCommWk > 0 ? 99 : 0);
-  const provBreakEven = pw > 0 ? Math.ceil(pw / (aov * provMargin)) : 0;
-  const boltBreakEven = bw > 0 ? Math.ceil(bw / (aov * commRate)) : 0;
 
   const roiPanel = document.getElementById('roiPanel');
   if (incGMVwk > 0) {
     roiPanel.style.display = 'block';
-    const provRoiColor = provROI >= 2 ? 'var(--accent)' : provROI >= 1 ? 'var(--provider)' : 'var(--danger)';
+    const provRoiColor = provROI >= 3 ? 'var(--accent)' : provROI >= 1.5 ? 'var(--provider)' : 'var(--danger)';
     const provVerdict = pw <= 0 ? 'No cost to provider'
-      : provROI >= 3 ? 'Excellent' : provROI >= 2 ? 'Strong' : provROI >= 1 ? 'Positive' : provROI >= 0.5 ? 'Marginal' : 'Below break-even';
-    const boltRoiColor = boltROI >= 2 ? 'var(--accent)' : boltROI >= 1 ? 'var(--bolt)' : 'var(--danger)';
+      : provROI >= 5 ? 'Excellent' : provROI >= 3 ? 'Strong' : provROI >= 1.5 ? 'Good' : provROI >= 1 ? 'Moderate' : 'Below break-even';
+    const boltRoiColor = boltROI >= 3 ? 'var(--accent)' : boltROI >= 1.5 ? 'var(--bolt)' : 'var(--danger)';
     const boltVerdict = bw <= 0 ? 'No cost to Bolt'
-      : boltROI >= 3 ? 'Excellent' : boltROI >= 2 ? 'Strong' : boltROI >= 1 ? 'Positive' : boltROI >= 0.5 ? 'Marginal' : 'Below break-even';
-    const commLabel = (_selectedProvider && _selectedProvider.commission) ? `${_selectedProvider.commission}% from data` : '25% default';
+      : boltROI >= 5 ? 'Excellent' : boltROI >= 3 ? 'Strong' : boltROI >= 1.5 ? 'Good' : boltROI >= 1 ? 'Moderate' : 'Below break-even';
+    const commLabel = (_selectedProvider && _selectedProvider.commission) ? `${_selectedProvider.commission}%` : '25%';
 
     document.getElementById('roiContent').innerHTML = `
       <div class="result-grid" style="margin-bottom:0;">
         <div class="result-card">
-          <div class="label">Extra Revenue / week</div>
-          <div class="value" style="color:var(--accent);font-size:20px;">${fmt(incGMVwk)}</div>
-          <div class="sub">+${Math.round(r.upliftOrders)} extra orders/wk · ${fmt(incGMVtotal)} over ${weeks} wk${weeks>1?'s':''}</div>
+          <div class="label">Extra Revenue (incl. repeat orders)</div>
+          <div class="value" style="color:var(--accent);font-size:20px;">${fmt(lifetimeGMV)}</div>
+          <div class="sub">${fmt(incGMVtotal)} direct + ${REPEAT_MULTIPLIER - 1}x repeat value · +${Math.round(r.upliftOrders)} new orders/wk</div>
         </div>
         <div class="result-card">
-          <div class="label">Provider ROI (at ~30% margin)</div>
+          <div class="label">Provider ROI</div>
           <div class="value" style="color:${provRoiColor};font-size:20px;">${pw > 0 ? provROI.toFixed(1) + 'x' : 'Free'}</div>
-          <div class="sub">${provVerdict}</div>
+          <div class="sub">${provVerdict}${pw > 0 ? ' · ~30% margin' : ''}</div>
         </div>
         <div class="result-card">
-          <div class="label">Bolt ROI (at ${commLabel} commission)</div>
+          <div class="label">Bolt ROI</div>
           <div class="value" style="color:${boltRoiColor};font-size:20px;">${bw > 0 ? boltROI.toFixed(1) + 'x' : 'Free'}</div>
-          <div class="sub">${boltVerdict}</div>
+          <div class="sub">${boltVerdict}${bw > 0 ? ' · ' + commLabel + ' commission' : ''}</div>
         </div>
       </div>
       <div style="margin-top:12px;">
-        <div class="breakdown-item"><span class="bi-label">Cost per extra order — total</span><span class="bi-value">${fmtDec(costPerExtraOrder)}</span></div>
-        <div class="breakdown-item"><span class="bi-label">Cost per extra order — provider</span><span class="bi-value">${pw > 0 ? fmtDec(provCostPerExtraOrder) : '€0'}</span></div>
-        <div class="breakdown-item"><span class="bi-label">Cost per extra order — Bolt</span><span class="bi-value">${bw > 0 ? fmtDec(boltCostPerExtraOrder) : '€0'}</span></div>
+        <div class="breakdown-item"><span class="bi-label">Direct incremental GMV (${weeks} wk${weeks>1?'s':''})</span><span class="bi-value">${fmt(incGMVtotal)}</span></div>
+        <div class="breakdown-item"><span class="bi-label">Est. lifetime value (${REPEAT_MULTIPLIER}x repeat multiplier)</span><span class="bi-value" style="color:var(--accent);">${fmt(lifetimeGMV)}</span></div>
         <div class="divider"></div>
-        <div class="breakdown-item"><span class="bi-label">Provider profit per extra order (~30% margin)</span><span class="bi-value" style="color:var(--provider);">${fmtDec(aov * provMargin)}</span></div>
-        <div class="breakdown-item"><span class="bi-label">Bolt commission per extra order (${commLabel})</span><span class="bi-value" style="color:var(--bolt);">${fmtDec(aov * commRate)}</span></div>
-        ${pw > 0 ? `<div class="divider"></div>
-        <div class="breakdown-item"><span class="bi-label">Provider break-even</span><span class="bi-value" style="color:${r.upliftOrders >= provBreakEven ? 'var(--accent)' : 'var(--danger)'};">${provBreakEven} orders/wk needed · uplift delivers ${Math.round(r.upliftOrders)} ${r.upliftOrders >= provBreakEven ? '(covered)' : '(short)'}</span></div>` : ''}
-        ${bw > 0 ? `<div class="breakdown-item"><span class="bi-label">Bolt break-even</span><span class="bi-value" style="color:${r.upliftOrders >= boltBreakEven ? 'var(--accent)' : 'var(--danger)'};">${boltBreakEven} orders/wk needed · uplift delivers ${Math.round(r.upliftOrders)} ${r.upliftOrders >= boltBreakEven ? '(covered)' : '(short)'}</span></div>` : ''}
+        <div class="breakdown-item"><span class="bi-label">Cost per extra order — total</span><span class="bi-value">${fmtDec(costPerExtraOrder)}</span></div>
+        ${pw > 0 ? `<div class="breakdown-item"><span class="bi-label">Cost per extra order — provider</span><span class="bi-value">${fmtDec(provCostPerExtraOrder)}</span></div>` : ''}
+        ${bw > 0 ? `<div class="breakdown-item"><span class="bi-label">Cost per extra order — Bolt</span><span class="bi-value">${fmtDec(boltCostPerExtraOrder)}</span></div>` : ''}
+        <div class="divider"></div>
+        ${pw > 0 ? `<div class="breakdown-item"><span class="bi-label">Provider: ${fmt(pw * weeks)} invested → ${fmt(provLifetimeProfit)} lifetime profit</span><span class="bi-value" style="color:${provRoiColor};font-weight:700;">${provROI.toFixed(1)}x return</span></div>` : ''}
+        ${bw > 0 ? `<div class="breakdown-item"><span class="bi-label">Bolt: ${fmt(bw * weeks)} invested → ${fmt(boltLifetimeComm)} lifetime commission</span><span class="bi-value" style="color:${boltRoiColor};font-weight:700;">${boltROI.toFixed(1)}x return</span></div>` : ''}
       </div>`;
   } else {
     roiPanel.style.display = 'none';
