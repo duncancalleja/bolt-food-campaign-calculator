@@ -234,6 +234,50 @@
     position: relative;
   }
   .history-chart .hc-bar:hover { opacity: .8; }
+
+  .stack-btn {
+    width: 100%; padding: 11px; border: 1px solid var(--accent); border-radius: 8px;
+    font-size: 14px; font-weight: 600; cursor: pointer; transition: all .15s;
+    background: var(--accent-dim); color: var(--accent); margin-top: 6px;
+  }
+  .stack-btn:hover { background: rgba(52,211,153,.2); }
+  .stack-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  .stack-item {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; margin-bottom: 8px; position: relative;
+  }
+  .stack-item .si-header {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;
+  }
+  .stack-item .si-type { font-size: 13px; font-weight: 600; color: var(--text); }
+  .stack-item .si-remove {
+    background: none; border: none; color: var(--danger); font-size: 18px;
+    cursor: pointer; padding: 0 4px; line-height: 1; opacity: .7; transition: opacity .15s;
+  }
+  .stack-item .si-remove:hover { opacity: 1; }
+  .stack-item .si-details { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+  .stack-item .si-costs {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 6px;
+  }
+  .stack-item .si-cost { text-align: center; }
+  .stack-item .si-cost .sc-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .3px; }
+  .stack-item .si-cost .sc-value { font-size: 14px; font-weight: 700; }
+
+  .stack-totals {
+    background: var(--surface2); border: 1px solid var(--accent); border-radius: 8px;
+    padding: 12px; margin-top: 4px;
+  }
+  .stack-totals .st-row {
+    display: flex; justify-content: space-between; padding: 5px 0;
+    font-size: 13px; border-bottom: 1px solid var(--border);
+  }
+  .stack-totals .st-row:last-child { border-bottom: none; }
+  .stack-totals .st-label { color: var(--text-dim); }
+  .stack-totals .st-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stack-totals .st-grand .st-label, .stack-totals .st-grand .st-value {
+    font-size: 15px; color: var(--accent); font-weight: 700;
+  }
 </style>
 </head>
 <body>
@@ -465,6 +509,16 @@
       </div>
 
       <button class="btn btn-primary" onclick="calculate()">Estimate Cost</button>
+      <button class="stack-btn" id="addToStackBtn" onclick="addToStack()" disabled>+ Add to Campaign Stack</button>
+    </div>
+
+    <div class="panel" id="stackPanel" style="display:none;">
+      <div class="panel-title" style="display:flex;justify-content:space-between;align-items:center;">
+        Campaign Stack <span id="stackCount" style="font-size:12px;color:var(--accent);text-transform:none;letter-spacing:0;"></span>
+        <button onclick="clearStack()" style="background:none;border:none;color:var(--danger);font-size:12px;cursor:pointer;font-weight:600;">Clear All</button>
+      </div>
+      <div id="stackItems"></div>
+      <div id="stackTotals" class="stack-totals" style="display:none;"></div>
     </div>
   </div>
 
@@ -502,6 +556,11 @@
         </div>
       </div>
 
+      <div class="panel" id="roiPanel" style="display:none;">
+        <div class="panel-title">ROI &amp; Investment Context</div>
+        <div id="roiContent"></div>
+      </div>
+
       <div class="panel">
         <div class="panel-title">Calculation Breakdown</div>
         <div id="breakdownContent"></div>
@@ -534,6 +593,8 @@ let uploadedColumns = [];
 let columnMap = { id: null, week: null, orders: null, gmv: null, aov: null, segment: null };
 let dataLoaded = false;
 let currentSource = 'manual'; // 'manual' | 'uploaded'
+let campaignStack = [];
+let _lastEstimate = null;
 
 // ─── Benchmarks from historical MT data ───
 const REDEMPTION = { menu_discount: 0.72, item_discount: 0.38, free_delivery: 0.85 };
@@ -2828,6 +2889,74 @@ function showProviderHistory(p) {
   document.getElementById('histEnd').textContent = validWeeks[validWeeks.length - 1].week || '';
 }
 
+// ─── Campaign Stack ───
+function addToStack() {
+  if (!_lastEstimate) return;
+  if (campaignStack.length >= 5) return;
+  campaignStack.push({ ..._lastEstimate });
+  renderStack();
+}
+
+function removeFromStack(idx) {
+  campaignStack.splice(idx, 1);
+  renderStack();
+}
+
+function clearStack() {
+  campaignStack = [];
+  renderStack();
+}
+
+function renderStack() {
+  const panel = document.getElementById('stackPanel');
+  const itemsEl = document.getElementById('stackItems');
+  const totalsEl = document.getElementById('stackTotals');
+  const countEl = document.getElementById('stackCount');
+
+  if (campaignStack.length === 0) {
+    panel.style.display = 'none';
+    return;
+  }
+
+  panel.style.display = 'block';
+  countEl.textContent = `${campaignStack.length} campaign${campaignStack.length > 1 ? 's' : ''}`;
+
+  let html = '';
+  campaignStack.forEach((c, i) => {
+    html += `<div class="stack-item">
+      <div class="si-header">
+        <span class="si-type">${c.label}</span>
+        <button class="si-remove" onclick="removeFromStack(${i})" title="Remove">&times;</button>
+      </div>
+      <div class="si-details">${c.provider} · ${c.weeks}wk · ${c.shareLabel}</div>
+      <div class="si-costs">
+        <div class="si-cost"><div class="sc-label">Total</div><div class="sc-value total-val">${c.fmtTotal}</div></div>
+        <div class="si-cost"><div class="sc-label">Provider</div><div class="sc-value provider-val">${c.fmtProv}</div></div>
+        <div class="si-cost"><div class="sc-label">Bolt</div><div class="sc-value bolt-val">${c.fmtBolt}</div></div>
+      </div>
+    </div>`;
+  });
+  itemsEl.innerHTML = html;
+
+  if (campaignStack.length >= 2) {
+    const sumTotal = campaignStack.reduce((s, c) => s + c.totalCampaign, 0);
+    const sumProv = campaignStack.reduce((s, c) => s + c.provCampaign, 0);
+    const sumBolt = campaignStack.reduce((s, c) => s + c.boltCampaign, 0);
+    const sumIncGMV = campaignStack.reduce((s, c) => s + c.incGMVCampaign, 0);
+    const combinedROI = sumIncGMV > 0 ? sumIncGMV / sumTotal : 0;
+
+    totalsEl.style.display = 'block';
+    totalsEl.innerHTML = `
+      <div class="st-row"><span class="st-label">Combined Total Cost</span><span class="st-value total-val">${fmt(sumTotal)}</span></div>
+      <div class="st-row"><span class="st-label">Combined Provider Cost</span><span class="st-value provider-val">${fmt(sumProv)}</span></div>
+      <div class="st-row"><span class="st-label">Combined Bolt Cost</span><span class="st-value bolt-val">${fmt(sumBolt)}</span></div>
+      <div class="st-row"><span class="st-label">Combined Incremental GMV</span><span class="st-value" style="color:var(--accent);">${fmt(sumIncGMV)}</span></div>
+      <div class="st-row st-grand"><span class="st-label">Combined GMV Return / €1</span><span class="st-value">€${combinedROI.toFixed(1)}</span></div>`;
+  } else {
+    totalsEl.style.display = 'none';
+  }
+}
+
 // ─── Core Estimation ───
 function syncRange(sid, did, suffix) {
   document.getElementById(did).textContent = document.getElementById(sid).value + suffix;
@@ -2948,10 +3077,13 @@ function est(orders, aov, disc, type, share, fdCap, mov, cv, itemShare, opts) {
   }
 
   const uo = baseOrders * (1 + uplift);
+  const incrementalOrders = uo - baseOrders;
+  const incrementalGMV = incrementalOrders * aov;
   return {
-    gmv, uplift, upliftedOrders: uo, upliftOrders: uo - baseOrders,
+    gmv, uplift, upliftedOrders: uo, upliftOrders: incrementalOrders,
     baseOrders, redemption, dpo, total, provShare: total * share, boltShare: total * (1 - share), share,
-    mov, qualifyingRate, effectiveAov, cv, itemShare, audience, boltPlusPct: bpPen
+    mov, qualifyingRate, effectiveAov, cv, itemShare, audience, boltPlusPct: bpPen,
+    incrementalGMV
   };
 }
 
@@ -3032,6 +3164,42 @@ function calculate() {
   document.getElementById('barBolt').textContent = r.boltShare > 0 ? `Bolt ${Math.round((1-r.share)*100)}%` : '';
   document.getElementById('barProvider').style.width = pW + '%';
   document.getElementById('barProvider').textContent = r.provShare > 0 ? `Provider ${Math.round(r.share*100)}%` : '';
+
+  // ROI & Investment Context
+  const incGMVwk = r.incrementalGMV;
+  const incGMVtotal = incGMVwk * weeks;
+  const costPctOfIncGMV = incGMVwk > 0 ? (tw / incGMVwk) * 100 : 0;
+  const provCostPctOfIncGMV = incGMVwk > 0 ? (pw / incGMVwk) * 100 : 0;
+  const roiMultiple = incGMVtotal > 0 ? incGMVtotal / gt : 0;
+  const breakEvenOrders = r.dpo > 0 ? Math.ceil(tw / aov) : 0;
+
+  const roiPanel = document.getElementById('roiPanel');
+  if (incGMVwk > 0) {
+    roiPanel.style.display = 'block';
+    const roiColor = roiMultiple >= 3 ? 'var(--accent)' : roiMultiple >= 1.5 ? 'var(--provider)' : 'var(--danger)';
+    const verdict = roiMultiple >= 5 ? 'Excellent ROI' : roiMultiple >= 3 ? 'Strong ROI' : roiMultiple >= 1.5 ? 'Moderate ROI' : 'Low ROI — consider lower discount or higher cost share';
+    document.getElementById('roiContent').innerHTML = `
+      <div class="result-grid" style="margin-bottom:0;">
+        <div class="result-card">
+          <div class="label">Incremental GMV / week</div>
+          <div class="value" style="color:var(--accent);font-size:20px;">${fmt(incGMVwk)}</div>
+          <div class="sub">${fmt(incGMVtotal)} over ${weeks} week${weeks>1?'s':''} · +${Math.round(r.upliftOrders)} extra orders/wk</div>
+        </div>
+        <div class="result-card">
+          <div class="label">GMV Return per €1 Spent</div>
+          <div class="value" style="color:${roiColor};font-size:20px;">€${roiMultiple.toFixed(1)}</div>
+          <div class="sub">${verdict}</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;">
+        <div class="breakdown-item"><span class="bi-label">Total campaign cost as % of incremental GMV</span><span class="bi-value" style="color:${costPctOfIncGMV > 60 ? 'var(--danger)' : 'var(--accent)'};">${costPctOfIncGMV.toFixed(1)}%</span></div>
+        <div class="breakdown-item"><span class="bi-label">Provider cost as % of incremental GMV</span><span class="bi-value">${provCostPctOfIncGMV.toFixed(1)}%</span></div>
+        <div class="breakdown-item"><span class="bi-label">Extra orders needed to cover total cost (at €${aov} AOV)</span><span class="bi-value">${breakEvenOrders} orders/wk</span></div>
+        <div class="breakdown-item"><span class="bi-label">Expected uplift delivers</span><span class="bi-value" style="color:${r.upliftOrders >= breakEvenOrders ? 'var(--accent)' : 'var(--danger)'};">${Math.round(r.upliftOrders)} orders/wk ${r.upliftOrders >= breakEvenOrders ? '(covers cost)' : '(below break-even)'}</span></div>
+      </div>`;
+  } else {
+    roiPanel.style.display = 'none';
+  }
 
   // Breakdown
   const cvSource = (currentSource === 'uploaded' && _selectedProvider && _selectedProvider.cv !== ORDER_VALUE_CV)
@@ -3159,6 +3327,27 @@ function calculate() {
   } else {
     pcp.style.display = 'none';
   }
+
+  // Save for campaign stack
+  _lastEstimate = {
+    label: tl,
+    provider: pid,
+    weeks,
+    shareLabel: sl,
+    totalWeek: tw,
+    provWeek: pw,
+    boltWeek: bw,
+    totalCampaign: gt,
+    provCampaign: pt,
+    boltCampaign: bt,
+    incGMVWeek: incGMVwk,
+    incGMVCampaign: incGMVtotal,
+    fmtTotal: fmt(gt),
+    fmtProv: fmt(pt),
+    fmtBolt: fmt(bt)
+  };
+  const stackBtn = document.getElementById('addToStackBtn');
+  stackBtn.disabled = campaignStack.length >= 5;
 }
 
 onTypeChange();
