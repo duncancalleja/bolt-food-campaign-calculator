@@ -3927,6 +3927,7 @@ const _PROVIDER_LOOKUP = {
 
 
 const SHEET_RAW_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vROxo-4kBIljn5pUc6Ra5Rb_bwPiG782bzwsTsWBqm98mbpYPs17KL_CJ7YXTNci2tnH9mK8-yfYA4F/pub?gid=559236247&single=true&output=csv';
+const SHEET_GVIZ_URL = 'https://docs.google.com/spreadsheets/d/17Wffy6BSp2pGr_AMy45EPG4LO3AlU5dFBJQOHjVKWWg/gviz/tq?tqx=out:csv&gid=1772723700';
 const CORS_PROXIES = [
   url => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url),
   url => 'https://corsproxy.io/?' + encodeURIComponent(url),
@@ -7477,6 +7478,36 @@ async function loadLiveData() {
   status.style.color = 'var(--accent)';
 
   let lastErr = null;
+
+  // Try Google Visualization API first (has proper CORS headers, no proxy needed)
+  try {
+    if (msg) msg.textContent = 'Fetching live data...';
+    const gvizUrl = SHEET_GVIZ_URL + '&_t=' + Date.now();
+    const gResp = await fetchWithTimeout(gvizUrl, 8000);
+    if (!gResp.ok) throw new Error('gviz HTTP ' + gResp.status);
+    const gText = await gResp.text();
+    const gRows = parseCSV(gText);
+    const gCampaigns = buildCampaigns(gRows);
+    if (gCampaigns.length === 0) throw new Error('No data from gviz');
+    _OPS_CAMPAIGNS = gCampaigns;
+    resetFilters(); initFilters(); refresh(); autoSnapshotIfSunday();
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    const dateStr = now.toLocaleDateString([], {month:'short', day:'numeric'});
+    window._lastDataUpdate = now;
+    status.textContent = 'LIVE \u00b7 ' + _OPS_CAMPAIGNS.length + ' campaigns';
+    status.title = 'Last updated: ' + dateStr + ' ' + timeStr;
+    const updEl = document.getElementById('lastUpdated');
+    updEl.textContent = 'Updated ' + dateStr + ' ' + timeStr;
+    updEl.style.display = '';
+    status.style.background = 'var(--accent-dim)';
+    status.style.color = 'var(--accent)';
+    if (overlay) overlay.style.display = 'none';
+    return;
+  } catch (gErr) {
+    console.warn('Direct gviz fetch failed, trying proxies:', gErr.message);
+  }
+
   for (const proxyFn of CORS_PROXIES) {
     try {
       const url = proxyFn(SHEET_RAW_URL) + (proxyFn(SHEET_RAW_URL).includes('?') ? '&' : '?') + '_t=' + Date.now();
