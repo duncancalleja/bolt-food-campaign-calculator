@@ -3928,6 +3928,7 @@ const _PROVIDER_LOOKUP = {
 
 const SHEET_RAW_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vROxo-4kBIljn5pUc6Ra5Rb_bwPiG782bzwsTsWBqm98mbpYPs17KL_CJ7YXTNci2tnH9mK8-yfYA4F/pub?gid=559236247&single=true&output=csv';
 const CORS_PROXIES = [
+  url => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url),
   url => 'https://corsproxy.io/?' + encodeURIComponent(url),
   url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
   url => url
