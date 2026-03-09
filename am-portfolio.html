@@ -154,7 +154,7 @@
     <span class="count" id="portfolioCount">Loading...</span>
     <div style="margin-left:auto" class="upload-bar">
       <span id="brandGroupStatus" style="font-size:11px;color:var(--text-dim)"></span>
-      <button onclick="document.getElementById('uploadBrandGroup').click()">&#x2B06; Upload Brands &amp; Groups CSV</button>
+      <button onclick="document.getElementById('uploadBrandGroup').click()">&#x2B06; Upload Merchant-Level Overview CSV</button>
       <input type="file" id="uploadBrandGroup" accept=".csv" style="display:none" onchange="handleBrandGroupUpload(this)">
       <button id="btnClearBG" class="clear" onclick="clearBrandGroupData()" style="display:none">Clear Upload</button>
     </div>
@@ -6305,6 +6305,12 @@ function findCol(headers, ...candidates) {
   return -1;
 }
 
+function parseCurrencyNum(s) {
+  if (!s) return 0;
+  const n = parseFloat(s.replace(/[^0-9.\-]/g, ''));
+  return isNaN(n) ? 0 : n;
+}
+
 function handleBrandGroupUpload(input) {
   const file = input.files[0];
   if (!file) return;
@@ -6314,29 +6320,96 @@ function handleBrandGroupUpload(input) {
     const rows = parseCSV(text);
     if (rows.length < 2) { alert('CSV has no data rows.'); input.value = ''; return; }
     const headers = rows[0].map(h => h.trim());
+
     const pidCol = findCol(headers, 'providerid', 'pid', 'provider_id', 'id', 'entityid', 'entity_id');
     const brandCol = findCol(headers, 'brand', 'brandname', 'brand_name');
     const groupCol = findCol(headers, 'group', 'groupname', 'group_name', 'restaurant_group', 'restaurantgroup');
-    if (pidCol < 0) { alert('Could not find Provider ID column.\nHeaders: ' + headers.join(', ')); input.value = ''; return; }
-    if (brandCol < 0 && groupCol < 0) { alert('Could not find Brand or Group columns.\nHeaders: ' + headers.join(', ')); input.value = ''; return; }
-    const data = getBrandGroupData();
-    let imported = 0;
-    for (let i = 1; i < rows.length; i++) {
-      const r = rows[i];
-      const pid = (r[pidCol] || '').trim().replace(/[^0-9]/g, '');
-      if (!pid) continue;
-      const brand = brandCol >= 0 ? (r[brandCol] || '').trim() : '';
-      const group = groupCol >= 0 ? (r[groupCol] || '').trim() : '';
-      if (!brand && !group) continue;
-      if (!data[pid]) data[pid] = {};
-      if (brand) data[pid].brand = brand;
-      if (group) data[pid].group = group;
-      imported++;
+    const amCol = findCol(headers, 'accountmanagername', 'account_manager_name', 'accountmanager', 'am');
+    const segCol = findCol(headers, 'businesssegmentv2', 'business_segment_v2', 'segment', 'businesssegment');
+    const gmvCol = headers.findIndex(h => /total\s*gmv\s*before\s*discount/i.test(h));
+    const courierOrdersCol = headers.findIndex(h => /courier\s*delivered\s*orders\s*count/i.test(h));
+    const merchantOrdersCol = headers.findIndex(h => /merchant\s*delivered\s*orders\s*count/i.test(h));
+    const nameCol = findCol(headers, 'providername', 'provider_name', 'name');
+
+    if (pidCol < 0) {
+      alert('Could not find Provider ID column.\nHeaders found: ' + headers.slice(0, 20).join(', '));
+      input.value = ''; return;
     }
-    saveBrandGroupData(data);
-    updateBGStatus();
-    renderPortfolio();
-    alert('Imported ' + imported + ' provider mappings.');
+
+    const isMerchantOverview = amCol >= 0 && segCol >= 0;
+    const bgData = {};
+    let imported = 0;
+
+    if (isMerchantOverview) {
+      const newProviderLookup = {};
+      const newBrandGroup = {};
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i];
+        const pid = (r[pidCol] || '').trim().replace(/[^0-9]/g, '');
+        if (!pid) continue;
+
+        const am = (r[amCol] || '').trim();
+        const seg = (r[segCol] || '').trim();
+        if (!am) continue;
+
+        const gmv = gmvCol >= 0 ? parseCurrencyNum(r[gmvCol]) : 0;
+        const courierOrders = courierOrdersCol >= 0 ? parseCurrencyNum(r[courierOrdersCol]) : 0;
+        const merchantOrders = merchantOrdersCol >= 0 ? parseCurrencyNum(r[merchantOrdersCol]) : 0;
+        const totalOrders = courierOrders + merchantOrders;
+        const aov = totalOrders > 0 ? gmv / totalOrders : 0;
+
+        if (newProviderLookup[pid]) {
+          newProviderLookup[pid][1] += totalOrders;
+          newProviderLookup[pid][2] += gmv;
+          newProviderLookup[pid][3] = newProviderLookup[pid][2] / (newProviderLookup[pid][1] || 1);
+        } else {
+          newProviderLookup[pid] = [am, totalOrders, gmv, Math.round(aov * 100) / 100, seg];
+        }
+
+        const brand = brandCol >= 0 ? (r[brandCol] || '').trim() : '';
+        const group = groupCol >= 0 ? (r[groupCol] || '').trim() : '';
+        if (brand || group) {
+          newBrandGroup[pid] = [brand, group];
+        }
+        imported++;
+      }
+
+      Object.keys(_PROVIDER_LOOKUP).forEach(k => delete _PROVIDER_LOOKUP[k]);
+      Object.assign(_PROVIDER_LOOKUP, newProviderLookup);
+
+      if (typeof _BRAND_GROUP !== 'undefined') {
+        Object.keys(_BRAND_GROUP).forEach(k => delete _BRAND_GROUP[k]);
+        Object.assign(_BRAND_GROUP, newBrandGroup);
+      }
+
+      _brandGroupMap = {};
+      localStorage.removeItem(BG_KEY);
+
+      updateBGStatus();
+      renderPortfolio();
+      alert('Full refresh: ' + imported + ' providers loaded.\nProvider data, brands, groups, segments all updated.');
+    } else {
+      if (brandCol < 0 && groupCol < 0) {
+        alert('Could not find Brand or Group columns.\nHeaders: ' + headers.slice(0, 20).join(', '));
+        input.value = ''; return;
+      }
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i];
+        const pid = (r[pidCol] || '').trim().replace(/[^0-9]/g, '');
+        if (!pid) continue;
+        const brand = brandCol >= 0 ? (r[brandCol] || '').trim() : '';
+        const group = groupCol >= 0 ? (r[groupCol] || '').trim() : '';
+        if (!brand && !group) continue;
+        bgData[pid] = {};
+        if (brand) bgData[pid].brand = brand;
+        if (group) bgData[pid].group = group;
+        imported++;
+      }
+      saveBrandGroupData(bgData);
+      updateBGStatus();
+      renderPortfolio();
+      alert('Imported ' + imported + ' brand/group mappings (replaces previous upload).');
+    }
     input.value = '';
   };
   reader.readAsText(file);
