@@ -7488,16 +7488,18 @@ async function loadLiveData() {
       const embCampaigns = buildCampaigns(embRows);
       if (embCampaigns.length > 0) {
         _OPS_CAMPAIGNS = embCampaigns;
-        resetFilters(); initFilters(); refresh(); autoSnapshotIfSunday();
+        if (overlay) overlay.style.display = 'none';
         status.textContent = 'LOADED \u00b7 ' + _OPS_CAMPAIGNS.length + ' campaigns';
         status.style.background = 'var(--accent-dim)';
         status.style.color = 'var(--accent)';
+        try { resetFilters(); initFilters(); refresh(); autoSnapshotIfSunday(); } catch(e2) { console.warn('Filter/refresh error:', e2); }
         const updEl = document.getElementById('lastUpdated');
-        updEl.textContent = 'Embedded data (Mar 6)';
-        updEl.style.display = '';
-        if (overlay) overlay.style.display = 'none';
+        if (updEl) { updEl.textContent = 'Embedded data (Mar 6)'; updEl.style.display = ''; }
       }
-    } catch (e) { console.warn('Embedded data parse failed:', e); }
+    } catch (e) {
+      console.warn('Embedded data parse failed:', e);
+      if (overlay) overlay.style.display = 'none';
+    }
   }
 
   // Then try to fetch fresh data in background
