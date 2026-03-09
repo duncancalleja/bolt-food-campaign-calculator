@@ -896,6 +896,7 @@ function clearBrandGroupData() {
 function updateBGStatus() {
   const count = Object.keys(_brandGroupMap).length;
   const el = document.getElementById('brandGroupStatus');
+  if (!el) return;
   const btn = document.getElementById('btnClearBG');
   if (count > 0) {
     el.textContent = count + ' providers mapped';
