@@ -7482,13 +7482,16 @@ async function loadLiveData() {
   const status = document.getElementById('dataStatus');
   const msg = document.getElementById('loadingMsg');
 
-  if (overlay) overlay.style.display = 'flex';
+  if (overlay) {
+    overlay.style.display = 'flex';
+    setTimeout(() => { overlay.style.display = 'none'; }, 3000);
+  }
   if (msg) msg.textContent = 'Fetching live data from Google Sheet...';
   status.textContent = 'Loading...';
   status.style.background = 'var(--accent-dim)';
   status.style.color = 'var(--accent)';
 
-  function fetchWithTimeout(url, ms = 8000) {
+  function fetchWithTimeout(url, ms = 5000) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ms);
     return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
@@ -7499,7 +7502,7 @@ async function loadLiveData() {
     try {
       const url = proxyFn(SHEET_RAW_URL) + (proxyFn(SHEET_RAW_URL).includes('?') ? '&' : '?') + '_t=' + Date.now();
       if (msg) msg.textContent = 'Fetching live data...';
-      const resp = await fetchWithTimeout(url, 8000);
+      const resp = await fetchWithTimeout(url, 5000);
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       const text = await resp.text();
       const rows = parseCSV(text);
