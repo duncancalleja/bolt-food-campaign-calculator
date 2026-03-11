@@ -382,9 +382,9 @@
 </head>
 <body>
 
-<div id="loadingOverlay" style="position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
-  <div style="width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite"></div>
-  <div style="color:var(--text-dim);font-size:14px" id="loadingMsg">Fetching live data from Google Sheet...</div>
+<div id="loadingOverlay" style="display:none">
+  <div></div>
+  <div id="loadingMsg"></div>
 </div>
 <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
 
