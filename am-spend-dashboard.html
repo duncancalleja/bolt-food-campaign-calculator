@@ -2870,12 +2870,65 @@ function getUplift(d) {
   return 0;
 }
 
+function _recentActualsAvg(pid, cat) {
+  if (typeof _DBX_ACTUALS === 'undefined') return null;
+  const pidStr = String(pid);
+  const weeks = Object.keys(_DBX_ACTUALS).sort();
+  if (weeks.length < 2) return null;
+  const recent = weeks.slice(-4);
+  const vals = [];
+  for (const wk of recent) {
+    const wd = _DBX_ACTUALS[wk];
+    if (wd && wd[pidStr] && wd[pidStr][cat]) {
+      const v = wd[pidStr][cat];
+      vals.push({ total: v[2], bolt: v[0], prov: v[1] });
+    }
+  }
+  if (vals.length < 2) return null;
+  const n = vals.length;
+  return {
+    total: vals.reduce((s, v) => s + v.total, 0) / n,
+    bolt: vals.reduce((s, v) => s + v.bolt, 0) / n,
+    prov: vals.reduce((s, v) => s + v.prov, 0) / n,
+    weeks: n
+  };
+}
+
+function _isCampaignTurnedOff(pid, cat) {
+  if (typeof _DBX_ACTUALS === 'undefined') return false;
+  const pidStr = String(pid);
+  const weeks = Object.keys(_DBX_ACTUALS).sort();
+  if (weeks.length < 2) return false;
+  const last2 = weeks.slice(-2);
+  let found = 0, nearZero = 0;
+  for (const wk of last2) {
+    const wd = _DBX_ACTUALS[wk];
+    if (wd && wd[pidStr] && wd[pidStr][cat]) {
+      found++;
+      if (wd[pidStr][cat][2] < 1) nearZero++;
+    }
+  }
+  return found > 0 && nearZero === found;
+}
+
 function _historyEstimate(pid, cat) {
   if (typeof _CAMP_HISTORY === 'undefined') return null;
   const ph = _CAMP_HISTORY[String(pid)];
   if (!ph) return null;
   const h = ph[cat];
-  if (!h || h[3] < 2) return null; // [avgWkTotal, avgWkBolt, avgWkProv, weeksActive, avgDiscPerOrder] — need >=2 weeks of data
+  if (!h || h[3] < 2) return null;
+
+  if (_isCampaignTurnedOff(pid, cat)) return null;
+
+  const recent = _recentActualsAvg(pid, cat);
+  if (recent) {
+    // Blend: 70% recent 4-week avg, 30% 12-month history
+    const total = recent.total * 0.7 + h[0] * 0.3;
+    const bolt  = recent.bolt  * 0.7 + h[1] * 0.3;
+    const prov  = recent.prov  * 0.7 + h[2] * 0.3;
+    return { total, bolt, prov, weeks: h[3], dpo: h[4], blended: true, recentWeeks: recent.weeks };
+  }
+
   return { total: h[0], bolt: h[1], prov: h[2], weeks: h[3], dpo: h[4] };
 }
 
@@ -2896,12 +2949,10 @@ function estimateCampaignCost(c) {
   const hist = _historyEstimate(pid, cat);
 
   if (hist) {
-    // Use 12-month historical avg weekly spend for this provider + campaign type
-    // Scale by current cost-share split (history has whatever split was used historically)
     const total = hist.total;
     const provShare = total * (costSharePct / 100);
     const boltShare = total * (1 - costSharePct / 100);
-    return { total, bolt: boltShare, prov: provShare, source: 'history', histWeeks: hist.weeks };
+    return { total, bolt: boltShare, prov: provShare, source: hist.blended ? 'blended' : 'history', histWeeks: hist.weeks };
   }
 
   // Fallback: formula-based estimate for providers without history
@@ -11433,7 +11484,11 @@ function _drillWeek(weekKey, snapId) {
     amRows.forEach(r => {
       const errClass = Math.abs(r.pctErr) < 20 ? 'delta-ok' : r.pctErr > 0 ? 'delta-pos' : 'delta-neg';
       const campSummary = r.campaigns.map(c => c.type + (c.discount ? ' ' + c.discount + '%' : '')).join(', ');
-      const srcBadge = (r.campaigns.some(c => c.source === 'history'))
+      const hasBl = r.campaigns.some(c => c.source === 'blended');
+      const hasHi = r.campaigns.some(c => c.source === 'history');
+      const srcBadge = hasBl
+        ? '<span style="background:#0ea5e9;color:#fff;border-radius:3px;padding:1px 4px;font-size:9px;margin-left:4px" title="Blended: 70% recent 4-week + 30% 12-month history">BLEND</span>'
+        : hasHi
         ? '<span style="background:#10b981;color:#fff;border-radius:3px;padding:1px 4px;font-size:9px;margin-left:4px" title="Based on 12-month provider history">HIST</span>'
         : '<span style="background:#6366f1;color:#fff;border-radius:3px;padding:1px 4px;font-size:9px;margin-left:4px" title="Formula-based estimate">CALC</span>';
       html += `<tr>
@@ -11637,7 +11692,11 @@ function renderComparison(actuals, snapId, weekRange) {
     amRows.forEach(r => {
       const errClass = Math.abs(r.pctErr) < 20 ? 'delta-ok' : r.pctErr > 0 ? 'delta-pos' : 'delta-neg';
       const campSummary = r.campaigns.map(c => c.type + (c.discount ? ' ' + c.discount + '%' : '')).join(', ');
-      const srcBadge = (r.campaigns.some(c => c.source === 'history'))
+      const hasBl2 = r.campaigns.some(c => c.source === 'blended');
+      const hasHi2 = r.campaigns.some(c => c.source === 'history');
+      const srcBadge = hasBl2
+        ? '<span style="background:#0ea5e9;color:#fff;border-radius:3px;padding:1px 4px;font-size:9px;margin-left:4px" title="Blended: 70% recent 4-week + 30% 12-month history">BLEND</span>'
+        : hasHi2
         ? '<span style="background:#10b981;color:#fff;border-radius:3px;padding:1px 4px;font-size:9px;margin-left:4px" title="Based on 12-month provider history">HIST</span>'
         : '<span style="background:#6366f1;color:#fff;border-radius:3px;padding:1px 4px;font-size:9px;margin-left:4px" title="Formula-based estimate">CALC</span>';
       html += `<tr>
