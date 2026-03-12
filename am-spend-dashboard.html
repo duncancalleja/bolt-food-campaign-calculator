@@ -7754,6 +7754,28 @@ function importSnapshots(input) {
   input.value = '';
 }
 
+function _averageActuals(weekKeys) {
+  const sums = {};
+  const counts = {};
+  weekKeys.forEach(wk => {
+    const wd = _DBX_ACTUALS[wk];
+    if (!wd) return;
+    for (const [pid, vals] of Object.entries(wd)) {
+      if (!sums[pid]) { sums[pid] = { bolt: 0, prov: 0, total: 0 }; counts[pid] = 0; }
+      sums[pid].bolt += vals[0];
+      sums[pid].prov += vals[1];
+      sums[pid].total += vals[2];
+      counts[pid]++;
+    }
+  });
+  const out = {};
+  for (const [pid, s] of Object.entries(sums)) {
+    const n = counts[pid];
+    out[pid] = { bolt: s.bolt / n, prov: s.prov / n, total: s.total / n };
+  }
+  return out;
+}
+
 function checkVsDbx() {
   if (typeof _DBX_ACTUALS === 'undefined' || Object.keys(_DBX_ACTUALS).length === 0) {
     alert('No Databricks actuals data embedded. Run the refresh script first.');
@@ -7766,27 +7788,24 @@ function checkVsDbx() {
   }
 
   const snap = snaps[0];
-  const weekKey = snap.date.slice(0,4) + '-W' + snap.isoWeek;
-  const weekData = _DBX_ACTUALS[weekKey];
+  const availableWeeks = Object.keys(_DBX_ACTUALS).sort();
 
-  if (!weekData) {
-    const available = Object.keys(_DBX_ACTUALS).sort().join(', ');
-    alert('No Databricks actuals for ' + weekKey + '.\nAvailable weeks: ' + available);
+  if (availableWeeks.length === 0) {
+    alert('No Databricks actuals weeks available.');
     return;
   }
 
-  const actuals = {};
-  for (const [pid, vals] of Object.entries(weekData)) {
-    actuals[pid] = { bolt: vals[0], prov: vals[1], total: vals[2] };
-  }
+  const actuals = _averageActuals(availableWeeks);
+  const weekRange = availableWeeks[0] + ' to ' + availableWeeks[availableWeeks.length - 1];
 
-  renderComparison(actuals, snap.id);
+  persistActuals(actuals);
+  renderComparison(actuals, snap.id, weekRange);
   document.getElementById('compareWrap').style.display = 'block';
 
   const spBody = document.getElementById('spBody');
   if (!spBody.classList.contains('open')) {
     spBody.classList.add('open');
-    spBody.previousElementSibling.querySelector('.sp-toggle').textContent = '▾ collapse';
+    spBody.previousElementSibling.querySelector('.sp-toggle').textContent = '\u25BE collapse';
   }
 
   document.getElementById('compareWrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -7853,9 +7872,27 @@ function persistActuals(actuals) {
 }
 
 let _lastActuals = null;
+let _lastWeekRange = '';
 
-function renderComparison(actuals, snapId) {
+function _aggregateByProvider(campaigns) {
+  const byPid = {};
+  campaigns.forEach(c => {
+    const pid = String(c.pid);
+    if (!byPid[pid]) {
+      byPid[pid] = { pid: c.pid, pname: c.pname, am: c.am, segment: c.segment,
+        campaigns: [], estTotal: 0, estBolt: 0, estProv: 0 };
+    }
+    byPid[pid].campaigns.push(c);
+    byPid[pid].estTotal += c.estTotal;
+    byPid[pid].estBolt += c.estBolt;
+    byPid[pid].estProv += c.estProv;
+  });
+  return byPid;
+}
+
+function renderComparison(actuals, snapId, weekRange) {
   _lastActuals = actuals;
+  _lastWeekRange = weekRange || '';
   const snaps = getSnapshots();
   const wrap = document.getElementById('compareWrap');
 
@@ -7868,29 +7905,28 @@ function renderComparison(actuals, snapId) {
   const snap = snapId ? snaps.find(s => s.id === snapId) : snaps[0];
   if (!snap) return;
 
+  const byPid = _aggregateByProvider(snap.campaigns);
+
   let matched = 0, totalEst = 0, totalAct = 0;
   const rows = [];
 
-  snap.campaigns.forEach(c => {
-    const act = actuals[String(c.pid)];
-    if (!act || act.total === 0) return;
+  for (const [pid, p] of Object.entries(byPid)) {
+    const act = actuals[pid];
+    if (!act || act.total === 0) continue;
     matched++;
-    const est = c.estTotal;
-    const estBolt = c.estBolt;
-    const estProv = c.estProv;
     const actual = Math.round(act.total);
     const actBolt = Math.round(act.bolt);
     const actProv = Math.round(act.prov);
-    const diff = est - actual;
+    const diff = Math.round(p.estTotal) - actual;
     const pctErr = actual > 0 ? ((diff / actual) * 100) : 0;
-    totalEst += est;
+    totalEst += Math.round(p.estTotal);
     totalAct += actual;
-    rows.push({ ...c, actual, actBolt, actProv, diff, pctErr });
-  });
+    rows.push({ ...p, actual, actBolt, actProv, diff, pctErr });
+  }
 
   if (matched === 0) {
     wrap.style.display = 'block';
-    wrap.innerHTML = '<p style="color:var(--text-dim)">No matching providers found between snapshot and actuals CSV. Make sure the CSV has a "Provider ID" column.</p>';
+    wrap.innerHTML = '<p style="color:var(--text-dim)">No matching providers found between snapshot and actuals.</p>';
     return;
   }
 
@@ -7899,18 +7935,19 @@ function renderComparison(actuals, snapId) {
   const biasPct = totalAct > 0 ? ((bias / totalAct) * 100) : 0;
 
   let html = '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">';
-  html += `<h4 style="margin:0">Accuracy: Estimated vs Actual (${matched} providers matched)</h4>`;
-  html += '<select id="snapPicker" onchange="renderComparison(_lastActuals, parseInt(this.value))" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 10px;font-size:12px">';
+  const rangeLabel = weekRange ? ' &middot; Actuals avg: ' + weekRange : '';
+  html += `<h4 style="margin:0">Accuracy: Estimated vs Actual (${matched} providers${rangeLabel})</h4>`;
+  html += '<select id="snapPicker" onchange="renderComparison(_lastActuals, parseInt(this.value), _lastWeekRange)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 10px;font-size:12px">';
   snaps.forEach(s => {
     html += `<option value="${s.id}" ${s.id === snap.id ? 'selected' : ''}>Snapshot ${s.date} (W${s.isoWeek})</option>`;
   });
   html += '</select></div>';
 
   html += '<div class="accuracy-cards">';
-  html += `<div class="accuracy-card"><div class="ac-label">Total Estimated/wk</div><div class="ac-value">€${totalEst.toLocaleString()}</div></div>`;
-  html += `<div class="accuracy-card"><div class="ac-label">Total Actual</div><div class="ac-value">€${totalAct.toLocaleString()}</div></div>`;
+  html += `<div class="accuracy-card"><div class="ac-label">Total Estimated/wk</div><div class="ac-value">\u20AC${totalEst.toLocaleString()}</div></div>`;
+  html += `<div class="accuracy-card"><div class="ac-label">Total Actual</div><div class="ac-value">\u20AC${totalAct.toLocaleString()}</div></div>`;
   const biasClass = Math.abs(biasPct) < 15 ? 'delta-ok' : biasPct > 0 ? 'delta-pos' : 'delta-neg';
-  html += `<div class="accuracy-card"><div class="ac-label">Bias (Est − Actual)</div><div class="ac-value ${biasClass}">${bias >= 0 ? '+' : ''}€${bias.toLocaleString()} (${biasPct >= 0 ? '+' : ''}${biasPct.toFixed(1)}%)</div></div>`;
+  html += `<div class="accuracy-card"><div class="ac-label">Bias (Est \u2212 Actual)</div><div class="ac-value ${biasClass}">${bias >= 0 ? '+' : ''}\u20AC${bias.toLocaleString()} (${biasPct >= 0 ? '+' : ''}${biasPct.toFixed(1)}%)</div></div>`;
   const mapeClass = mape < 20 ? 'delta-ok' : mape < 40 ? 'delta-neg' : 'delta-pos';
   html += `<div class="accuracy-card"><div class="ac-label">MAPE (avg. error)</div><div class="ac-value ${mapeClass}">${mape.toFixed(1)}%</div></div>`;
   html += '</div>';
@@ -7925,7 +7962,7 @@ function renderComparison(actuals, snapId) {
   const thStyleL = thStyle.replace('right', 'left');
   html += `<div style="max-height:500px;overflow-y:auto;margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="position:sticky;top:0;background:var(--surface);z-index:1">`;
   html += `<th style="${thStyleL}">AM / Provider</th>`;
-  html += `<th style="${thStyleL}">Type</th>`;
+  html += `<th style="${thStyleL}">Campaigns</th>`;
   html += `<th style="${thStyle}">Est. Total</th>`;
   html += `<th style="${thStyle}">Actual Total</th>`;
   html += `<th style="${thStyle}">Est. Bolt</th>`;
@@ -7942,7 +7979,7 @@ function renderComparison(actuals, snapId) {
   Object.keys(byAM).sort().forEach(am => {
     const amRows = byAM[am];
     amRows.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
-    const amEst = amRows.reduce((s, r) => s + r.estTotal, 0);
+    const amEst = amRows.reduce((s, r) => s + Math.round(r.estTotal), 0);
     const amAct = amRows.reduce((s, r) => s + r.actual, 0);
     const amDiff = amEst - amAct;
     const amPctErr = amAct > 0 ? ((amDiff / amAct) * 100) : 0;
@@ -7950,25 +7987,26 @@ function renderComparison(actuals, snapId) {
 
     html += `<tr style="background:var(--surface2);font-weight:600">
       <td style="${tdL}" colspan="2">${am} (${amRows.length} providers)</td>
-      <td style="${tdR}">€${amEst.toLocaleString()}</td>
-      <td style="${tdR}">€${amAct.toLocaleString()}</td>
+      <td style="${tdR}">\u20AC${amEst.toLocaleString()}</td>
+      <td style="${tdR}">\u20AC${amAct.toLocaleString()}</td>
       <td style="${tdR}" colspan="4"></td>
-      <td style="${tdR}" class="${amClass}">${amDiff >= 0 ? '+' : ''}€${amDiff.toLocaleString()}</td>
+      <td style="${tdR}" class="${amClass}">${amDiff >= 0 ? '+' : ''}\u20AC${amDiff.toLocaleString()}</td>
       <td style="${tdR}" class="${amClass}">${amPctErr >= 0 ? '+' : ''}${amPctErr.toFixed(1)}%</td>
     </tr>`;
 
     amRows.forEach(r => {
       const errClass = Math.abs(r.pctErr) < 20 ? 'delta-ok' : r.pctErr > 0 ? 'delta-pos' : 'delta-neg';
+      const campSummary = r.campaigns.map(c => c.type + (c.discount ? ' ' + c.discount + '%' : '')).join(', ');
       html += `<tr>
         <td style="${tdL};padding-left:20px">${r.pname} <span style="color:var(--text-dim);font-size:11px">(${r.pid})</span></td>
-        <td style="${tdL}">${r.type} ${r.discount}%</td>
-        <td style="${tdR}">€${r.estTotal.toLocaleString()}</td>
-        <td style="${tdR}">€${r.actual.toLocaleString()}</td>
-        <td style="${tdR};color:var(--bolt)">€${r.estBolt.toLocaleString()}</td>
-        <td style="${tdR};color:var(--bolt)">€${r.actBolt.toLocaleString()}</td>
-        <td style="${tdR};color:var(--provider)">€${r.estProv.toLocaleString()}</td>
-        <td style="${tdR};color:var(--provider)">€${r.actProv.toLocaleString()}</td>
-        <td style="${tdR}" class="${errClass}">${r.diff >= 0 ? '+' : ''}€${r.diff.toLocaleString()}</td>
+        <td style="${tdL};font-size:11px;color:var(--text-dim)">${campSummary}</td>
+        <td style="${tdR}">\u20AC${Math.round(r.estTotal).toLocaleString()}</td>
+        <td style="${tdR}">\u20AC${r.actual.toLocaleString()}</td>
+        <td style="${tdR};color:var(--bolt)">\u20AC${Math.round(r.estBolt).toLocaleString()}</td>
+        <td style="${tdR};color:var(--bolt)">\u20AC${r.actBolt.toLocaleString()}</td>
+        <td style="${tdR};color:var(--provider)">\u20AC${Math.round(r.estProv).toLocaleString()}</td>
+        <td style="${tdR};color:var(--provider)">\u20AC${r.actProv.toLocaleString()}</td>
+        <td style="${tdR}" class="${errClass}">${r.diff >= 0 ? '+' : ''}\u20AC${r.diff.toLocaleString()}</td>
         <td style="${tdR}" class="${errClass}">${r.pctErr >= 0 ? '+' : ''}${r.pctErr.toFixed(1)}%</td>
       </tr>`;
     });
@@ -7989,19 +8027,22 @@ function buildCalibrationData() {
   storedActuals.forEach(sa => {
     const snap = sa.snapId ? snaps.find(s => s.id === sa.snapId) : snaps[0];
     if (!snap || !snap.campaigns) return;
-    snap.campaigns.forEach(c => {
-      const act = sa.actuals[String(c.pid)];
-      if (!act || act.total === 0) return;
+    const byPid = _aggregateByProvider(snap.campaigns);
+    for (const [pid, p] of Object.entries(byPid)) {
+      const act = sa.actuals[pid];
+      if (!act || act.total === 0) continue;
+      const primaryType = p.campaigns[0].type;
+      const primaryDiscount = p.campaigns[0].discount;
       dataPoints.push({
-        pid: c.pid, pname: c.pname, type: c.type,
-        discount: c.discount, costShare: c.costShare,
-        segment: c.segment || 'SMB',
-        estTotal: c.estTotal, actTotal: Math.round(act.total),
-        estBolt: c.estBolt, actBolt: Math.round(act.bolt),
-        estProv: c.estProv, actProv: Math.round(act.prov),
+        pid: p.pid, pname: p.pname, type: primaryType,
+        discount: primaryDiscount, costShare: p.campaigns[0].costShare,
+        segment: p.segment || 'SMB',
+        estTotal: Math.round(p.estTotal), actTotal: Math.round(act.total),
+        estBolt: Math.round(p.estBolt), actBolt: Math.round(act.bolt),
+        estProv: Math.round(p.estProv), actProv: Math.round(act.prov),
         snapDate: snap.date
       });
-    });
+    }
   });
   return dataPoints.length > 0 ? dataPoints : null;
 }
