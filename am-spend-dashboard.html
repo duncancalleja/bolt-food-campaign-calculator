@@ -12247,13 +12247,13 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeProviderModal();
 });
 
-renderSnapshots();
-showActiveCalibration();
-loadBudget();
-loadSheetUrl();
-loadBrandGroupData();
-
 loadLiveData();
+
+try { renderSnapshots(); } catch(e) { console.warn('renderSnapshots:', e); }
+try { showActiveCalibration(); } catch(e) { console.warn('showActiveCalibration:', e); }
+try { loadBudget(); } catch(e) { console.warn('loadBudget:', e); }
+try { loadSheetUrl(); } catch(e) { console.warn('loadSheetUrl:', e); }
+try { loadBrandGroupData(); } catch(e) { console.warn('loadBrandGroupData:', e); }
 </script>
 </body>
 </html>
