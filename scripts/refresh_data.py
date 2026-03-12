@@ -1,29 +1,27 @@
 #!/usr/bin/env python3
 """
-Refresh Calculator & Dashboard Data from Databricks
-
-Pulls 12 months of Malta food provider + campaign data and updates:
-  - campaign-cost-calculator.html (provider data)
-  - am-spend-dashboard.html (weekly actuals for accuracy tracking)
+Refresh Calculator Data from Databricks
+Pulls 12 months of Malta food provider + campaign data and updates
+campaign-cost-calculator.html with fresh embedded data.
 
 Usage:
-    python3 scripts/refresh_data.py          # run from repo root
-    DATABRICKS_TOKEN=xxx python3 scripts/refresh_data.py  # with explicit token
+    python3 refresh_calculator.py
 
 Requires:
-    pip install databricks-sql-connector pandas
+    - databricks-sql-connector (pip install databricks-sql-connector)
+    - pandas
+    - ~/.databricks_token or DATABRICKS_TOKEN env var
 """
 
 import sys, os, re
 from datetime import date
 
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'databricks-setup'))
 from dbx import DBX
 import pandas as pd
 
-REPO_ROOT = os.path.join(os.path.dirname(__file__), '..')
-CALC_FILE = os.path.join(REPO_ROOT, 'campaign-cost-calculator.html')
-DASH_FILE = os.path.join(REPO_ROOT, 'am-spend-dashboard.html')
+CALC_FILE = os.path.join(os.path.dirname(__file__), 'campaign-cost-calculator.html')
+DASH_FILE = os.path.join(os.path.dirname(__file__), 'am-spend-dashboard.html')
 TODAY = date.today().isoformat()
 
 
@@ -66,24 +64,6 @@ def pull_campaign_spend(dbx):
         WHERE country = 'mt'
           AND order_created_date >= DATE_SUB(CURRENT_DATE(), 365)
         GROUP BY provider_id
-    """)
-
-
-def pull_weekly_actuals(dbx, weeks=8):
-    print(f"  Pulling {weeks}-week actuals for accuracy tracker...")
-    return dbx.query(f"""
-        SELECT
-            provider_id,
-            WEEKOFYEAR(order_created_date) AS iso_week,
-            YEAR(order_created_date) AS yr,
-            ROUND(SUM(CAST(bolt_spend AS DOUBLE)), 2) AS bolt,
-            ROUND(SUM(CAST(provider_spend AS DOUBLE)), 2) AS prov,
-            ROUND(SUM(CAST(discount_value AS DOUBLE)), 2) AS total
-        FROM ng_public_spark.etl_delivery_campaign_order_metrics
-        WHERE country = 'mt'
-          AND order_created_date >= DATE_SUB(CURRENT_DATE(), {weeks * 7})
-          AND order_created_date < DATE_TRUNC('WEEK', CURRENT_DATE())
-        GROUP BY provider_id, WEEKOFYEAR(order_created_date), YEAR(order_created_date)
     """)
 
 
@@ -130,27 +110,7 @@ def generate_embedded_js(providers, orders, camp_spend):
     return js, len(lines)
 
 
-def generate_actuals_js(actuals_df):
-    data = {}
-    for _, r in actuals_df.iterrows():
-        wk = f"{int(r['yr'])}-W{int(r['iso_week'])}"
-        pid = str(int(r['provider_id']))
-        if wk not in data:
-            data[wk] = {}
-        data[wk][pid] = [round(r['bolt'], 2), round(r['prov'], 2), round(r['total'], 2)]
-
-    lines = ["const _DBX_ACTUALS = {"]
-    for wk in sorted(data.keys()):
-        entries = ",".join(
-            f"'{pid}':[{v[0]},{v[1]},{v[2]}]"
-            for pid, v in sorted(data[wk].items(), key=lambda x: -x[1][2])
-        )
-        lines.append(f"'{wk}':{{{entries}}},")
-    lines.append("};")
-    return "\n".join(lines), len(data)
-
-
-def update_calculator(new_js):
+def update_html(new_js):
     with open(CALC_FILE, 'r') as f:
         html = f.read()
 
@@ -179,7 +139,65 @@ def update_calculator(new_js):
     return count
 
 
-def update_dashboard(actuals_js):
+def pull_weekly_actuals(dbx, weeks=8):
+    print(f"  Pulling {weeks}-week actuals for accuracy tracker...")
+    return dbx.query(f"""
+        SELECT
+            provider_id,
+            WEEKOFYEAR(order_created_date) AS iso_week,
+            YEAR(order_created_date) AS yr,
+            ROUND(SUM(CAST(bolt_spend AS DOUBLE)), 2) AS bolt,
+            ROUND(SUM(CAST(provider_spend AS DOUBLE)), 2) AS prov,
+            ROUND(SUM(CAST(discount_value AS DOUBLE)), 2) AS total
+        FROM ng_public_spark.etl_delivery_campaign_order_metrics
+        WHERE country = 'mt'
+          AND order_created_date >= DATE_SUB(CURRENT_DATE(), {weeks * 7})
+          AND order_created_date < DATE_TRUNC('WEEK', CURRENT_DATE())
+        GROUP BY provider_id, WEEKOFYEAR(order_created_date), YEAR(order_created_date)
+    """)
+
+
+def generate_actuals_js(actuals_df):
+    data = {}
+    for _, r in actuals_df.iterrows():
+        wk = f"{int(r['yr'])}-W{int(r['iso_week'])}"
+        pid = str(int(r['provider_id']))
+        if wk not in data:
+            data[wk] = {}
+        data[wk][pid] = [round(r['bolt'], 2), round(r['prov'], 2), round(r['total'], 2)]
+
+    lines = ["const _DBX_ACTUALS = {"]
+    for wk in sorted(data.keys()):
+        entries = ",".join(
+            f"'{pid}':[{v[0]},{v[1]},{v[2]}]"
+            for pid, v in sorted(data[wk].items(), key=lambda x: -x[1][2])
+        )
+        lines.append(f"'{wk}':{{{entries}}},")
+    lines.append("};")
+    return "\n".join(lines), len(data)
+
+
+def generate_provider_lookup_js(providers, orders):
+    merged = providers.merge(orders, on='provider_id', how='left')
+    merged['total_orders'] = merged['total_orders'].fillna(0).astype(int)
+    merged['total_gmv'] = merged['total_gmv'].fillna(0)
+    merged['avg_aov'] = merged['avg_aov'].fillna(0)
+
+    lines = []
+    for _, r in merged.iterrows():
+        pid = int(r['provider_id'])
+        am = str(r['account_manager_name']).replace("'", "\\'") if pd.notna(r['account_manager_name']) else 'Unknown'
+        ords = int(r['total_orders'])
+        gmv = round(float(r['total_gmv']), 2)
+        aov = round(float(r['avg_aov']), 2)
+        seg = str(r['business_segment_v2']) if pd.notna(r['business_segment_v2']) else 'SMB'
+        lines.append(f"'{pid}':['{am}',{ords},{gmv},{aov},'{seg}']")
+
+    js = "const _PROVIDER_LOOKUP = {\n" + ",\n".join(lines) + "\n};"
+    return js, len(lines)
+
+
+def update_dashboard(actuals_js, provider_lookup_js=None):
     with open(DASH_FILE, 'r') as f:
         html = f.read()
 
@@ -192,13 +210,22 @@ def update_dashboard(actuals_js):
     if count == 0:
         raise RuntimeError("Could not find _DBX_ACTUALS block in dashboard HTML")
 
+    if provider_lookup_js:
+        lookup_pat = r'const _PROVIDER_LOOKUP = \{.*?\};'
+        new_html, lcount = re.subn(lookup_pat, provider_lookup_js, new_html, flags=re.DOTALL)
+        if lcount == 0:
+            raise RuntimeError("Could not find _PROVIDER_LOOKUP block in dashboard HTML")
+
+        weeks_pat = r'const WEEKS_IN_DATA = \d+;'
+        new_html = re.sub(weeks_pat, 'const WEEKS_IN_DATA = 52;', new_html)
+
     with open(DASH_FILE, 'w') as f:
         f.write(new_html)
     return count
 
 
 def main():
-    print(f"=== Refreshing data from Databricks ({TODAY}) ===")
+    print(f"Refreshing data from Databricks ({TODAY})...")
     print("Connecting to Databricks...")
 
     with DBX() as dbx:
@@ -211,15 +238,20 @@ def main():
 
     new_js, n_providers = generate_embedded_js(providers, orders, camp_spend)
     print(f"  Generated calculator data for {n_providers} providers")
-    count = update_calculator(new_js)
+    count = update_html(new_js)
     print(f"  Updated calculator ({count} replacement)")
 
     actuals_js, n_weeks = generate_actuals_js(weekly_actuals)
     print(f"  Generated actuals for {n_weeks} weeks")
-    count2 = update_dashboard(actuals_js)
+
+    lookup_js, n_lookup = generate_provider_lookup_js(providers, orders)
+    print(f"  Generated provider lookup for {n_lookup} providers (12-month data, WEEKS_IN_DATA=52)")
+
+    count2 = update_dashboard(actuals_js, lookup_js)
     print(f"  Updated AM dashboard ({count2} replacement)")
 
-    print(f"\n=== Done! Calculator: {n_providers} providers. Dashboard: {n_weeks} weeks of actuals. ===")
+    print(f"\nDone! Calculator: {n_providers} providers. Dashboard: {n_lookup} providers + {n_weeks} weeks of actuals.")
+    print(f"Next step: push to GitHub")
 
 
 if __name__ == '__main__':
