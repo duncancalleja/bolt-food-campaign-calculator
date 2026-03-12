@@ -3303,7 +3303,7 @@ function refresh() {
   document.getElementById('sTotalCost').textContent = fmt(totalCost);
   document.getElementById('sTotalCostSub').textContent = fmt(totalCost * 4) + ' estimated per month';
   document.getElementById('sBoltCost').textContent = fmt(totalBolt);
-  document.getElementById('sBoltPct').textContent = totalCost > 0 ? pct(totalBolt / totalCost) + ' of total' : '0%';
+  document.getElementById('sBoltPct').textContent = fmt(totalBolt * 4) + ' / month · ' + (totalCost > 0 ? pct(totalBolt / totalCost) : '0%') + ' of total';
   document.getElementById('sProvCost').textContent = fmt(totalProv);
   document.getElementById('sProvPct').textContent = totalCost > 0 ? pct(totalProv / totalCost) + ' of total' : '0%';
 
@@ -3319,8 +3319,8 @@ function refresh() {
     budgetFill.style.width = Math.min(usedPct * 100, 100) + '%';
     budgetFill.className = 'budget-bar-fill ' + (usedPct > 1 ? 'over' : usedPct > 0.85 ? 'warn' : 'ok');
     budgetSub.innerHTML = remaining >= 0
-      ? `<span style="color:var(--accent)">${fmt(remaining)} remaining</span> of ${fmt(budget)} budget (${(usedPct*100).toFixed(0)}% used)`
-      : `<span style="color:#e74c3c">${fmt(Math.abs(remaining))} over budget</span> of ${fmt(budget)} (${(usedPct*100).toFixed(0)}% used)`;
+      ? `<span style="color:var(--accent)">${fmt(remaining)} remaining</span> · Bolt spend ${fmt(totalBolt)} of ${fmt(budget)} weekly budget (${(usedPct*100).toFixed(0)}% used)`
+      : `<span style="color:#e74c3c">${fmt(Math.abs(remaining))} over budget</span> · Bolt spend ${fmt(totalBolt)} of ${fmt(budget)} (${(usedPct*100).toFixed(0)}% used)`;
   } else {
     budgetBar.style.display = 'none';
     budgetSub.style.display = 'none';
