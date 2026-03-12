@@ -604,6 +604,10 @@ let _lastEstimate = null;
 const REDEMPTION = { menu_discount: 0.92, item_discount: 0.35, free_delivery: 0.92 };
 const UPLIFT = { 5:0, 10:0, 15:0, 20:0, 25:0, 30:0, 35:0, 40:0, 45:0, 50:0 };
 const UPLIFT_FD = 0;
+// ROI-only uplift: used purely for the ROI panel's incremental GMV calculation,
+// not for cost estimation (where uplift is 0 since it's baked into historical orders).
+const ROI_UPLIFT = { 5:0.02, 10:0.05, 15:0.08, 20:0.12, 25:0.16, 30:0.20, 35:0.24, 40:0.28, 45:0.32, 50:0.36 };
+const ROI_UPLIFT_FD = 0.06;
 const AVG_DELIVERY_FEE = 1.75;
 const FULL_DELIVERY_FEE = 2.20;
 const BOLT_PLUS_PENETRATION = 0.25;
@@ -3173,8 +3177,26 @@ function est(orders, aov, disc, type, share, fdCap, mov, cv, itemShare, opts) {
   }
 
   const uo = baseOrders * (1 + uplift);
-  const incrementalOrders = uo - baseOrders;
+
+  // ROI uplift: separate from cost-estimation uplift (which is 0)
+  let roiUplift;
+  if (type === 'bolt_plus_fd') roiUplift = BOLT_PLUS_UPLIFT;
+  else if (type === 'free_delivery') roiUplift = ROI_UPLIFT_FD;
+  else {
+    const keys = Object.keys(ROI_UPLIFT).map(Number).sort((a,b)=>a-b);
+    roiUplift = ROI_UPLIFT[keys[keys.length-1]] || 0;
+    for (let i = 0; i < keys.length; i++) {
+      if (disc <= keys[i]) { roiUplift = ROI_UPLIFT[keys[i]]; break; }
+      if (i < keys.length - 1 && disc < keys[i+1]) {
+        const ratio = (disc - keys[i]) / (keys[i+1] - keys[i]);
+        roiUplift = ROI_UPLIFT[keys[i]] + ratio * (ROI_UPLIFT[keys[i+1]] - ROI_UPLIFT[keys[i]]);
+        break;
+      }
+    }
+  }
+  const incrementalOrders = baseOrders * roiUplift;
   const incrementalGMV = incrementalOrders * aov;
+
   return {
     gmv, uplift, upliftedOrders: uo, upliftOrders: incrementalOrders,
     baseOrders, redemption, dpo, total, provShare: total * share, boltShare: total * (1 - share), share,
