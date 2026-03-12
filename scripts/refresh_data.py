@@ -140,12 +140,18 @@ def update_html(new_js):
 
 
 def pull_weekly_actuals(dbx, weeks=8):
-    print(f"  Pulling {weeks}-week actuals for accuracy tracker...")
+    print(f"  Pulling {weeks}-week actuals by campaign type...")
     return dbx.query(f"""
         SELECT
             provider_id,
             WEEKOFYEAR(order_created_date) AS iso_week,
             YEAR(order_created_date) AS yr,
+            CASE
+                WHEN LOWER(name) LIKE '%free%delivery%' THEN 'fd'
+                WHEN LOWER(name) LIKE '%menu discount%' THEN 'md'
+                WHEN LOWER(name) LIKE '%item%' AND spend_objective LIKE '%portal%' THEN 'id'
+                ELSE 'ot'
+            END AS camp_cat,
             ROUND(SUM(CAST(bolt_spend AS DOUBLE)), 2) AS bolt,
             ROUND(SUM(CAST(provider_spend AS DOUBLE)), 2) AS prov,
             ROUND(SUM(CAST(discount_value AS DOUBLE)), 2) AS total
@@ -153,7 +159,13 @@ def pull_weekly_actuals(dbx, weeks=8):
         WHERE country = 'mt'
           AND order_created_date >= DATE_SUB(CURRENT_DATE(), {weeks * 7})
           AND order_created_date < DATE_TRUNC('WEEK', CURRENT_DATE())
-        GROUP BY provider_id, WEEKOFYEAR(order_created_date), YEAR(order_created_date)
+        GROUP BY provider_id, WEEKOFYEAR(order_created_date), YEAR(order_created_date),
+                 CASE
+                    WHEN LOWER(name) LIKE '%free%delivery%' THEN 'fd'
+                    WHEN LOWER(name) LIKE '%menu discount%' THEN 'md'
+                    WHEN LOWER(name) LIKE '%item%' AND spend_objective LIKE '%portal%' THEN 'id'
+                    ELSE 'ot'
+                 END
     """)
 
 
@@ -162,17 +174,27 @@ def generate_actuals_js(actuals_df):
     for _, r in actuals_df.iterrows():
         wk = f"{int(r['yr'])}-W{int(r['iso_week'])}"
         pid = str(int(r['provider_id']))
+        cat = r['camp_cat']
         if wk not in data:
             data[wk] = {}
-        data[wk][pid] = [round(r['bolt'], 2), round(r['prov'], 2), round(r['total'], 2)]
+        if pid not in data[wk]:
+            data[wk][pid] = {}
+        if cat not in data[wk][pid]:
+            data[wk][pid][cat] = [0.0, 0.0, 0.0]
+        data[wk][pid][cat][0] += round(r['bolt'], 2)
+        data[wk][pid][cat][1] += round(r['prov'], 2)
+        data[wk][pid][cat][2] += round(r['total'], 2)
 
     lines = ["const _DBX_ACTUALS = {"]
     for wk in sorted(data.keys()):
-        entries = ",".join(
-            f"'{pid}':[{v[0]},{v[1]},{v[2]}]"
-            for pid, v in sorted(data[wk].items(), key=lambda x: -x[1][2])
-        )
-        lines.append(f"'{wk}':{{{entries}}},")
+        pid_entries = []
+        for pid in sorted(data[wk].keys(), key=lambda p: -sum(v[2] for v in data[wk][p].values())):
+            cats = ",".join(
+                f"{cat}:[{round(v[0],2)},{round(v[1],2)},{round(v[2],2)}]"
+                for cat, v in sorted(data[wk][pid].items())
+            )
+            pid_entries.append(f"'{pid}':{{{cats}}}")
+        lines.append(f"'{wk}':{{{','.join(pid_entries)}}},")
     lines.append("};")
     return "\n".join(lines), len(data)
 
