@@ -7776,6 +7776,36 @@ function _averageActuals(weekKeys) {
   return out;
 }
 
+function _weekActualsMap(weekKey) {
+  const wd = _DBX_ACTUALS[weekKey];
+  if (!wd) return null;
+  const out = {};
+  for (const [pid, vals] of Object.entries(wd)) {
+    out[pid] = { bolt: vals[0], prov: vals[1], total: vals[2] };
+  }
+  return out;
+}
+
+function _scoreWeek(byPid, actuals) {
+  let matched = 0, totalEst = 0, totalAct = 0, sumAbsPct = 0;
+  for (const [pid, p] of Object.entries(byPid)) {
+    const act = actuals[pid];
+    if (!act || act.total === 0) continue;
+    matched++;
+    const est = Math.round(p.estTotal);
+    const actual = Math.round(act.total);
+    totalEst += est;
+    totalAct += actual;
+    const pctErr = actual > 0 ? Math.abs((est - actual) / actual) * 100 : 0;
+    sumAbsPct += pctErr;
+  }
+  if (matched === 0) return null;
+  const mape = sumAbsPct / matched;
+  const bias = totalEst - totalAct;
+  const biasPct = totalAct > 0 ? ((bias / totalAct) * 100) : 0;
+  return { matched, totalEst, totalAct, mape, bias, biasPct };
+}
+
 function checkVsDbx() {
   if (typeof _DBX_ACTUALS === 'undefined' || Object.keys(_DBX_ACTUALS).length === 0) {
     alert('No Databricks actuals data embedded. Run the refresh script first.');
@@ -7789,26 +7819,169 @@ function checkVsDbx() {
 
   const snap = snaps[0];
   const availableWeeks = Object.keys(_DBX_ACTUALS).sort();
-
   if (availableWeeks.length === 0) {
     alert('No Databricks actuals weeks available.');
     return;
   }
 
-  const actuals = _averageActuals(availableWeeks);
-  const weekRange = availableWeeks[0] + ' to ' + availableWeeks[availableWeeks.length - 1];
+  const byPid = _aggregateByProvider(snap.campaigns);
 
-  persistActuals(actuals);
-  renderComparison(actuals, snap.id, weekRange);
+  const weekScores = [];
+  availableWeeks.forEach(wk => {
+    const actuals = _weekActualsMap(wk);
+    if (!actuals) return;
+    const score = _scoreWeek(byPid, actuals);
+    if (score) weekScores.push({ week: wk, ...score });
+  });
+
+  const avgActuals = _averageActuals(availableWeeks);
+  persistActuals(avgActuals);
+
+  renderWeeklyTrend(weekScores, snap, byPid, availableWeeks);
+
   document.getElementById('compareWrap').style.display = 'block';
-
   const spBody = document.getElementById('spBody');
   if (!spBody.classList.contains('open')) {
     spBody.classList.add('open');
     spBody.previousElementSibling.querySelector('.sp-toggle').textContent = '\u25BE collapse';
   }
-
   document.getElementById('compareWrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderWeeklyTrend(weekScores, snap, byPid, availableWeeks) {
+  const wrap = document.getElementById('compareWrap');
+  if (weekScores.length === 0) {
+    wrap.innerHTML = '<p style="color:var(--text-dim)">No matching data between snapshot and actuals.</p>';
+    return;
+  }
+
+  const avgMape = weekScores.reduce((s, w) => s + w.mape, 0) / weekScores.length;
+  const avgBiasPct = weekScores.reduce((s, w) => s + w.biasPct, 0) / weekScores.length;
+  const latestMape = weekScores[weekScores.length - 1].mape;
+  const earliestMape = weekScores[0].mape;
+  const trendDir = latestMape < earliestMape ? 'improving' : latestMape > earliestMape ? 'worsening' : 'stable';
+  const trendArrow = trendDir === 'improving' ? '\u2193' : trendDir === 'worsening' ? '\u2191' : '\u2192';
+  const trendClass = trendDir === 'improving' ? 'delta-ok' : trendDir === 'worsening' ? 'delta-pos' : '';
+
+  let html = `<h4 style="margin:0 0 12px">Accuracy by Week (Snapshot ${snap.date}, W${snap.isoWeek})</h4>`;
+
+  html += '<div class="accuracy-cards">';
+  const avgMapeClass = avgMape < 20 ? 'delta-ok' : avgMape < 40 ? 'delta-neg' : 'delta-pos';
+  html += `<div class="accuracy-card"><div class="ac-label">Avg MAPE</div><div class="ac-value ${avgMapeClass}">${avgMape.toFixed(1)}%</div></div>`;
+  html += `<div class="accuracy-card"><div class="ac-label">Avg Bias</div><div class="ac-value">${avgBiasPct >= 0 ? '+' : ''}${avgBiasPct.toFixed(1)}%</div></div>`;
+  html += `<div class="accuracy-card"><div class="ac-label">Trend</div><div class="ac-value ${trendClass}">${trendArrow} ${trendDir} (${earliestMape.toFixed(0)}% \u2192 ${latestMape.toFixed(0)}%)</div></div>`;
+  html += `<div class="accuracy-card"><div class="ac-label">Weeks Compared</div><div class="ac-value">${weekScores.length}</div></div>`;
+  html += '</div>';
+
+  const thS = 'padding:6px 10px;border-bottom:2px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:var(--text-dim)';
+  html += '<div style="margin-top:12px"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr>';
+  html += `<th style="${thS};text-align:left">Week</th>`;
+  html += `<th style="${thS};text-align:right">Providers</th>`;
+  html += `<th style="${thS};text-align:right">Est. Total</th>`;
+  html += `<th style="${thS};text-align:right">Actual Total</th>`;
+  html += `<th style="${thS};text-align:right">Bias</th>`;
+  html += `<th style="${thS};text-align:right">MAPE</th>`;
+  html += `<th style="${thS};text-align:center"></th>`;
+  html += '</tr></thead><tbody>';
+
+  const tdS = 'padding:6px 10px;border-bottom:1px solid var(--border)';
+  weekScores.forEach(w => {
+    const biasClass = Math.abs(w.biasPct) < 15 ? 'delta-ok' : w.biasPct > 0 ? 'delta-pos' : 'delta-neg';
+    const mapeClass = w.mape < 20 ? 'delta-ok' : w.mape < 40 ? 'delta-neg' : 'delta-pos';
+    html += `<tr>
+      <td style="${tdS};font-weight:600">${w.week}</td>
+      <td style="${tdS};text-align:right">${w.matched}</td>
+      <td style="${tdS};text-align:right">\u20AC${w.totalEst.toLocaleString()}</td>
+      <td style="${tdS};text-align:right">\u20AC${w.totalAct.toLocaleString()}</td>
+      <td style="${tdS};text-align:right" class="${biasClass}">${w.biasPct >= 0 ? '+' : ''}${w.biasPct.toFixed(1)}%</td>
+      <td style="${tdS};text-align:right" class="${mapeClass}">${w.mape.toFixed(1)}%</td>
+      <td style="${tdS};text-align:center"><button onclick="_drillWeek('${w.week}',${snap.id})" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px;font-weight:600">\u25B8 Detail</button></td>
+    </tr>`;
+  });
+
+  html += '</tbody></table></div>';
+
+  html += '<div id="weekDrillWrap" style="margin-top:16px"></div>';
+
+  wrap.innerHTML = html;
+}
+
+function _drillWeek(weekKey, snapId) {
+  const actuals = _weekActualsMap(weekKey);
+  if (!actuals) return;
+  _lastActuals = actuals;
+  _lastWeekRange = weekKey;
+  const snaps = getSnapshots();
+  const snap = snaps.find(s => s.id === snapId);
+  if (!snap) return;
+
+  const byPid = _aggregateByProvider(snap.campaigns);
+  let matched = 0, totalEst = 0, totalAct = 0;
+  const rows = [];
+
+  for (const [pid, p] of Object.entries(byPid)) {
+    const act = actuals[pid];
+    if (!act || act.total === 0) continue;
+    matched++;
+    const actual = Math.round(act.total);
+    const actBolt = Math.round(act.bolt);
+    const actProv = Math.round(act.prov);
+    const diff = Math.round(p.estTotal) - actual;
+    const pctErr = actual > 0 ? ((diff / actual) * 100) : 0;
+    totalEst += Math.round(p.estTotal);
+    totalAct += actual;
+    rows.push({ ...p, actual, actBolt, actProv, diff, pctErr });
+  }
+
+  if (matched === 0) { document.getElementById('weekDrillWrap').innerHTML = '<p style="color:var(--text-dim)">No matching providers for ' + weekKey + '.</p>'; return; }
+
+  const byAM = {};
+  rows.forEach(r => { if (!byAM[r.am]) byAM[r.am] = []; byAM[r.am].push(r); });
+
+  const thStyle = 'text-align:right;padding:6px 8px;border-bottom:2px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:var(--text-dim)';
+  const thStyleL = thStyle.replace('right', 'left');
+  let html = `<h4 style="margin:0 0 8px">${weekKey} \u2014 ${matched} providers matched</h4>`;
+  html += `<div style="max-height:500px;overflow-y:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="position:sticky;top:0;background:var(--surface);z-index:1">`;
+  html += `<th style="${thStyleL}">AM / Provider</th><th style="${thStyleL}">Campaigns</th>`;
+  html += `<th style="${thStyle}">Est. Total</th><th style="${thStyle}">Actual Total</th>`;
+  html += `<th style="${thStyle}">Diff</th><th style="${thStyle}">Error</th>`;
+  html += '</tr></thead><tbody>';
+
+  const tdR = 'text-align:right;padding:5px 8px;border-bottom:1px solid var(--border)';
+  const tdL = tdR.replace('right', 'left');
+
+  Object.keys(byAM).sort().forEach(am => {
+    const amRows = byAM[am];
+    amRows.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+    const amEst = amRows.reduce((s, r) => s + Math.round(r.estTotal), 0);
+    const amAct = amRows.reduce((s, r) => s + r.actual, 0);
+    const amDiff = amEst - amAct;
+    const amPctErr = amAct > 0 ? ((amDiff / amAct) * 100) : 0;
+    const amClass = Math.abs(amPctErr) < 15 ? 'delta-ok' : amPctErr > 0 ? 'delta-pos' : 'delta-neg';
+
+    html += `<tr style="background:var(--surface2);font-weight:600">
+      <td style="${tdL}" colspan="2">${am} (${amRows.length})</td>
+      <td style="${tdR}">\u20AC${amEst.toLocaleString()}</td><td style="${tdR}">\u20AC${amAct.toLocaleString()}</td>
+      <td style="${tdR}" class="${amClass}">${amDiff >= 0 ? '+' : ''}\u20AC${amDiff.toLocaleString()}</td>
+      <td style="${tdR}" class="${amClass}">${amPctErr >= 0 ? '+' : ''}${amPctErr.toFixed(1)}%</td>
+    </tr>`;
+
+    amRows.forEach(r => {
+      const errClass = Math.abs(r.pctErr) < 20 ? 'delta-ok' : r.pctErr > 0 ? 'delta-pos' : 'delta-neg';
+      const campSummary = r.campaigns.map(c => c.type + (c.discount ? ' ' + c.discount + '%' : '')).join(', ');
+      html += `<tr>
+        <td style="${tdL};padding-left:20px">${r.pname} <span style="color:var(--text-dim);font-size:11px">(${r.pid})</span></td>
+        <td style="${tdL};font-size:11px;color:var(--text-dim)">${campSummary}</td>
+        <td style="${tdR}">\u20AC${Math.round(r.estTotal).toLocaleString()}</td><td style="${tdR}">\u20AC${r.actual.toLocaleString()}</td>
+        <td style="${tdR}" class="${errClass}">${r.diff >= 0 ? '+' : ''}\u20AC${r.diff.toLocaleString()}</td>
+        <td style="${tdR}" class="${errClass}">${r.pctErr >= 0 ? '+' : ''}${r.pctErr.toFixed(1)}%</td>
+      </tr>`;
+    });
+  });
+
+  html += '</tbody></table></div>';
+  document.getElementById('weekDrillWrap').innerHTML = html;
+  document.getElementById('weekDrillWrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function uploadActuals(input) {
