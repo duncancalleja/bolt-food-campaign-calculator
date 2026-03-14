@@ -894,9 +894,8 @@
   <button id="refresh-data-btn" style="margin-top:12px;background:none;border:1px solid var(--border);color:var(--muted);font-size:13px;padding:8px 20px;border-radius:8px;cursor:pointer;transition:color .15s, border-color .15s;"
     onmouseover="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'"
     onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">
-    ↻ Refresh data from Databricks
+    ↻ Refresh
   </button>
-  <div id="refresh-status" style="margin-top:8px;font-size:12px;color:var(--muted);display:none;"></div>
 </div>
 
 <!-- LOADING SCREEN -->
@@ -1607,28 +1606,15 @@ document.getElementById('cy-file-input-header').addEventListener('change', e => 
   if (f) loadCyFile(f);
 });
 
-// Refresh data button
-document.getElementById('refresh-data-btn').addEventListener('click', async () => {
+// Refresh button — just reloads the country list
+document.getElementById('refresh-data-btn').addEventListener('click', () => {
   const btn = document.getElementById('refresh-data-btn');
-  const status = document.getElementById('refresh-status');
+  btn.textContent = '↻ …';
   btn.disabled = true;
-  btn.textContent = '↻ Connecting…';
-  status.style.display = 'block';
-  status.textContent = '';
-
-  try {
-    const resp = await fetch('api/refresh', { method: 'GET' });
-    if (!resp.ok) throw new Error('not local');
-    btn.textContent = '↻ Refresh started';
-    status.style.color = 'var(--green)';
-    status.textContent = 'Databricks query running in background. Reload this page in 1-2 minutes to see updated data.';
-    setTimeout(() => { btn.disabled = false; btn.textContent = '↻ Refresh data from Databricks'; }, 10000);
-  } catch (e) {
-    btn.textContent = '↻ Refresh data from Databricks';
+  loadCountries().then(() => {
+    btn.textContent = '↻ Refresh';
     btn.disabled = false;
-    status.style.color = 'var(--yellow)';
-    status.innerHTML = 'To refresh data, run locally:<br><code style="background:var(--surface2);padding:4px 10px;border-radius:4px;font-size:12px;display:inline-block;margin-top:6px;">python3 serve_investment_dashboard.py</code><br><span style="font-size:11px;margin-top:4px;display:inline-block;">Then open <b>localhost:8788</b> and use the refresh button there. Push updated CSVs to GitHub afterwards.</span>';
-  }
+  });
 });
 
 // Load countries on page load
