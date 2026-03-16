@@ -16,12 +16,13 @@ Requires:
 import sys, os, re
 from datetime import date
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'databricks-setup'))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(__file__))
 from dbx import DBX
 import pandas as pd
 
-CALC_FILE = os.path.join(os.path.dirname(__file__), 'campaign-cost-calculator.html')
-DASH_FILE = os.path.join(os.path.dirname(__file__), 'am-spend-dashboard.html')
+CALC_FILE = os.path.join(ROOT, 'campaign-cost-calculator.html')
+DASH_FILE = os.path.join(ROOT, 'am-spend-dashboard.html')
 TODAY = date.today().isoformat()
 
 
