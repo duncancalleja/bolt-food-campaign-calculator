@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 """
-Refresh Calculator Data from Databricks
-Pulls 12 months of Malta food provider + campaign data and updates
-campaign-cost-calculator.html with fresh embedded data.
+Refresh Calculator & Dashboard Data from Databricks — All Countries
+Pulls 12 months of Bolt Food provider + campaign data per country and generates
+per-country JSON data files in data/ folder.
 
 Usage:
-    python3 refresh_calculator.py
+    python3 scripts/refresh_data.py              # all countries
+    python3 scripts/refresh_data.py mt ro cz      # specific countries only
 
 Requires:
-    - databricks-sql-connector (pip install databricks-sql-connector)
+    - databricks-sql-connector
     - pandas
     - ~/.databricks_token or DATABRICKS_TOKEN env var
 """
 
-import sys, os, re
+import sys, os, re, json
 from datetime import date
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -21,127 +22,68 @@ sys.path.insert(0, os.path.dirname(__file__))
 from dbx import DBX
 import pandas as pd
 
-CALC_FILE = os.path.join(ROOT, 'campaign-cost-calculator.html')
-DASH_FILE = os.path.join(ROOT, 'am-spend-dashboard.html')
+DATA_DIR = os.path.join(ROOT, 'data')
 TODAY = date.today().isoformat()
 
+COUNTRY_NAMES = {
+    'az': 'Azerbaijan', 'bg': 'Bulgaria', 'cy': 'Cyprus', 'cz': 'Czechia',
+    'ee': 'Estonia', 'ge': 'Georgia', 'gh': 'Ghana', 'ke': 'Kenya',
+    'lt': 'Lithuania', 'lv': 'Latvia', 'mt': 'Malta', 'pl': 'Poland',
+    'pt': 'Portugal', 'ro': 'Romania', 'sk': 'Slovakia', 'ua': 'Ukraine',
+}
 
-def pull_providers(dbx):
-    print("  Pulling provider dimension...")
-    return dbx.query("""
+
+def discover_countries(dbx):
+    """Find all countries with active food campaign data in last 90 days."""
+    df = dbx.query("""
+        SELECT DISTINCT country
+        FROM ng_public_spark.etl_delivery_campaign_order_metrics
+        WHERE order_created_date >= DATE_SUB(CURRENT_DATE(), 90)
+        ORDER BY country
+    """)
+    return sorted(df['country'].tolist())
+
+
+def pull_providers(dbx, cc):
+    return dbx.query(f"""
         SELECT provider_id, provider_name, vendor_id, vendor_name, brand_name, group_name,
                account_manager_name, business_segment_v2, business_subsegment_v2,
                provider_status, provider_rating, is_bolt_plus_enrolled_provider,
                regular_commission_rate
         FROM ng_delivery_spark.dim_provider_v2
-        WHERE country_code = 'mt' AND delivery_vertical = 'food'
+        WHERE country_code = '{cc}' AND delivery_vertical = 'food'
     """)
 
 
-def pull_order_stats(dbx):
-    print("  Pulling 12-month order stats...")
-    return dbx.query("""
+def pull_order_stats(dbx, cc):
+    return dbx.query(f"""
         SELECT
             provider_id,
             COUNT(order_id) AS total_orders,
             ROUND(SUM(gmv_eur), 2) AS total_gmv,
             ROUND(AVG(gmv_eur), 2) AS avg_aov
         FROM ng_public_spark.etl_delivery_order_monetary_metrics
-        WHERE country = 'mt'
+        WHERE country = '{cc}'
           AND order_created_date >= DATE_FORMAT(DATE_SUB(CURRENT_DATE(), 365), 'yyyy-MM-dd')
           AND is_bolt_market = false
         GROUP BY provider_id
     """)
 
 
-def pull_campaign_spend(dbx):
-    print("  Pulling 12-month campaign spend...")
-    return dbx.query("""
+def pull_campaign_spend(dbx, cc):
+    return dbx.query(f"""
         SELECT
             provider_id,
             ROUND(SUM(CAST(bolt_spend AS DOUBLE)), 2) AS bolt_spend,
             ROUND(SUM(CAST(provider_spend AS DOUBLE)), 2) AS provider_spend
         FROM ng_public_spark.etl_delivery_campaign_order_metrics
-        WHERE country = 'mt'
+        WHERE country = '{cc}'
           AND order_created_date >= DATE_SUB(CURRENT_DATE(), 365)
         GROUP BY provider_id
     """)
 
 
-def seg_code(s):
-    if pd.isna(s):
-        return 'S'
-    s = str(s).lower()
-    if 'enterprise' in s:
-        return 'E'
-    if 'mid' in s:
-        return 'M'
-    return 'S'
-
-
-def generate_embedded_js(providers, orders, camp_spend):
-    merged = providers.merge(orders, on='provider_id', how='left')
-    merged = merged.merge(camp_spend, on='provider_id', how='left')
-    merged['bolt_spend'] = merged['bolt_spend'].fillna(0)
-    merged['provider_spend'] = merged['provider_spend'].fillna(0)
-    merged['total_orders'] = merged['total_orders'].fillna(0).astype(int)
-    merged['total_gmv'] = merged['total_gmv'].fillna(0)
-    merged['avg_aov'] = merged['avg_aov'].fillna(0)
-    merged['seg_code'] = merged['business_segment_v2'].apply(seg_code)
-
-    active = merged[(merged['total_orders'] > 0) | (merged['provider_status'] == 'active')].copy()
-    active = active.sort_values('total_gmv', ascending=False)
-
-    lines = []
-    for _, r in active.iterrows():
-        name = str(r['provider_name']).replace("'", "\\'")
-        pid = int(r['provider_id'])
-        seg = r['seg_code']
-        ords = int(r['total_orders'])
-        gmv = round(float(r['total_gmv']), 2)
-        aov = round(float(r['avg_aov']), 2)
-        comm = round(float(r['regular_commission_rate']), 1) if pd.notna(r['regular_commission_rate']) else 0
-        cb = int(round(float(r['bolt_spend']), 0))
-        cm = int(round(float(r['provider_spend']), 0))
-        vid = int(r['vendor_id']) if pd.notna(r['vendor_id']) else pid
-        vname = str(r['vendor_name']).replace("'", "\\'") if pd.notna(r['vendor_name']) else ''
-        lines.append(f"['{name}',{pid},'{seg}',{ords},{gmv},{aov},{comm},{cb},{cm},{vid},'{vname}']")
-
-    js = "const _EMBEDDED_DATA = [\n" + ",\n".join(lines) + "\n];\nconst _EMBEDDED_WEEKS = 52;"
-    return js, len(lines)
-
-
-def update_html(new_js):
-    with open(CALC_FILE, 'r') as f:
-        html = f.read()
-
-    pattern = r'// ─── Embedded Provider Data.*?\n(const _EMBEDDED_DATA = \[.*?\];)\nconst _EMBEDDED_WEEKS = \d+;'
-    replacement = f'// ─── Embedded Provider Data (from Databricks — 12 months, refreshed {TODAY}) ───\n' + new_js
-    new_html, count = re.subn(pattern, replacement, html, flags=re.DOTALL)
-
-    if count == 0:
-        pattern2 = r'const _EMBEDDED_DATA = \[.*?\];\nconst _EMBEDDED_WEEKS = \d+;'
-        new_html, count = re.subn(pattern2, new_js, html, flags=re.DOTALL)
-
-    if count == 0:
-        raise RuntimeError("Could not find _EMBEDDED_DATA block in calculator HTML")
-
-    date_pattern = r"const _DATA_REFRESHED = '[^']*';"
-    if re.search(date_pattern, new_html):
-        new_html = re.sub(date_pattern, f"const _DATA_REFRESHED = '{TODAY}';", new_html)
-    else:
-        new_html = new_html.replace(
-            'const _EMBEDDED_WEEKS = 52;',
-            f"const _EMBEDDED_WEEKS = 52;\nconst _DATA_REFRESHED = '{TODAY}';"
-        )
-
-    with open(CALC_FILE, 'w') as f:
-        f.write(new_html)
-    return count
-
-
-def pull_weekly_actuals(dbx, weeks=8):
-    print(f"  Pulling {weeks}-week actuals by campaign type...")
+def pull_weekly_actuals(dbx, cc, weeks=8):
     return dbx.query(f"""
         SELECT
             provider_id,
@@ -157,7 +99,7 @@ def pull_weekly_actuals(dbx, weeks=8):
             ROUND(SUM(CAST(provider_spend AS DOUBLE)), 2) AS prov,
             ROUND(SUM(CAST(discount_value AS DOUBLE)), 2) AS total
         FROM ng_public_spark.etl_delivery_campaign_order_metrics
-        WHERE country = 'mt'
+        WHERE country = '{cc}'
           AND order_created_date >= DATE_SUB(CURRENT_DATE(), {weeks * 7})
           AND order_created_date < DATE_TRUNC('WEEK', CURRENT_DATE())
         GROUP BY provider_id, WEEKOFYEAR(order_created_date), YEAR(order_created_date),
@@ -170,111 +112,289 @@ def pull_weekly_actuals(dbx, weeks=8):
     """)
 
 
-def generate_actuals_js(actuals_df):
+def pull_camp_history(dbx, cc):
+    return dbx.query(f"""
+        SELECT
+            provider_id,
+            name,
+            CASE
+                WHEN LOWER(name) LIKE '%free%delivery%' THEN 'fd'
+                WHEN LOWER(name) LIKE '%menu discount%' THEN 'md'
+                WHEN LOWER(name) LIKE '%item%' AND spend_objective LIKE '%portal%' THEN 'id'
+                ELSE 'ot'
+            END AS camp_cat,
+            spend_objective,
+            WEEKOFYEAR(order_created_date) AS iso_week,
+            YEAR(order_created_date) AS yr,
+            ROUND(SUM(CAST(bolt_spend AS DOUBLE)), 2) AS bolt,
+            ROUND(SUM(CAST(provider_spend AS DOUBLE)), 2) AS prov,
+            ROUND(SUM(CAST(discount_value AS DOUBLE)), 2) AS total,
+            COUNT(*) AS order_count,
+            ROUND(AVG(CAST(discount_value AS DOUBLE)), 2) AS avg_disc
+        FROM ng_public_spark.etl_delivery_campaign_order_metrics
+        WHERE country = '{cc}'
+          AND order_created_date >= DATE_SUB(CURRENT_DATE(), 365)
+        GROUP BY provider_id, name, spend_objective,
+                 WEEKOFYEAR(order_created_date), YEAR(order_created_date),
+                 CASE
+                    WHEN LOWER(name) LIKE '%free%delivery%' THEN 'fd'
+                    WHEN LOWER(name) LIKE '%menu discount%' THEN 'md'
+                    WHEN LOWER(name) LIKE '%item%' AND spend_objective LIKE '%portal%' THEN 'id'
+                    ELSE 'ot'
+                 END
+    """)
+
+
+def seg_code(s):
+    if pd.isna(s):
+        return 'S'
+    s = str(s).lower()
+    if 'enterprise' in s:
+        return 'E'
+    if 'mid' in s:
+        return 'M'
+    return 'S'
+
+
+def _extract_disc_pct(name, cat):
+    """Extract discount percentage from campaign name."""
+    if cat == 'fd':
+        return 0
+    name_l = str(name).lower()
+    patterns = [
+        r'(\d+)\s*%\s*%?\s*(?:menu discount|item discount)',
+        r'(?:md|menu discount|item discount)\s+(\d+)\s*%',
+        r'(\d+)\s*pc[_-](?:menu|item)',
+        r'(\d+)\s*%\s+(?:on|off|discount)',
+        r'(?:discount|disc)\s*(\d+)\s*%',
+    ]
+    for pat in patterns:
+        m = re.search(pat, name_l)
+        if m:
+            return int(m.group(1))
+    return 0
+
+
+def _extract_cost_share(name):
+    m = re.search(r'(\d+)\s*%\s*on\s*provider', str(name).lower())
+    return int(m.group(1)) if m else -1
+
+
+def build_calc_data(providers, orders, camp_spend):
+    merged = providers.merge(orders, on='provider_id', how='left')
+    merged = merged.merge(camp_spend, on='provider_id', how='left')
+    for col in ['bolt_spend', 'provider_spend', 'total_gmv', 'avg_aov']:
+        merged[col] = merged[col].fillna(0)
+    merged['total_orders'] = merged['total_orders'].fillna(0).astype(int)
+    merged['seg_code'] = merged['business_segment_v2'].apply(seg_code)
+
+    active = merged[(merged['total_orders'] > 0) | (merged['provider_status'] == 'active')].copy()
+    active = active.sort_values('total_gmv', ascending=False)
+
+    rows = []
+    for _, r in active.iterrows():
+        name = str(r['provider_name']) if pd.notna(r['provider_name']) else ''
+        vid = int(r['vendor_id']) if pd.notna(r['vendor_id']) else int(r['provider_id'])
+        vname = str(r['vendor_name']) if pd.notna(r['vendor_name']) else ''
+        comm = round(float(r['regular_commission_rate']), 1) if pd.notna(r['regular_commission_rate']) else 0
+        rows.append([
+            name, int(r['provider_id']), r['seg_code'],
+            int(r['total_orders']), round(float(r['total_gmv']), 2),
+            round(float(r['avg_aov']), 2), comm,
+            int(round(float(r['bolt_spend']), 0)),
+            int(round(float(r['provider_spend']), 0)),
+            vid, vname
+        ])
+    return rows
+
+
+def build_actuals_data(actuals_df):
     data = {}
     for _, r in actuals_df.iterrows():
         wk = f"{int(r['yr'])}-W{int(r['iso_week'])}"
         pid = str(int(r['provider_id']))
         cat = r['camp_cat']
-        if wk not in data:
-            data[wk] = {}
-        if pid not in data[wk]:
-            data[wk][pid] = {}
-        if cat not in data[wk][pid]:
-            data[wk][pid][cat] = [0.0, 0.0, 0.0]
+        data.setdefault(wk, {}).setdefault(pid, {}).setdefault(cat, [0.0, 0.0, 0.0])
         data[wk][pid][cat][0] += round(r['bolt'], 2)
         data[wk][pid][cat][1] += round(r['prov'], 2)
         data[wk][pid][cat][2] += round(r['total'], 2)
-
-    lines = ["const _DBX_ACTUALS = {"]
-    for wk in sorted(data.keys()):
-        pid_entries = []
-        for pid in sorted(data[wk].keys(), key=lambda p: -sum(v[2] for v in data[wk][p].values())):
-            cats = ",".join(
-                f"{cat}:[{round(v[0],2)},{round(v[1],2)},{round(v[2],2)}]"
-                for cat, v in sorted(data[wk][pid].items())
-            )
-            pid_entries.append(f"'{pid}':{{{cats}}}")
-        lines.append(f"'{wk}':{{{','.join(pid_entries)}}},")
-    lines.append("};")
-    return "\n".join(lines), len(data)
+    return data
 
 
-def generate_provider_lookup_js(providers, orders):
+def build_provider_lookup(providers, orders):
     merged = providers.merge(orders, on='provider_id', how='left')
     merged['total_orders'] = merged['total_orders'].fillna(0).astype(int)
     merged['total_gmv'] = merged['total_gmv'].fillna(0)
     merged['avg_aov'] = merged['avg_aov'].fillna(0)
 
-    lines = []
+    lookup = {}
     for _, r in merged.iterrows():
-        pid = int(r['provider_id'])
-        am = str(r['account_manager_name']).replace("'", "\\'") if pd.notna(r['account_manager_name']) else 'Unknown'
-        ords = int(r['total_orders'])
-        gmv = round(float(r['total_gmv']), 2)
-        aov = round(float(r['avg_aov']), 2)
+        pid = str(int(r['provider_id']))
+        am = str(r['account_manager_name']) if pd.notna(r['account_manager_name']) else 'Unknown'
         seg = str(r['business_segment_v2']) if pd.notna(r['business_segment_v2']) else 'SMB'
-        lines.append(f"'{pid}':['{am}',{ords},{gmv},{aov},'{seg}']")
+        lookup[pid] = [am, int(r['total_orders']), round(float(r['total_gmv']), 2),
+                       round(float(r['avg_aov']), 2), seg]
+    return lookup
 
-    js = "const _PROVIDER_LOOKUP = {\n" + ",\n".join(lines) + "\n};"
-    return js, len(lines)
+
+def build_camp_history(hist_df):
+    history = {}
+    for _, r in hist_df.iterrows():
+        pid = str(int(r['provider_id']))
+        cat = r['camp_cat']
+        disc_pct = _extract_disc_pct(r['name'], cat)
+        cost_share = _extract_cost_share(r['name'])
+        wk = f"{int(r['yr'])}-W{int(r['iso_week'])}"
+
+        tier_key = f"{cat}_{disc_pct}" if disc_pct > 0 else cat
+
+        history.setdefault(pid, {}).setdefault(tier_key, {}).setdefault(wk, {
+            'bolt': 0, 'prov': 0, 'total': 0, 'orders': 0, 'disc_sum': 0, 'disc_pct': disc_pct, 'cost_share': cost_share
+        })
+        entry = history[pid][tier_key][wk]
+        entry['bolt'] += float(r['bolt'])
+        entry['prov'] += float(r['prov'])
+        entry['total'] += float(r['total'])
+        entry['orders'] += int(r['order_count'])
+        entry['disc_sum'] += float(r['avg_disc']) * int(r['order_count'])
+
+    result = {}
+    for pid, cats in history.items():
+        result[pid] = {}
+        for tier_key, weeks in cats.items():
+            n_weeks = len(weeks)
+            total_bolt = sum(w['bolt'] for w in weeks.values())
+            total_prov = sum(w['prov'] for w in weeks.values())
+            total_total = sum(w['total'] for w in weeks.values())
+            total_orders = sum(w['orders'] for w in weeks.values())
+            total_disc_sum = sum(w['disc_sum'] for w in weeks.values())
+            disc_pct = next(iter(weeks.values()))['disc_pct']
+            cost_share = next(iter(weeks.values()))['cost_share']
+
+            avg_disc_per_order = round(total_disc_sum / total_orders, 2) if total_orders else 0
+            result[pid][tier_key] = [
+                round(total_total / n_weeks, 2),
+                round(total_bolt / n_weeks, 2),
+                round(total_prov / n_weeks, 2),
+                n_weeks,
+                avg_disc_per_order,
+                disc_pct,
+                cost_share
+            ]
+    return result
 
 
-def update_dashboard(actuals_js, provider_lookup_js=None):
-    with open(DASH_FILE, 'r') as f:
-        html = f.read()
+def process_country(dbx, cc):
+    """Pull all data for one country and write JSON files."""
+    print(f"\n{'='*50}")
+    print(f"  Processing {cc.upper()} ({COUNTRY_NAMES.get(cc, cc)})")
+    print(f"{'='*50}")
 
-    date_pat = r"const _DBX_ACTUALS_REFRESHED = '[^']*';"
-    html = re.sub(date_pat, f"const _DBX_ACTUALS_REFRESHED = '{TODAY}';", html)
+    print(f"  [{cc}] Pulling providers...")
+    providers = pull_providers(dbx, cc)
+    print(f"  [{cc}] Pulling order stats (12 months)...")
+    orders = pull_order_stats(dbx, cc)
+    print(f"  [{cc}] Pulling campaign spend (12 months)...")
+    camp_spend = pull_campaign_spend(dbx, cc)
+    print(f"  [{cc}] Pulling weekly actuals (8 weeks)...")
+    weekly_actuals = pull_weekly_actuals(dbx, cc)
+    print(f"  [{cc}] Pulling campaign history (12 months)...")
+    camp_hist_raw = pull_camp_history(dbx, cc)
 
-    actuals_pat = r'const _DBX_ACTUALS = \{.*?\};'
-    new_html, count = re.subn(actuals_pat, actuals_js, html, flags=re.DOTALL)
+    print(f"  [{cc}] Providers: {len(providers)}, Orders: {len(orders)}, Campaigns: {len(camp_spend)}")
 
-    if count == 0:
-        raise RuntimeError("Could not find _DBX_ACTUALS block in dashboard HTML")
+    calc_data = build_calc_data(providers, orders, camp_spend)
+    actuals_data = build_actuals_data(weekly_actuals)
+    lookup_data = build_provider_lookup(providers, orders)
+    camp_history = build_camp_history(camp_hist_raw)
 
-    if provider_lookup_js:
-        lookup_pat = r'const _PROVIDER_LOOKUP = \{.*?\};'
-        new_html, lcount = re.subn(lookup_pat, provider_lookup_js, new_html, flags=re.DOTALL)
-        if lcount == 0:
-            raise RuntimeError("Could not find _PROVIDER_LOOKUP block in dashboard HTML")
+    calc_json = {
+        'country': cc,
+        'country_name': COUNTRY_NAMES.get(cc, cc),
+        'refreshed': TODAY,
+        'weeks': 52,
+        'embedded_data': calc_data,
+    }
 
-        weeks_pat = r'const WEEKS_IN_DATA = \d+;'
-        new_html = re.sub(weeks_pat, 'const WEEKS_IN_DATA = 52;', new_html)
+    dash_json = {
+        'country': cc,
+        'country_name': COUNTRY_NAMES.get(cc, cc),
+        'refreshed': TODAY,
+        'weeks_in_data': 52,
+        'camp_history': camp_history,
+        'dbx_actuals': actuals_data,
+        'provider_lookup': lookup_data,
+    }
 
-    with open(DASH_FILE, 'w') as f:
-        f.write(new_html)
-    return count
+    os.makedirs(DATA_DIR, exist_ok=True)
+    calc_path = os.path.join(DATA_DIR, f'{cc}-calc.json')
+    dash_path = os.path.join(DATA_DIR, f'{cc}-dash.json')
+
+    with open(calc_path, 'w') as f:
+        json.dump(calc_json, f, separators=(',', ':'))
+    with open(dash_path, 'w') as f:
+        json.dump(dash_json, f, separators=(',', ':'))
+
+    calc_size = os.path.getsize(calc_path) / 1024
+    dash_size = os.path.getsize(dash_path) / 1024
+
+    print(f"  [{cc}] Calculator: {len(calc_data)} providers ({calc_size:.0f} KB)")
+    print(f"  [{cc}] Dashboard: {len(lookup_data)} providers, {len(actuals_data)} weeks actuals ({dash_size:.0f} KB)")
+    return len(calc_data), len(lookup_data)
+
+
+def generate_country_index():
+    """Write data/countries.json with list of available countries."""
+    index = {}
+    for cc, name in sorted(COUNTRY_NAMES.items()):
+        calc_path = os.path.join(DATA_DIR, f'{cc}-calc.json')
+        dash_path = os.path.join(DATA_DIR, f'{cc}-dash.json')
+        if os.path.exists(calc_path) and os.path.exists(dash_path):
+            index[cc] = {'name': name, 'refreshed': TODAY}
+
+    with open(os.path.join(DATA_DIR, 'countries.json'), 'w') as f:
+        json.dump(index, f, indent=2)
+    return index
 
 
 def main():
-    print(f"Refreshing data from Databricks ({TODAY})...")
+    requested = [c.lower() for c in sys.argv[1:]] if len(sys.argv) > 1 else None
+
+    print(f"Bolt Food Campaign Data Refresh — {TODAY}")
     print("Connecting to Databricks...")
 
-    with DBX() as dbx:
-        providers = pull_providers(dbx)
-        orders = pull_order_stats(dbx)
-        camp_spend = pull_campaign_spend(dbx)
-        weekly_actuals = pull_weekly_actuals(dbx)
+    if requested:
+        countries = requested
+        print(f"  Refreshing specific countries: {', '.join(c.upper() for c in countries)}")
+    else:
+        with DBX() as dbx:
+            countries = discover_countries(dbx)
+        print(f"  Discovered {len(countries)} countries: {', '.join(c.upper() for c in countries)}")
 
-    print(f"  Providers: {len(providers)}, With orders: {len(orders)}, Campaign records: {len(camp_spend)}")
+    summary = {}
+    for cc in countries:
+        try:
+            with DBX() as dbx:
+                n_calc, n_dash = process_country(dbx, cc)
+            summary[cc] = (n_calc, n_dash)
+        except Exception as e:
+            print(f"  [{cc}] ERROR: {e}")
+            import traceback; traceback.print_exc()
+            summary[cc] = None
 
-    new_js, n_providers = generate_embedded_js(providers, orders, camp_spend)
-    print(f"  Generated calculator data for {n_providers} providers")
-    count = update_html(new_js)
-    print(f"  Updated calculator ({count} replacement)")
+    index = generate_country_index()
 
-    actuals_js, n_weeks = generate_actuals_js(weekly_actuals)
-    print(f"  Generated actuals for {n_weeks} weeks")
-
-    lookup_js, n_lookup = generate_provider_lookup_js(providers, orders)
-    print(f"  Generated provider lookup for {n_lookup} providers (12-month data, WEEKS_IN_DATA=52)")
-
-    count2 = update_dashboard(actuals_js, lookup_js)
-    print(f"  Updated AM dashboard ({count2} replacement)")
-
-    print(f"\nDone! Calculator: {n_providers} providers. Dashboard: {n_lookup} providers + {n_weeks} weeks of actuals.")
-    print(f"Next step: push to GitHub")
+    print(f"\n{'='*50}")
+    print(f"  SUMMARY")
+    print(f"{'='*50}")
+    for cc, result in summary.items():
+        if result:
+            print(f"  {cc.upper():>4}: {result[0]:>5} calc providers, {result[1]:>5} dash providers")
+        else:
+            print(f"  {cc.upper():>4}: FAILED")
+    print(f"\n  {len(index)} countries in index")
+    print(f"  Data files in: {DATA_DIR}")
+    print(f"  Next step: git add data/ && git commit && git push")
 
 
 if __name__ == '__main__':

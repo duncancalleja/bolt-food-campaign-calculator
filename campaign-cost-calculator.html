@@ -284,9 +284,11 @@
 
 <div class="header">
   <h1>Provider Campaign Cost Calculator</h1>
-  <span class="badge">Bolt Food MT</span>
-  <span id="dataRefreshBadge" style="margin-left:12px;font-size:11px;color:#8b949e;background:rgba(255,255,255,0.06);padding:3px 10px;border-radius:8px;display:inline-flex;align-items:center;gap:6px">
-    <span style="width:7px;height:7px;border-radius:50%;background:#3fb950;display:inline-block"></span>
+  <select id="countrySelect" onchange="_switchCountry(this.value)" style="background:var(--bolt-dim);color:var(--bolt);border:1px solid rgba(99,102,241,.3);border-radius:6px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;text-transform:uppercase;letter-spacing:.5px;outline:none">
+    <option value="">Loading...</option>
+  </select>
+  <span id="dataRefreshBadge" style="font-size:11px;color:#8b949e;background:rgba(255,255,255,0.06);padding:3px 10px;border-radius:8px;display:inline-flex;align-items:center;gap:6px">
+    <span id="dataStatusDot" style="width:7px;height:7px;border-radius:50%;background:#3fb950;display:inline-block"></span>
     Data: <span id="refreshDate">—</span> · 12 months
   </span>
   <a href="am-spend-dashboard.html" style="margin-left:auto;font-size:13px;color:var(--accent);text-decoration:none;display:flex;align-items:center;gap:4px">AM Spend Dashboard →</a>
@@ -620,8 +622,61 @@ const SEGMENT_BENCHMARKS = {
   stores:     { avgOrders: 220, avgAOV: 46.0 }
 };
 
-// ─── Embedded Provider Data (from Databricks — 12 months, refreshed 2026-03-16) ───
-const _EMBEDDED_DATA = [
+// ─── Country switching & data loading ───
+let _CURRENT_COUNTRY = localStorage.getItem('bolt_country') || 'mt';
+const _COUNTRIES = {};
+
+async function _loadCountryIndex() {
+  try {
+    const resp = await fetch('data/countries.json');
+    const index = await resp.json();
+    Object.assign(_COUNTRIES, index);
+    const sel = document.getElementById('countrySelect');
+    sel.innerHTML = '';
+    for (const [cc, info] of Object.entries(index).sort((a,b) => a[1].name.localeCompare(b[1].name))) {
+      const opt = document.createElement('option');
+      opt.value = cc;
+      opt.textContent = `${info.name} (${cc.toUpperCase()})`;
+      sel.appendChild(opt);
+    }
+    sel.value = _CURRENT_COUNTRY in index ? _CURRENT_COUNTRY : Object.keys(index)[0] || 'mt';
+    _CURRENT_COUNTRY = sel.value;
+  } catch(e) {
+    console.warn('Could not load country index:', e);
+    const sel = document.getElementById('countrySelect');
+    sel.innerHTML = '<option value="mt">Malta (MT)</option>';
+  }
+}
+
+async function _switchCountry(cc) {
+  _CURRENT_COUNTRY = cc;
+  localStorage.setItem('bolt_country', cc);
+  const dot = document.getElementById('dataStatusDot');
+  const status = document.getElementById('uploadStatus');
+  if (dot) dot.style.background = '#f59e0b';
+  if (status) status.textContent = `Loading ${cc.toUpperCase()} data...`;
+
+  try {
+    const resp = await fetch(`data/${cc}-calc.json`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    _EMBEDDED_DATA = data.embedded_data || [];
+    _EMBEDDED_WEEKS = data.weeks || 52;
+    _DATA_REFRESHED = data.refreshed || '';
+    loadEmbeddedData();
+    if (dot) dot.style.background = '#3fb950';
+    const rd = document.getElementById('refreshDate');
+    if (rd) rd.textContent = _DATA_REFRESHED;
+    if (status) status.textContent = `${_EMBEDDED_DATA.length} providers loaded (${cc.toUpperCase()})`;
+  } catch(e) {
+    console.warn(`Failed to load ${cc} data:`, e);
+    if (dot) dot.style.background = '#ef4444';
+    if (status) status.textContent = `Failed to load ${cc.toUpperCase()} data`;
+  }
+}
+
+// ─── Embedded Provider Data (MT default — from Databricks, 12 months) ───
+let _EMBEDDED_DATA = [
 ['McDonald\'s ® Luqa',1546,'E',87900,2663135.62,30.3,11.4,79484,10073,990,'McDonalds'],
 ['McDonald\'s ® Birkirkara',1545,'E',89804,2411809.64,26.86,11.4,60727,8489,990,'McDonalds'],
 ['McDonald\'s ® Gozo',1663,'E',54575,1553631.24,28.47,11.4,25779,6073,1177,'McDonalds Gozo '],
@@ -2440,8 +2495,8 @@ const _EMBEDDED_DATA = [
 ['Il-Pirata Burger & Pasta Valletta',88868,'S',0,0.0,0.0,20.0,0,0,53262,'IL PIRATA BURGER & PASTA'],
 ['Grab A Crab',190185,'S',0,0.0,0.0,23.5,0,0,141769,'GRAB A CRAB Valletta']
 ];
-const _EMBEDDED_WEEKS = 52;
-const _DATA_REFRESHED = '2026-03-16';
+let _EMBEDDED_WEEKS = 52;
+let _DATA_REFRESHED = '2026-03-16';
 
 let vendorDB = {};
 let _viewLevel = 'provider'; // 'provider' | 'vendor'
@@ -3524,6 +3579,14 @@ if (typeof _DATA_REFRESHED !== 'undefined' && _DATA_REFRESHED) {
   const el = document.getElementById('refreshDate');
   if (el) el.textContent = _DATA_REFRESHED;
 }
+
+// Load country index and switch to saved country
+_loadCountryIndex().then(() => {
+  const saved = localStorage.getItem('bolt_country');
+  if (saved && saved !== 'mt' && saved in _COUNTRIES) {
+    _switchCountry(saved);
+  }
+});
 </script>
 </body>
 </html>
