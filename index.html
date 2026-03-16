@@ -362,6 +362,7 @@
         <div class="level-toggle">
           <button id="btnProvider" class="level-btn active" onclick="setViewLevel('provider')">Provider (store)</button>
           <button id="btnVendor" class="level-btn" onclick="setViewLevel('vendor')">Vendor (brand)</button>
+          <button id="btnGroup" class="level-btn" onclick="setViewLevel('group')">Group</button>
         </div>
 
         <div class="field" style="margin-top:8px;">
@@ -2499,7 +2500,8 @@ let _EMBEDDED_WEEKS = 52;
 let _DATA_REFRESHED = '2026-03-16';
 
 let vendorDB = {};
-let _viewLevel = 'provider'; // 'provider' | 'vendor'
+let groupDB = {};
+let _viewLevel = 'provider'; // 'provider' | 'vendor' | 'group'
 
 function loadEmbeddedData() {
   if (!_EMBEDDED_DATA || _EMBEDDED_DATA.length === 0) return;
@@ -2507,20 +2509,21 @@ function loadEmbeddedData() {
   const nWeeks = _EMBEDDED_WEEKS;
   providerDB = {};
   vendorDB = {};
+  groupDB = {};
 
   _EMBEDDED_DATA.forEach(d => {
-    // [name, pid, seg, orders, gmv, aov, comm, campBolt, campMerch, vid, vname]
+    // [name, pid, seg, orders, gmv, aov, comm, campBolt, campMerch, vid, vname, gname]
     const name = d[0], id = d[1], seg = segMap[d[2]] || 'smb';
     const totalOrders = d[3], totalGmv = d[4], aov = d[5];
     const comm = d[6], campBolt = d[7], campMerch = d[8];
-    const vid = d[9], vname = d[10] || '';
+    const vid = d[9], vname = d[10] || '', gname = d[11] || '';
 
     const avgOrders = Math.round(totalOrders / nWeeks);
     const avgGmv = Math.round(totalGmv / nWeeks);
 
     providerDB[name] = {
       weeks: [], segment: seg, campaigns: [], name: name,
-      providerId: id, vendorId: vid, vendorName: vname,
+      providerId: id, vendorId: vid, vendorName: vname, groupName: gname,
       avgOrders: avgOrders, avgGMV: avgGmv, avgAOV: aov,
       commission: comm, campBolt: campBolt, campMerch: campMerch,
       totalOrders: totalOrders, totalGMV: totalGmv
@@ -2531,7 +2534,7 @@ function loadEmbeddedData() {
       const vkey = vname;
       if (!vendorDB[vkey]) {
         vendorDB[vkey] = {
-          name: vname, vendorId: vid, segment: seg,
+          name: vname, vendorId: vid, segment: seg, groupName: gname,
           providers: [], totalOrders: 0, totalGMV: 0,
           campBolt: 0, campMerch: 0, commissions: [], weeks: []
         };
@@ -2542,6 +2545,25 @@ function loadEmbeddedData() {
       vendorDB[vkey].campBolt += campBolt;
       vendorDB[vkey].campMerch += campMerch;
       vendorDB[vkey].commissions.push(comm);
+    }
+
+    // Build group DB by aggregating vendors
+    if (gname) {
+      if (!groupDB[gname]) {
+        groupDB[gname] = {
+          name: gname, segment: seg,
+          vendors: [], providers: [], totalOrders: 0, totalGMV: 0,
+          campBolt: 0, campMerch: 0, commissions: [], weeks: []
+        };
+      }
+      const g = groupDB[gname];
+      if (vname && !g.vendors.includes(vname)) g.vendors.push(vname);
+      g.providers.push(name);
+      g.totalOrders += totalOrders;
+      g.totalGMV += totalGmv;
+      g.campBolt += campBolt;
+      g.campMerch += campMerch;
+      g.commissions.push(comm);
     }
   });
 
@@ -2555,7 +2577,6 @@ function loadEmbeddedData() {
     v.commission = v.commissions.length > 0
       ? Math.round(v.commissions.reduce((a,b)=>a+b,0) / v.commissions.length * 10) / 10
       : 0;
-    // Use segment of highest-GMV provider
     let topSeg = 'smb';
     let topGmv = 0;
     v.providers.forEach(pn => {
@@ -2565,12 +2586,32 @@ function loadEmbeddedData() {
     v.segment = topSeg;
   });
 
+  // Finalize group averages
+  Object.keys(groupDB).forEach(gk => {
+    const g = groupDB[gk];
+    g.avgOrders = Math.round(g.totalOrders / nw);
+    g.avgGMV = Math.round(g.totalGMV / nw);
+    g.avgAOV = g.totalOrders > 0 ? Math.round(g.totalGMV / g.totalOrders * 100) / 100 : 0;
+    g.commission = g.commissions.length > 0
+      ? Math.round(g.commissions.reduce((a,b)=>a+b,0) / g.commissions.length * 10) / 10
+      : 0;
+    let topSeg = 'smb';
+    let topGmv = 0;
+    g.providers.forEach(pn => {
+      const p = providerDB[pn];
+      if (p && p.totalGMV > topGmv) { topGmv = p.totalGMV; topSeg = p.segment; }
+    });
+    g.segment = topSeg;
+  });
+
   dataLoaded = true;
   const pCount = Object.keys(providerDB).length;
   const vCount = Object.keys(vendorDB).length;
+  const gCount = Object.keys(groupDB).length;
   document.getElementById('uploadStatus').innerHTML =
     '<span class="count">' + pCount + '</span> providers / ' +
-    '<span class="count">' + vCount + '</span> vendors pre-loaded.';
+    '<span class="count">' + vCount + '</span> vendors / ' +
+    '<span class="count">' + gCount + '</span> groups pre-loaded.';
   switchToUploadedMode();
 }
 
@@ -2872,13 +2913,17 @@ function setViewLevel(level) {
   _viewLevel = level;
   document.getElementById('btnProvider').classList.toggle('active', level === 'provider');
   document.getElementById('btnVendor').classList.toggle('active', level === 'vendor');
-  document.getElementById('pickerLabel').textContent = level === 'vendor' ? 'Select Vendor' : 'Select Provider';
+  document.getElementById('btnGroup').classList.toggle('active', level === 'group');
+  const labels = { provider: 'Select Provider', vendor: 'Select Vendor', group: 'Select Group' };
+  document.getElementById('pickerLabel').textContent = labels[level] || 'Select Provider';
   document.getElementById('providerSearch').value = '';
   populatePicker();
 }
 
 function getActiveDB() {
-  return _viewLevel === 'vendor' ? vendorDB : providerDB;
+  if (_viewLevel === 'group') return groupDB;
+  if (_viewLevel === 'vendor') return vendorDB;
+  return providerDB;
 }
 
 function populatePicker() {
@@ -2944,9 +2989,13 @@ function onProviderPick() {
   document.getElementById('statCampMerch').textContent = p.campMerch ? '€' + p.campMerch.toLocaleString() : '--';
   document.getElementById('providerStats').style.display = 'block';
 
-  // Vendor locations list
+  // Vendor / group locations list
   const locEl = document.getElementById('vendorLocations');
-  if (_viewLevel === 'vendor' && p.providers && p.providers.length > 1) {
+  if (_viewLevel === 'group' && p.vendors && p.vendors.length > 0) {
+    locEl.style.display = 'block';
+    locEl.innerHTML = '<strong>' + p.vendors.length + ' vendor(s), ' + p.providers.length + ' store(s):</strong> ' +
+      p.vendors.map(n => n.replace(/</g,'&lt;')).join(', ');
+  } else if (_viewLevel === 'vendor' && p.providers && p.providers.length > 1) {
     locEl.style.display = 'block';
     locEl.innerHTML = '<strong>' + p.providers.length + ' locations:</strong> ' +
       p.providers.map(n => n.replace(/</g,'&lt;')).join(', ');
@@ -3580,12 +3629,9 @@ if (typeof _DATA_REFRESHED !== 'undefined' && _DATA_REFRESHED) {
   if (el) el.textContent = _DATA_REFRESHED;
 }
 
-// Load country index and switch to saved country
+// Load country index and load selected country's data (including group names)
 _loadCountryIndex().then(() => {
-  const saved = localStorage.getItem('bolt_country');
-  if (saved && saved !== 'mt' && saved in _COUNTRIES) {
-    _switchCountry(saved);
-  }
+  _switchCountry(_CURRENT_COUNTRY);
 });
 </script>
 </body>

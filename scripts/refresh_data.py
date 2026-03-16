@@ -196,6 +196,7 @@ def build_calc_data(providers, orders, camp_spend):
         name = str(r['provider_name']) if pd.notna(r['provider_name']) else ''
         vid = int(r['vendor_id']) if pd.notna(r['vendor_id']) else int(r['provider_id'])
         vname = str(r['vendor_name']) if pd.notna(r['vendor_name']) else ''
+        gname = str(r['group_name']) if pd.notna(r['group_name']) else ''
         comm = round(float(r['regular_commission_rate']), 1) if pd.notna(r['regular_commission_rate']) else 0
         rows.append([
             name, int(r['provider_id']), r['seg_code'],
@@ -203,7 +204,7 @@ def build_calc_data(providers, orders, camp_spend):
             round(float(r['avg_aov']), 2), comm,
             int(round(float(r['bolt_spend']), 0)),
             int(round(float(r['provider_spend']), 0)),
-            vid, vname
+            vid, vname, gname
         ])
     return rows
 
