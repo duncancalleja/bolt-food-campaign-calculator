@@ -3152,15 +3152,17 @@ function renderStack() {
     const sumProv = campaignStack.reduce((s, c) => s + c.provCampaign, 0);
     const sumBolt = campaignStack.reduce((s, c) => s + c.boltCampaign, 0);
     const sumIncGMV = campaignStack.reduce((s, c) => s + c.incGMVCampaign, 0);
-    const combinedROI = sumIncGMV > 0 ? sumIncGMV / sumTotal : 0;
+    const sumLifetimeGMV = sumIncGMV * 4;
+    const combinedRevPerEuro = sumTotal > 0 ? sumLifetimeGMV / sumTotal : 0;
+    const combinedNetPct = sumTotal > 0 ? Math.round((sumLifetimeGMV - sumTotal) / sumTotal * 100) : 0;
 
     totalsEl.style.display = 'block';
     totalsEl.innerHTML = `
       <div class="st-row"><span class="st-label">Combined Total Cost</span><span class="st-value total-val">${fmt(sumTotal)}</span></div>
       <div class="st-row"><span class="st-label">Combined Provider Cost</span><span class="st-value provider-val">${fmt(sumProv)}</span></div>
       <div class="st-row"><span class="st-label">Combined Bolt Cost</span><span class="st-value bolt-val">${fmt(sumBolt)}</span></div>
-      <div class="st-row"><span class="st-label">Combined Incremental GMV</span><span class="st-value" style="color:var(--accent);">${fmt(sumIncGMV)}</span></div>
-      <div class="st-row st-grand"><span class="st-label">Combined GMV Return / €1</span><span class="st-value">€${combinedROI.toFixed(1)}</span></div>`;
+      <div class="st-row"><span class="st-label">Combined Extra Revenue (incl. repeat)</span><span class="st-value" style="color:var(--accent);">${fmt(sumLifetimeGMV)}</span></div>
+      <div class="st-row st-grand"><span class="st-label">Revenue per €1 Invested</span><span class="st-value">€${combinedRevPerEuro.toFixed(1)} <span style="font-size:11px;font-weight:400">(Net: ${combinedNetPct}%)</span></span></div>`;
   } else {
     totalsEl.style.display = 'none';
   }
@@ -3393,18 +3395,24 @@ function calculate() {
   document.getElementById('barProvider').textContent = r.provShare > 0 ? `Provider ${Math.round(r.share*100)}%` : '';
 
   // ROI & Investment Context
-  // Campaigns acquire customers who keep ordering. Repeat multiplier = estimated
-  // future orders per new customer acquired (industry standard 3-5x for food delivery).
+  // ROI = incremental revenue / campaign cost (how many € in sales per €1 invested)
+  // Net ROI = (revenue - cost) / cost
   const REPEAT_MULTIPLIER = 4;
   const incGMVwk = r.incrementalGMV;
   const incGMVtotal = incGMVwk * weeks;
   const lifetimeGMV = incGMVtotal * REPEAT_MULTIPLIER;
-  const provMargin = 0.30;
-  const commRate = (_selectedProvider && _selectedProvider.commission) ? _selectedProvider.commission / 100 : 0.25;
-  const provLifetimeProfit = lifetimeGMV * provMargin;
-  const boltLifetimeComm = lifetimeGMV * commRate;
-  const provROI = (pw * weeks) > 0 ? provLifetimeProfit / (pw * weeks) : (provLifetimeProfit > 0 ? 99 : 0);
-  const boltROI = (bw * weeks) > 0 ? boltLifetimeComm / (bw * weeks) : (boltLifetimeComm > 0 ? 99 : 0);
+
+  const provCostTotal = pw * weeks;
+  const boltCostTotal = bw * weeks;
+  const totalCostAll = tw * weeks;
+
+  const provRevROI = provCostTotal > 0 ? lifetimeGMV / provCostTotal : 0;
+  const provNetROI = provCostTotal > 0 ? (lifetimeGMV - provCostTotal) / provCostTotal : 0;
+  const boltRevROI = boltCostTotal > 0 ? lifetimeGMV / boltCostTotal : 0;
+  const boltNetROI = boltCostTotal > 0 ? (lifetimeGMV - boltCostTotal) / boltCostTotal : 0;
+  const totalRevROI = totalCostAll > 0 ? lifetimeGMV / totalCostAll : 0;
+  const totalNetROI = totalCostAll > 0 ? (lifetimeGMV - totalCostAll) / totalCostAll : 0;
+
   const costPerExtraOrder = r.upliftOrders > 0 ? tw / r.upliftOrders : 0;
   const provCostPerExtraOrder = r.upliftOrders > 0 ? pw / r.upliftOrders : 0;
   const boltCostPerExtraOrder = r.upliftOrders > 0 ? bw / r.upliftOrders : 0;
@@ -3412,13 +3420,15 @@ function calculate() {
   const roiPanel = document.getElementById('roiPanel');
   if (incGMVwk > 0) {
     roiPanel.style.display = 'block';
-    const provRoiColor = provROI >= 3 ? 'var(--accent)' : provROI >= 1.5 ? 'var(--provider)' : 'var(--danger)';
-    const provVerdict = pw <= 0 ? 'No cost to provider'
-      : provROI >= 5 ? 'Excellent' : provROI >= 3 ? 'Strong' : provROI >= 1.5 ? 'Good' : provROI >= 1 ? 'Moderate' : 'Below break-even';
-    const boltRoiColor = boltROI >= 3 ? 'var(--accent)' : boltROI >= 1.5 ? 'var(--bolt)' : 'var(--danger)';
-    const boltVerdict = bw <= 0 ? 'No cost to Bolt'
-      : boltROI >= 5 ? 'Excellent' : boltROI >= 3 ? 'Strong' : boltROI >= 1.5 ? 'Good' : boltROI >= 1 ? 'Moderate' : 'Below break-even';
-    const commLabel = (_selectedProvider && _selectedProvider.commission) ? `${_selectedProvider.commission}%` : '25%';
+
+    function roiColor(net) { return net >= 3 ? 'var(--accent)' : net >= 1 ? 'var(--provider)' : net >= 0 ? '#f59e0b' : 'var(--danger)'; }
+    function roiVerdict(net) { return net >= 5 ? 'Excellent' : net >= 3 ? 'Strong' : net >= 1 ? 'Good' : net >= 0 ? 'Break-even' : 'Loss'; }
+
+    const provColor = roiColor(provNetROI);
+    const provVerdict = pw <= 0 ? 'No cost to provider' : roiVerdict(provNetROI);
+    const boltColor = roiColor(boltNetROI);
+    const boltVerdict = bw <= 0 ? 'No cost to Bolt' : roiVerdict(boltNetROI);
+    const netProfit = lifetimeGMV - totalCostAll;
 
     document.getElementById('roiContent').innerHTML = `
       <div class="result-grid" style="margin-bottom:0;">
@@ -3428,14 +3438,14 @@ function calculate() {
           <div class="sub">${fmt(incGMVtotal)} direct + ${REPEAT_MULTIPLIER - 1}x repeat value · +${Math.round(r.upliftOrders)} new orders/wk</div>
         </div>
         <div class="result-card">
-          <div class="label">Provider ROI</div>
-          <div class="value" style="color:${provRoiColor};font-size:20px;">${pw > 0 ? provROI.toFixed(1) + 'x' : 'Free'}</div>
-          <div class="sub">${provVerdict}${pw > 0 ? ' · ~30% margin' : ''}</div>
+          <div class="label">Net Return</div>
+          <div class="value" style="color:${netProfit >= 0 ? 'var(--accent)' : 'var(--danger)'};font-size:20px;">${fmt(netProfit)}</div>
+          <div class="sub">Revenue ${fmt(lifetimeGMV)} − Cost ${fmt(totalCostAll)}</div>
         </div>
         <div class="result-card">
-          <div class="label">Bolt ROI</div>
-          <div class="value" style="color:${boltRoiColor};font-size:20px;">${bw > 0 ? boltROI.toFixed(1) + 'x' : 'Free'}</div>
-          <div class="sub">${boltVerdict}${bw > 0 ? ' · ' + commLabel + ' commission' : ''}</div>
+          <div class="label">Revenue per €1 Invested</div>
+          <div class="value" style="color:var(--accent);font-size:20px;">€${totalRevROI.toFixed(1)}</div>
+          <div class="sub">Net ROI: ${Math.round(totalNetROI * 100)}%</div>
         </div>
       </div>
       <div style="margin-top:12px;">
@@ -3446,8 +3456,8 @@ function calculate() {
         ${pw > 0 ? `<div class="breakdown-item"><span class="bi-label">Cost per extra order — provider</span><span class="bi-value">${fmtDec(provCostPerExtraOrder)}</span></div>` : ''}
         ${bw > 0 ? `<div class="breakdown-item"><span class="bi-label">Cost per extra order — Bolt</span><span class="bi-value">${fmtDec(boltCostPerExtraOrder)}</span></div>` : ''}
         <div class="divider"></div>
-        ${pw > 0 ? `<div class="breakdown-item"><span class="bi-label">Provider: ${fmt(pw * weeks)} invested → ${fmt(provLifetimeProfit)} lifetime profit</span><span class="bi-value" style="color:${provRoiColor};font-weight:700;">${provROI.toFixed(1)}x return</span></div>` : ''}
-        ${bw > 0 ? `<div class="breakdown-item"><span class="bi-label">Bolt: ${fmt(bw * weeks)} invested → ${fmt(boltLifetimeComm)} lifetime commission</span><span class="bi-value" style="color:${boltRoiColor};font-weight:700;">${boltROI.toFixed(1)}x return</span></div>` : ''}
+        ${pw > 0 ? `<div class="breakdown-item"><span class="bi-label">Provider: ${fmt(provCostTotal)} invested → ${fmt(lifetimeGMV)} extra revenue</span><span class="bi-value" style="color:${provColor};font-weight:700;">€${provRevROI.toFixed(1)} per €1 <span style="font-size:11px;font-weight:400">(${provVerdict})</span></span></div>` : ''}
+        ${bw > 0 ? `<div class="breakdown-item"><span class="bi-label">Bolt: ${fmt(boltCostTotal)} invested → ${fmt(lifetimeGMV)} extra revenue</span><span class="bi-value" style="color:${boltColor};font-weight:700;">€${boltRevROI.toFixed(1)} per €1 <span style="font-size:11px;font-weight:400">(${boltVerdict})</span></span></div>` : ''}
       </div>`;
   } else {
     roiPanel.style.display = 'none';
@@ -3487,12 +3497,12 @@ function calculate() {
 
   // Scenarios — compute all first to find best ROI
   const estOpts = { audience, boltPlusPct };
-  const RM = 4; // repeat multiplier, must match REPEAT_MULTIPLIER above
+  const RM = 4;
 
   function scenarioROI(s, wks) {
     const ltGMV = s.incrementalGMV * wks * RM;
     const totalCost = s.total * wks;
-    return totalCost > 0 ? ltGMV * 0.30 / totalCost : 0;
+    return totalCost > 0 ? ltGMV / totalCost : 0;
   }
 
   let scenarios = [];
