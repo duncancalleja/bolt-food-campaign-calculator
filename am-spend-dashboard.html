@@ -515,6 +515,7 @@
   <div class="sp-body" id="spBody">
     <div class="sp-actions">
       <button class="primary" onclick="takeSnapshot()">📸 Snapshot Now</button>
+      <button onclick="exportAllCountrySnapshots()" title="Download JSON of every country’s snapshots — merge into data/team-snapshots.json and push to share with all AMs">⬇ Export all countries</button>
       <button onclick="exportSnapshots()">⬇ Export All</button>
       <button onclick="document.getElementById('importSnap').click()">⬆ Import</button>
       <input type="file" id="importSnap" accept=".json" style="display:none" onchange="importSnapshots(this)">
@@ -537,6 +538,7 @@
         <button onclick="loadLiveData()" style="padding:6px 12px;background:var(--accent-dim);color:var(--accent);border:1px solid rgba(52,211,153,.25);border-radius:6px;font-size:12px;cursor:pointer">Load Sheet</button>
       </div>
       <span id="sheetConfigStatus" style="font-size:11px;color:var(--text-dim);margin-top:4px;display:block"></span>
+      <p style="font-size:11px;color:var(--text-dim);margin-top:6px;max-width:720px">Sheet IDs in <code style="background:var(--surface2);padding:2px 6px;border-radius:4px">data/sheet-config.json</code> are shared with every AM. To add a country: edit that file in GitHub with their Sheet ID + GID, then push.</p>
     </div>
     <div id="calibrationPanel" style="display:none"></div>
     <div class="sp-history" id="snapshotHistory"></div>
@@ -606,6 +608,30 @@ async function _switchCountry(cc) {
     console.warn('Failed to load ' + cc + ' data:', e);
     if (statusEl) { statusEl.textContent = 'Error'; statusEl.style.background = 'var(--danger-dim)'; statusEl.style.color = 'var(--danger)'; }
   }
+}
+
+let _SHEET_CONFIG = {};
+let _TEAM_SNAPSHOTS = { schema: 1, byCountry: {}, updated: '' };
+
+async function _loadSheetConfigAndTeamSnapshots() {
+  try {
+    const r = await fetch('data/sheet-config.json');
+    _SHEET_CONFIG = await r.json();
+  } catch (e) { console.warn('sheet-config:', e); }
+  try {
+    const r2 = await fetch('data/team-snapshots.json?t=' + Date.now());
+    _TEAM_SNAPSHOTS = await r2.json();
+  } catch (e) { console.warn('team-snapshots:', e); }
+}
+
+function _sheetIdForCountry(cc) {
+  const loc = (localStorage.getItem('bolt_sheet_id_' + cc) || '').trim();
+  if (loc) return { id: loc, gid: (localStorage.getItem('bolt_sheet_gid_' + cc) || '0').trim() };
+  const sh = _SHEET_CONFIG[cc];
+  const fromShared = sh && sh.sheetId && String(sh.sheetId).trim();
+  if (fromShared) return { id: fromShared.trim(), gid: (sh.gid || '0').toString().trim() || '0' };
+  if (cc === 'mt') return { id: '17Wffy6BSp2pGr_AMy45EPG4LO3AlU5dFBJQOHjVKWWg', gid: '559236247' };
+  return { id: '', gid: '' };
 }
 
 let _DBX_ACTUALS_REFRESHED = '2026-03-16';
@@ -7524,8 +7550,9 @@ let SHEET_GID = localStorage.getItem('bolt_sheet_gid_' + _CURRENT_COUNTRY) || '5
 let SHEET_JSONP_URL = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/gviz/tq?tqx=responseHandler:_handleSheetJsonp&gid=' + SHEET_GID;
 
 function _updateSheetUrl() {
-  SHEET_ID = localStorage.getItem('bolt_sheet_id_' + _CURRENT_COUNTRY) || (_CURRENT_COUNTRY === 'mt' ? '17Wffy6BSp2pGr_AMy45EPG4LO3AlU5dFBJQOHjVKWWg' : '');
-  SHEET_GID = localStorage.getItem('bolt_sheet_gid_' + _CURRENT_COUNTRY) || (_CURRENT_COUNTRY === 'mt' ? '559236247' : '');
+  const sg = _sheetIdForCountry(_CURRENT_COUNTRY);
+  SHEET_ID = sg.id;
+  SHEET_GID = sg.gid || '0';
   if (SHEET_ID) {
     SHEET_JSONP_URL = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/gviz/tq?tqx=responseHandler:_handleSheetJsonp&gid=' + SHEET_GID;
   } else {
@@ -7535,6 +7562,10 @@ function _updateSheetUrl() {
   const gidEl = document.getElementById('sheetGidInput');
   if (idEl) idEl.value = SHEET_ID;
   if (gidEl) gidEl.value = SHEET_GID;
+  const st = document.getElementById('sheetConfigStatus');
+  if (st && _SHEET_CONFIG[_CURRENT_COUNTRY] && _SHEET_CONFIG[_CURRENT_COUNTRY].sheetId) {
+    st.textContent = 'Using shared sheet (sheet-config.json) for ' + _CURRENT_COUNTRY.toUpperCase();
+  }
 }
 
 function _saveSheetConfig() {
@@ -11086,7 +11117,6 @@ function _applySheetData(campaigns, source) {
   resetFilters();
   initFilters();
   refresh();
-  autoSnapshotIfSunday();
 
   const status = document.getElementById('dataStatus');
   const updEl = document.getElementById('lastUpdated');
@@ -11172,16 +11202,39 @@ function getSnapshots() {
   try { return JSON.parse(localStorage.getItem(_snapKey()) || '[]'); } catch { return []; }
 }
 
+function getTeamSnapshotsForCountry(cc) {
+  const raw = (_TEAM_SNAPSHOTS.byCountry && _TEAM_SNAPSHOTS.byCountry[cc]) || [];
+  return Array.isArray(raw) ? raw.map(s => Object.assign({}, s, { _fromTeam: true })) : [];
+}
+
+function getSnapshotsMerged() {
+  const local = getSnapshots();
+  const team = getTeamSnapshotsForCountry(_CURRENT_COUNTRY);
+  const seen = new Set(local.map(s => String(s.date) + '-' + String(s.isoWeek)));
+  const out = local.map(s => Object.assign({}, s, { _fromTeam: false }));
+  team.forEach(s => {
+    const k = String(s.date) + '-' + String(s.isoWeek);
+    if (!seen.has(k)) {
+      out.push(Object.assign({}, s, { _fromTeam: true }));
+      seen.add(k);
+    }
+  });
+  out.sort((a, b) => {
+    const da = String(b.date || '').localeCompare(String(a.date || ''));
+    if (da !== 0) return da;
+    return (Number(b.id) || 0) - (Number(a.id) || 0);
+  });
+  return out;
+}
+
 function saveSnapshots(snaps) {
   localStorage.setItem(_snapKey(), JSON.stringify(snaps));
 }
 
-function takeSnapshot() {
-  if (_OPS_CAMPAIGNS.length === 0) { alert('No campaign data loaded yet.'); return; }
+function buildSnapshotObject(countryCode) {
   const now = new Date();
   const dateStr = now.toISOString().slice(0, 10);
   const weekNum = getISOWeek(now);
-
   const campaigns = _OPS_CAMPAIGNS.map(c => {
     const est = estimateCampaignCost(c);
     return {
@@ -11193,26 +11246,137 @@ function takeSnapshot() {
       source: est.source || 'formula'
     };
   });
-
   const totals = campaigns.reduce((s, c) => ({
     total: s.total + c.estTotal, bolt: s.bolt + c.estBolt, prov: s.prov + c.estProv
   }), { total: 0, bolt: 0, prov: 0 });
-
-  const snap = {
-    id: Date.now(),
+  return {
+    id: Date.now() + Math.floor(Math.random() * 1000),
     date: dateStr,
     isoWeek: weekNum,
     campaignCount: campaigns.length,
     totals,
-    campaigns
+    campaigns,
+    country: countryCode || _CURRENT_COUNTRY
   };
+}
 
+function saveSnapshotForCountry(cc, silent) {
+  if (_OPS_CAMPAIGNS.length === 0) return false;
+  const snap = buildSnapshotObject(cc);
+  const key = 'am_spend_snapshots_' + cc;
+  let snaps;
+  try { snaps = JSON.parse(localStorage.getItem(key) || '[]'); } catch { snaps = []; }
+  if (snaps.some(s => s.date === snap.date)) return false;
+  snaps.unshift(snap);
+  while (snaps.length > 80) snaps.pop();
+  localStorage.setItem(key, JSON.stringify(snaps));
+  if (!silent) pushSnapshotToSheet(snap);
+  return true;
+}
+
+function _fetchSheetCampaignsJsonp(sheetId, sheetGid) {
+  return new Promise(resolve => {
+    if (!sheetId) { resolve(null); return; }
+    const cb = '_gvizMulti_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    const t = setTimeout(() => { try { delete window[cb]; } catch (e) {} resolve(null); }, 40000);
+    window[cb] = function(response) {
+      clearTimeout(t);
+      try { delete window[cb]; } catch (e) {}
+      try {
+        if (response.status !== 'ok') { resolve(null); return; }
+        const rows = _gvizRowsToArrays(response.table);
+        resolve(buildCampaigns(rows));
+      } catch (e) { resolve(null); }
+    };
+    const s = document.createElement('script');
+    s.src = 'https://docs.google.com/spreadsheets/d/' + sheetId + '/gviz/tq?tqx=responseHandler:' + cb + '&gid=' + (sheetGid || '0');
+    s.onerror = () => { clearTimeout(t); try { delete window[cb]; } catch (e) {} resolve(null); };
+    document.body.appendChild(s);
+  });
+}
+
+async function autoSnapshotAllCountriesSunday() {
+  const now = new Date();
+  if (now.getDay() !== 0) return;
+  const today = now.toISOString().slice(0, 10);
+  const lockKey = 'bolt_sunday_snapshots_' + today;
+  if (localStorage.getItem(lockKey)) return;
+
+  const countries = Object.keys(_COUNTRIES).length ? Object.keys(_COUNTRIES).sort() : ['mt'];
+  const origCC = _CURRENT_COUNTRY;
+  let any = false;
+
+  for (const cc of countries) {
+    const sg = _sheetIdForCountry(cc);
+    if (!sg.id) continue;
+    try {
+      const r = await fetch('data/' + cc + '-dash.json');
+      if (!r.ok) continue;
+      const data = await r.json();
+      _CAMP_HISTORY = data.camp_history || {};
+      _DBX_ACTUALS = data.dbx_actuals || {};
+      _PROVIDER_LOOKUP = data.provider_lookup || {};
+      WEEKS_IN_DATA = data.weeks_in_data || 52;
+
+      let snaps;
+      try { snaps = JSON.parse(localStorage.getItem('am_spend_snapshots_' + cc) || '[]'); } catch { snaps = []; }
+      if (snaps.some(s => s.date === today)) continue;
+
+      const camps = await _fetchSheetCampaignsJsonp(sg.id, sg.gid);
+      if (!camps || camps.length === 0) continue;
+      _OPS_CAMPAIGNS = camps;
+      if (saveSnapshotForCountry(cc, true)) any = true;
+    } catch (e) { console.warn('Sunday snapshot ' + cc, e); }
+  }
+
+  _CURRENT_COUNTRY = origCC;
+  try {
+    const r = await fetch('data/' + origCC + '-dash.json');
+    if (r.ok) {
+      const data = await r.json();
+      _CAMP_HISTORY = data.camp_history || {};
+      _DBX_ACTUALS = data.dbx_actuals || {};
+      _PROVIDER_LOOKUP = data.provider_lookup || {};
+      WEEKS_IN_DATA = data.weeks_in_data || 52;
+    }
+  } catch (e) {}
+  _updateSheetUrl();
+  loadLiveData();
+
+  localStorage.setItem(lockKey, '1');
+  if (any) console.log('Sunday snapshots saved for all configured countries.');
+}
+
+function exportAllCountrySnapshots() {
+  const countries = Object.keys(_COUNTRIES).length ? Object.keys(_COUNTRIES).sort() : ['mt'];
+  const byCountry = {};
+  countries.forEach(cc => {
+    try { byCountry[cc] = JSON.parse(localStorage.getItem('am_spend_snapshots_' + cc) || '[]'); }
+    catch { byCountry[cc] = []; }
+  });
+  const payload = {
+    schema: 1,
+    exported: new Date().toISOString(),
+    note: 'Merge byCountry into data/team-snapshots.json under byCountry (merge arrays by date), then git push.',
+    byCountry
+  };
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+  a.download = 'all-country-snapshots-' + new Date().toISOString().slice(0, 10) + '.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  alert('Downloaded. To share with all AMs: merge into data/team-snapshots.json on GitHub and push.');
+}
+
+function takeSnapshot() {
+  if (_OPS_CAMPAIGNS.length === 0) { alert('No campaign data loaded yet.'); return; }
+  const snap = buildSnapshotObject(_CURRENT_COUNTRY);
   const snaps = getSnapshots();
   snaps.unshift(snap);
   saveSnapshots(snaps);
   renderSnapshots();
   pushSnapshotToSheet(snap);
-  alert(`Snapshot saved: ${dateStr} (Week ${weekNum}) — ${campaigns.length} campaigns, est. total €${totals.total.toLocaleString()}/wk`);
+  alert(`Snapshot saved: ${snap.date} (Week ${snap.isoWeek}) — ${snap.campaignCount} campaigns, est. total €${snap.totals.total.toLocaleString()}/wk`);
 }
 
 function getISOWeek(d) {
@@ -11223,25 +11387,19 @@ function getISOWeek(d) {
   return 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
 }
 
-function autoSnapshotIfSunday() {
-  const now = new Date();
-  if (now.getDay() !== 0) return;
-  const today = now.toISOString().slice(0, 10);
-  const snaps = getSnapshots();
-  if (snaps.some(s => s.date === today)) return;
-  takeSnapshot();
-}
-
 function renderSnapshots() {
-  const snaps = getSnapshots();
+  const snaps = getSnapshotsMerged();
   const el = document.getElementById('snapshotHistory');
   if (snaps.length === 0) {
-    el.innerHTML = '<div class="sp-empty">No snapshots yet. Click "Snapshot Now" to save the current estimates, or they\'ll be saved automatically every Sunday.</div>';
+    el.innerHTML = '<div class="sp-empty">No snapshots yet. Sunday auto-saves all countries with a sheet in sheet-config.json. Team history loads from data/team-snapshots.json.</div>';
     return;
   }
-  let html = '<table><thead><tr><th>Date</th><th>Week</th><th>Campaigns</th><th>Est. Total/wk</th><th>Est. Bolt/wk</th><th>Est. Provider/wk</th><th></th><th></th></tr></thead><tbody>';
+  let html = '<table><thead><tr><th></th><th>Date</th><th>Week</th><th>Campaigns</th><th>Est. Total/wk</th><th>Est. Bolt/wk</th><th>Est. Provider/wk</th><th></th><th></th></tr></thead><tbody>';
   snaps.forEach(s => {
+    const teamBadge = s._fromTeam ? '<span style="font-size:10px;background:var(--bolt-dim);color:var(--bolt);padding:2px 6px;border-radius:4px">TEAM</span>' : '';
+    const delBtn = s._fromTeam ? '' : `<button onclick="deleteSnapshot(${s.id})" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px" title="Delete">✕</button>`;
     html += `<tr>
+      <td>${teamBadge}</td>
       <td>${s.date}</td>
       <td>W${s.isoWeek}</td>
       <td>${s.campaignCount}</td>
@@ -11249,9 +11407,9 @@ function renderSnapshots() {
       <td style="color:var(--bolt)">€${s.totals.bolt.toLocaleString()}</td>
       <td style="color:var(--provider)">€${s.totals.prov.toLocaleString()}</td>
       <td><button onclick="toggleSnapDetail(${s.id})" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap" title="View providers">▸ Providers</button></td>
-      <td><button onclick="deleteSnapshot(${s.id})" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px" title="Delete">✕</button></td>
+      <td>${delBtn}</td>
     </tr>`;
-    html += `<tr id="snapDetail_${s.id}" style="display:none"><td colspan="8" style="padding:0"><div id="snapDetailInner_${s.id}"></div></td></tr>`;
+    html += `<tr id="snapDetail_${s.id}" style="display:none"><td colspan="9" style="padding:0"><div id="snapDetailInner_${s.id}"></div></td></tr>`;
   });
   html += '</tbody></table>';
   el.innerHTML = html;
@@ -11271,8 +11429,8 @@ function toggleSnapDetail(id) {
 }
 
 function renderSnapDetail(id, container) {
-  const snaps = getSnapshots();
-  const snap = snaps.find(s => s.id === id);
+  const snaps = getSnapshotsMerged();
+  const snap = snaps.find(s => s.id == id);
   if (!snap || !snap.campaigns) { container.innerHTML = '<p style="padding:8px;color:var(--text-dim)">No campaign data in this snapshot.</p>'; return; }
 
   const byAM = {};
@@ -11325,14 +11483,16 @@ function renderSnapDetail(id, container) {
 }
 
 function deleteSnapshot(id) {
+  const snap = getSnapshotsMerged().find(s => s.id == id);
+  if (snap && snap._fromTeam) { alert('Team snapshots (from data/team-snapshots.json) cannot be deleted here.'); return; }
   if (!confirm('Delete this snapshot?')) return;
-  const snaps = getSnapshots().filter(s => s.id !== id);
+  const snaps = getSnapshots().filter(s => s.id != id);
   saveSnapshots(snaps);
   renderSnapshots();
 }
 
 function exportSnapshots() {
-  const snaps = getSnapshots();
+  const snaps = getSnapshotsMerged();
   if (snaps.length === 0) { alert('No snapshots to export.'); return; }
   const blob = new Blob([JSON.stringify(snaps, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
@@ -11487,7 +11647,7 @@ function checkVsDbx() {
     alert('No Databricks actuals data embedded. Run the refresh script first.');
     return;
   }
-  const snaps = getSnapshots();
+  const snaps = getSnapshotsMerged();
   if (snaps.length === 0) {
     alert('No snapshots to compare. Take a snapshot first.');
     return;
@@ -11585,8 +11745,8 @@ function renderWeeklyTrend(weekScores, snap, byPid, availableWeeks) {
 }
 
 function _drillWeek(weekKey, snapId) {
-  const snaps = getSnapshots();
-  const snap = snaps.find(s => s.id === snapId);
+  const snaps = getSnapshotsMerged();
+  const snap = snaps.find(s => s.id == snapId);
   if (!snap) return;
 
   const byPid = _aggregateByProvider(snap.campaigns);
@@ -11724,7 +11884,7 @@ function getStoredActuals() { try { return JSON.parse(localStorage.getItem(_actu
 function persistActuals(actuals) {
   const stored = getStoredActuals();
   const date = new Date().toISOString().slice(0, 10);
-  const snaps = getSnapshots();
+  const snaps = getSnapshotsMerged();
   const snapId = snaps.length > 0 ? snaps[0].id : null;
   stored.push({ date, snapId, actuals });
   localStorage.setItem(_actualsKey(), JSON.stringify(stored));
@@ -11752,7 +11912,7 @@ function _aggregateByProvider(campaigns) {
 function renderComparison(actuals, snapId, weekRange) {
   _lastActuals = actuals;
   _lastWeekRange = weekRange || '';
-  const snaps = getSnapshots();
+  const snaps = getSnapshotsMerged();
   const wrap = document.getElementById('compareWrap');
 
   if (snaps.length === 0) {
@@ -11887,12 +12047,12 @@ function renderComparison(actuals, snapId, weekRange) {
 // ─── Calibration Engine ───
 function buildCalibrationData() {
   const storedActuals = getStoredActuals();
-  const snaps = getSnapshots();
+  const snaps = getSnapshotsMerged();
   if (storedActuals.length === 0 || snaps.length === 0) return null;
 
   const dataPoints = [];
   storedActuals.forEach(sa => {
-    const snap = sa.snapId ? snaps.find(s => s.id === sa.snapId) : snaps[0];
+    const snap = sa.snapId ? snaps.find(s => s.id == sa.snapId) : snaps[0];
     if (!snap || !snap.campaigns) return;
     const byPid = _aggregateByProvider(snap.campaigns);
     for (const [pid, p] of Object.entries(byPid)) {
@@ -12249,7 +12409,7 @@ function openProviderModal(pid) {
   });
 
   // Check snapshot history for this provider
-  const snaps = getSnapshots();
+  const snaps = getSnapshotsMerged();
   const storedActuals = getStoredActuals();
   const history = [];
   snaps.forEach(snap => {
@@ -12360,20 +12520,27 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeProviderModal();
 });
 
-loadLiveData();
-
-try { renderSnapshots(); } catch(e) { console.warn('renderSnapshots:', e); }
-try { showActiveCalibration(); } catch(e) { console.warn('showActiveCalibration:', e); }
-try { loadBudget(); } catch(e) { console.warn('loadBudget:', e); }
-try { loadSheetUrl(); } catch(e) { console.warn('loadSheetUrl:', e); }
-
-_loadCountryIndex().then(() => {
+(async function dashboardInit() {
+  await _loadSheetConfigAndTeamSnapshots();
+  try { await _loadCountryIndex(); } catch (e) { console.warn('country index:', e); }
   const saved = localStorage.getItem('bolt_country');
-  if (saved && saved !== 'mt' && saved in _COUNTRIES) {
-    _switchCountry(saved);
+  let cc = 'mt';
+  if (saved && _COUNTRIES[saved]) cc = saved;
+  else if (_CURRENT_COUNTRY && _COUNTRIES[_CURRENT_COUNTRY]) cc = _CURRENT_COUNTRY;
+  try {
+    await _switchCountry(cc);
+  } catch (e) {
+    console.warn('switchCountry:', e);
+    _updateSheetUrl();
+    loadLiveData();
   }
-});
-try { loadBrandGroupData(); } catch(e) { console.warn('loadBrandGroupData:', e); }
+  try { await autoSnapshotAllCountriesSunday(); } catch (e) { console.warn('Sunday snapshots:', e); }
+  try { renderSnapshots(); } catch(e) { console.warn('renderSnapshots:', e); }
+  try { showActiveCalibration(); } catch(e) { console.warn('showActiveCalibration:', e); }
+  try { loadBudget(); } catch(e) { console.warn('loadBudget:', e); }
+  try { loadSheetUrl(); } catch(e) { console.warn('loadSheetUrl:', e); }
+  try { loadBrandGroupData(); } catch(e) { console.warn('loadBrandGroupData:', e); }
+})();
 </script>
 </body>
 </html>

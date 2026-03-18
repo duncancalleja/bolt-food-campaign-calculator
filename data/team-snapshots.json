@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "updated": "",
+  "note": "Merged snapshot history for all countries. After Export from dashboard, merge JSON here and push so all AMs see the same history for learning/calibration.",
+  "byCountry": {}
+}
