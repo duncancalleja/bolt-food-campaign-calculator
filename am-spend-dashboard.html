@@ -7576,7 +7576,7 @@ function _updateSheetUrl() {
 
 function _ghDispatchCommand(country, sheetId, gid) {
   const repo = 'duncancalleja/bolt-food-campaign-calculator';
-  return `gh api repos/${repo}/dispatches -f event_type=update_sheet_config -f 'client_payload[country]=${country}' -f 'client_payload[sheetId]=${sheetId}' -f 'client_payload[gid]=${gid || '0'}'`;
+  return `gh api --method POST repos/${repo}/dispatches -f event_type=update_sheet_config -f 'client_payload[country]=${country}' -f 'client_payload[sheetId]=${sheetId}' -f 'client_payload[gid]=${gid || '0'}'`;
 }
 
 function saveSheetDispatchWebhook() {
