@@ -1,0 +1,49 @@
+name: Weekly team snapshots
+
+# Collects spend snapshots for every country with a sheet in sheet-config.json
+# (same logic as Sunday in-browser snapshots) and merges into data/team-snapshots.json.
+
+on:
+  schedule:
+    # Sunday 08:00 UTC — adjust if you prefer another window
+    - cron: '0 8 * * 0'
+  workflow_dispatch:
+
+jobs:
+  snapshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Playwright
+        run: |
+          npm install playwright@1.49.1
+          npx playwright install chromium --with-deps
+
+      - name: Collect snapshots (Playwright + local server)
+        run: node scripts/ci_weekly_snapshots.mjs
+
+      - name: Merge into data/team-snapshots.json
+        run: python3 scripts/merge_team_snapshots.py /tmp/weekly-snap-new.json
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/team-snapshots.json
+          if git diff --cached --quiet; then
+            echo "No snapshot changes to commit."
+          else
+            git commit -m "Weekly team snapshots ($(date +%Y-%m-%d) UTC)"
+            git push
+          fi

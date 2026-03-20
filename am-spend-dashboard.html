@@ -539,6 +539,11 @@
       </div>
       <span id="sheetConfigStatus" style="font-size:11px;color:var(--text-dim);margin-top:4px;display:block"></span>
       <p style="font-size:11px;color:var(--text-dim);margin-top:6px;max-width:720px">Sheet IDs in <code style="background:var(--surface2);padding:2px 6px;border-radius:4px">data/sheet-config.json</code> are shared with every AM. To add a country: edit that file in GitHub with their Sheet ID + GID, then push.</p>
+      <div style="margin-top:8px">
+        <label style="font-size:11px;color:var(--text-dim)">Optional: webhook URL to auto-update GitHub (<a href="https://github.com/duncancalleja/bolt-food-campaign-calculator/blob/main/data/SHEETS_AND_SNAPSHOTS.md" target="_blank" rel="noopener" style="color:var(--accent)">setup</a>)</label>
+        <input type="text" id="sheetDispatchWebhook" placeholder="https://script.google.com/... (POST JSON)" style="width:100%;margin-top:4px;padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px" onchange="saveSheetDispatchWebhook()">
+      </div>
+      <div id="sheetGhCommandWrap" style="display:none;margin-top:8px;padding:8px;background:var(--surface2);border-radius:6px;font-size:11px;font-family:monospace;word-break:break-all;color:var(--text-dim)"></div>
     </div>
     <div id="calibrationPanel" style="display:none"></div>
     <div class="sp-history" id="snapshotHistory"></div>
@@ -2837,6 +2842,7 @@ function loadSheetUrl() {
   const url = getSheetUrl();
   if (url) { document.getElementById('sheetWebhookUrl').value = url; saveSheetUrl(); }
   _updateSheetUrl();
+  loadSheetDispatchWebhook();
 }
 
 async function pushSnapshotToSheet(snap) {
@@ -7568,6 +7574,22 @@ function _updateSheetUrl() {
   }
 }
 
+function _ghDispatchCommand(country, sheetId, gid) {
+  const repo = 'duncancalleja/bolt-food-campaign-calculator';
+  return `gh api repos/${repo}/dispatches -f event_type=update_sheet_config -f 'client_payload[country]=${country}' -f 'client_payload[sheetId]=${sheetId}' -f 'client_payload[gid]=${gid || '0'}'`;
+}
+
+function saveSheetDispatchWebhook() {
+  const el = document.getElementById('sheetDispatchWebhook');
+  if (el) localStorage.setItem('bolt_sheet_dispatch_webhook', (el.value || '').trim());
+}
+
+function loadSheetDispatchWebhook() {
+  const el = document.getElementById('sheetDispatchWebhook');
+  const v = localStorage.getItem('bolt_sheet_dispatch_webhook') || '';
+  if (el) el.value = v;
+}
+
 function _saveSheetConfig() {
   const sid = (document.getElementById('sheetIdInput').value || '').trim();
   const gid = (document.getElementById('sheetGidInput').value || '').trim();
@@ -7575,7 +7597,23 @@ function _saveSheetConfig() {
   localStorage.setItem('bolt_sheet_gid_' + _CURRENT_COUNTRY, gid);
   _updateSheetUrl();
   const st = document.getElementById('sheetConfigStatus');
-  if (st) st.textContent = sid ? 'Saved for ' + _CURRENT_COUNTRY.toUpperCase() : '';
+  if (st) st.textContent = sid ? 'Saved locally for ' + _CURRENT_COUNTRY.toUpperCase() + ' (overrides shared sheet-config until cleared)' : '';
+
+  const ghWrap = document.getElementById('sheetGhCommandWrap');
+  if (ghWrap && sid) {
+    ghWrap.style.display = 'block';
+    ghWrap.innerHTML = '<div style="margin-bottom:4px;color:var(--text)">To commit to GitHub for <strong>all AMs</strong>, run locally (after <code>gh auth login</code>):</div><code style="color:var(--accent)">' +
+      _ghDispatchCommand(_CURRENT_COUNTRY, sid, gid).replace(/</g, '&lt;') + '</code>';
+  } else if (ghWrap) ghWrap.style.display = 'none';
+
+  const wh = localStorage.getItem('bolt_sheet_dispatch_webhook');
+  if (wh && sid) {
+    fetch(wh, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ country: _CURRENT_COUNTRY, sheetId: sid, gid: gid || '0' })
+    }).catch(() => {});
+  }
 }
 
 const _BRAND_GROUP = {
@@ -11347,6 +11385,36 @@ async function autoSnapshotAllCountriesSunday() {
   if (any) console.log('Sunday snapshots saved for all configured countries.');
 }
 
+/** Used by GitHub Actions (Playwright) — same logic as Sunday snap, returns JSON (no localStorage). */
+async function collectWeeklySnapshotsForCI() {
+  const result = { schema: 1, collectedAt: new Date().toISOString(), byCountry: {} };
+  const countries = Object.keys(_COUNTRIES).length ? Object.keys(_COUNTRIES).sort() : ['mt'];
+  const origCC = _CURRENT_COUNTRY;
+  for (const cc of countries) {
+    const sg = _sheetIdForCountry(cc);
+    if (!sg.id) continue;
+    try {
+      const r = await fetch('data/' + cc + '-dash.json');
+      if (!r.ok) continue;
+      const data = await r.json();
+      _CAMP_HISTORY = data.camp_history || {};
+      _DBX_ACTUALS = data.dbx_actuals || {};
+      _PROVIDER_LOOKUP = data.provider_lookup || {};
+      WEEKS_IN_DATA = data.weeks_in_data || 52;
+      const camps = await _fetchSheetCampaignsJsonp(sg.id, sg.gid);
+      if (!camps || camps.length === 0) continue;
+      _OPS_CAMPAIGNS = camps;
+      const snap = buildSnapshotObject(cc);
+      delete snap._fromTeam;
+      result.byCountry[cc] = [snap];
+    } catch (e) { console.warn('CI snapshot ' + cc, e); }
+  }
+  _CURRENT_COUNTRY = origCC;
+  return result;
+}
+window.__collectWeeklySnapshotsForCI = collectWeeklySnapshotsForCI;
+window.__weeklySnapshotsReady = false;
+
 function exportAllCountrySnapshots() {
   const countries = Object.keys(_COUNTRIES).length ? Object.keys(_COUNTRIES).sort() : ['mt'];
   const byCountry = {};
@@ -12534,12 +12602,15 @@ document.addEventListener('keydown', e => {
     _updateSheetUrl();
     loadLiveData();
   }
-  try { await autoSnapshotAllCountriesSunday(); } catch (e) { console.warn('Sunday snapshots:', e); }
+  if (!window.__PLAYWRIGHT_CI) {
+    try { await autoSnapshotAllCountriesSunday(); } catch (e) { console.warn('Sunday snapshots:', e); }
+  }
   try { renderSnapshots(); } catch(e) { console.warn('renderSnapshots:', e); }
   try { showActiveCalibration(); } catch(e) { console.warn('showActiveCalibration:', e); }
   try { loadBudget(); } catch(e) { console.warn('loadBudget:', e); }
   try { loadSheetUrl(); } catch(e) { console.warn('loadSheetUrl:', e); }
   try { loadBrandGroupData(); } catch(e) { console.warn('loadBrandGroupData:', e); }
+  window.__weeklySnapshotsReady = true;
 })();
 </script>
 </body>

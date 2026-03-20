@@ -1,0 +1,39 @@
+name: Update sheet config (repository_dispatch)
+
+# Trigger from outside GitHub (e.g. gh CLI with PAT) after saving a sheet on the dashboard:
+#   gh api --method POST repos/duncancalleja/bolt-food-campaign-calculator/dispatches \
+#     -f event_type=update_sheet_config \
+#     -f client_payload[country]=pl \
+#     -f client_payload[sheetId]=YOUR_SHEET_ID \
+#     -f client_payload[gid]=0
+
+on:
+  repository_dispatch:
+    types: [update_sheet_config]
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Apply client_payload to sheet-config.json
+        env:
+          PAYLOAD: ${{ toJson(github.event.client_payload) }}
+        run: python3 scripts/apply_sheet_dispatch.py
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/sheet-config.json
+          if git diff --cached --quiet; then
+            echo "No sheet-config changes."
+          else
+            git commit -m "Update sheet config: ${{ github.event.client_payload.country }}"
+            git push
+          fi
