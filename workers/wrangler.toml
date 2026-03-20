@@ -1,0 +1,11 @@
+name = "bolt-sheet-dispatch"
+main = "sheet-dispatch-worker.js"
+compatibility_date = "2024-11-01"
+
+# Secrets (set after first deploy):
+#   npx wrangler secret put GITHUB_TOKEN
+#   npx wrangler secret put WEBHOOK_SECRET   # optional; if set, dashboard must send same "secret" in JSON body
+#
+# Optional vars (dashboard → GitHub):
+#   npx wrangler vars add GITHUB_REPO "owner/repo"
+#   npx wrangler vars add ALLOWED_ORIGINS "https://duncancalleja.github.io,http://localhost:8080"

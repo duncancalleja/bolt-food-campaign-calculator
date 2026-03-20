@@ -51,9 +51,9 @@ gh api --method POST repos/duncancalleja/bolt-food-campaign-calculator/dispatche
 
 The dashboard shows a copy-paste **GitHub dispatch** command with your current country and fields filled where possible.
 
-### B) Optional webhook URL
+### B) Webhook (automatic from the browser — recommended)
 
-If you set a **Sheet dispatch webhook** in the dashboard (stored in `localStorage`), saving sheet settings can **POST** `{ country, sheetId, gid }` to your endpoint (e.g. Google Apps Script, Cloudflare Worker). **Your** server must validate the request and either call `repository_dispatch` with a secret PAT or commit to the repo.
+Follow **[WEBHOOK_SETUP.md](./WEBHOOK_SETUP.md)** (Cloudflare Worker, ~5 minutes). After deploy, paste the Worker URL (and optional shared secret) into the dashboard; each save of Sheet ID + GID **POST**s `{ country, sheetId, gid, secret? }` and GitHub Actions updates `sheet-config.json`.
 
 ---
 

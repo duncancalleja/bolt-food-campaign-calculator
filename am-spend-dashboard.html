@@ -540,8 +540,10 @@
       <span id="sheetConfigStatus" style="font-size:11px;color:var(--text-dim);margin-top:4px;display:block"></span>
       <p style="font-size:11px;color:var(--text-dim);margin-top:6px;max-width:720px">Sheet IDs in <code style="background:var(--surface2);padding:2px 6px;border-radius:4px">data/sheet-config.json</code> are shared with every AM. To add a country: edit that file in GitHub with their Sheet ID + GID, then push.</p>
       <div style="margin-top:8px">
-        <label style="font-size:11px;color:var(--text-dim)">Optional: webhook URL to auto-update GitHub (<a href="https://github.com/duncancalleja/bolt-food-campaign-calculator/blob/main/data/SHEETS_AND_SNAPSHOTS.md" target="_blank" rel="noopener" style="color:var(--accent)">setup</a>)</label>
-        <input type="text" id="sheetDispatchWebhook" placeholder="https://script.google.com/... (POST JSON)" style="width:100%;margin-top:4px;padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px" onchange="saveSheetDispatchWebhook()">
+        <label style="font-size:11px;color:var(--text-dim)">Webhook URL — auto-update <code style="background:var(--surface2);padding:2px 6px;border-radius:4px">sheet-config.json</code> on save (<a href="https://github.com/duncancalleja/bolt-food-campaign-calculator/blob/main/data/WEBHOOK_SETUP.md" target="_blank" rel="noopener" style="color:var(--accent)">5‑min Cloudflare setup</a>)</label>
+        <input type="text" id="sheetDispatchWebhook" placeholder="https://bolt-sheet-dispatch.xxx.workers.dev" style="width:100%;margin-top:4px;padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px" onchange="saveSheetDispatchWebhook()">
+        <label style="font-size:11px;color:var(--text-dim);margin-top:6px;display:block">Webhook shared secret (optional — same value as Worker <code>WEBHOOK_SECRET</code>)</label>
+        <input type="password" id="sheetWebhookSecret" placeholder="Leave empty if Worker has no secret" autocomplete="off" style="width:100%;margin-top:4px;padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px" onchange="saveSheetWebhookSecret()">
       </div>
       <div id="sheetGhCommandWrap" style="display:none;margin-top:8px;padding:8px;background:var(--surface2);border-radius:6px;font-size:11px;font-family:monospace;word-break:break-all;color:var(--text-dim)"></div>
     </div>
@@ -7588,6 +7590,14 @@ function loadSheetDispatchWebhook() {
   const el = document.getElementById('sheetDispatchWebhook');
   const v = localStorage.getItem('bolt_sheet_dispatch_webhook') || '';
   if (el) el.value = v;
+  const se = document.getElementById('sheetWebhookSecret');
+  const sv = localStorage.getItem('bolt_sheet_webhook_secret') || '';
+  if (se) se.value = sv;
+}
+
+function saveSheetWebhookSecret() {
+  const el = document.getElementById('sheetWebhookSecret');
+  if (el) localStorage.setItem('bolt_sheet_webhook_secret', (el.value || '').trim());
 }
 
 function _saveSheetConfig() {
@@ -7608,10 +7618,13 @@ function _saveSheetConfig() {
 
   const wh = localStorage.getItem('bolt_sheet_dispatch_webhook');
   if (wh && sid) {
+    const payload = { country: _CURRENT_COUNTRY, sheetId: sid, gid: gid || '0' };
+    const sec = (localStorage.getItem('bolt_sheet_webhook_secret') || '').trim();
+    if (sec) payload.secret = sec;
     fetch(wh, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ country: _CURRENT_COUNTRY, sheetId: sid, gid: gid || '0' })
+      body: JSON.stringify(payload)
     }).catch(() => {});
   }
 }
