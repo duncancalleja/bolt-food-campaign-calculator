@@ -595,9 +595,9 @@
 
 <script>
 // ─── State ───
-let providerDB = {};       // { providerId: { weeks: [{week, orders, gmv, aov}], avgOrders, avgAOV, avgGMV, segment, campaigns: [...] } }
+let providerDB = {};       // { providerId: { weeks: [{week, orders, gmv, aov, spend?}], avgOrders, avgAOV, avgGMV, segment, campaigns: [...] } }
 let uploadedColumns = [];
-let columnMap = { id: null, week: null, orders: null, gmv: null, aov: null, segment: null };
+let columnMap = { id: null, week: null, orders: null, gmv: null, aov: null, segment: null, campaign_spend: null };
 let dataLoaded = false;
 let currentSource = 'manual'; // 'manual' | 'uploaded'
 let campaignStack = [];
@@ -622,6 +622,8 @@ const SEGMENT_BENCHMARKS = {
   smb:        { avgOrders: 120, avgAOV: 18.0 },
   stores:     { avgOrders: 220, avgAOV: 46.0 }
 };
+
+function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
 
 // ─── Country switching & data loading ───
 let _CURRENT_COUNTRY = localStorage.getItem('bolt_country') || 'mt';
@@ -2503,6 +2505,141 @@ let vendorDB = {};
 let groupDB = {};
 let _viewLevel = 'provider'; // 'provider' | 'vendor' | 'group'
 
+// Peer-GMVR ROI calibration index (rebuilt whenever providerDB changes)
+let _peerRoiIndex = { all: [], bySeg: {} };
+
+function _campIntensity(p) {
+  if (!p) return null;
+  const bolt = Number(p.campBolt || 0);
+  const merch = Number(p.campMerch || 0);
+  const gmv = Number(p.totalGMV || 0);
+  if (!(gmv > 0)) return null;
+  const spend = bolt + merch;
+  if (!(spend > 0)) return null;
+  return spend / gmv;
+}
+
+function rebuildPeerRoiIndex() {
+  const bySeg = {};
+  const all = [];
+
+  Object.keys(providerDB || {}).forEach(k => {
+    const p = providerDB[k];
+    if (!p) return;
+    const gmv = Number(p.avgGMV || 0);
+    if (!(gmv > 0)) return;
+    const seg = p.segment || 'unknown';
+    const inten = _campIntensity(p);
+    const row = { key: k, seg, gmv, logGmv: Math.log(gmv), inten };
+    all.push(row);
+    if (!bySeg[seg]) bySeg[seg] = [];
+    bySeg[seg].push(row);
+  });
+
+  const sortRows = (arr) => arr.slice().sort((a, b) => a.logGmv - b.logGmv);
+  _peerRoiIndex = {
+    all: sortRows(all),
+    bySeg: Object.fromEntries(Object.entries(bySeg).map(([s, arr]) => [s, sortRows(arr)])),
+  };
+}
+
+function median(nums) {
+  const a = nums.filter(v => typeof v === 'number' && isFinite(v)).slice().sort((x, y) => x - y);
+  if (!a.length) return null;
+  const m = Math.floor(a.length / 2);
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+}
+
+function peerCampaignIntensityMedian(p, kNeighbors) {
+  if (!p || !_peerRoiIndex || !_peerRoiIndex.all.length) return null;
+  kNeighbors = kNeighbors || 25;
+
+  const gmv = Number(p.avgGMV || 0);
+  if (!(gmv > 0)) return null;
+  const logGmv = Math.log(gmv);
+  const seg = p.segment || 'unknown';
+
+  const pool = (_peerRoiIndex.bySeg[seg] && _peerRoiIndex.bySeg[seg].length >= Math.max(10, kNeighbors))
+    ? _peerRoiIndex.bySeg[seg]
+    : _peerRoiIndex.all;
+
+  let lo = 0, hi = pool.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (pool[mid].logGmv < logGmv) lo = mid + 1;
+    else hi = mid - 1;
+  }
+  const idx = clamp(lo, 0, Math.max(0, pool.length - 1));
+
+  const ints = [];
+  for (let d = -kNeighbors; d <= kNeighbors; d++) {
+    const j = idx + d;
+    if (j < 0 || j >= pool.length) continue;
+    const row = pool[j];
+    if (!row || row.key === p.name) continue;
+    const other = providerDB[row.key];
+    const ci = _campIntensity(other);
+    if (ci !== null) ints.push(ci);
+  }
+  return median(ints);
+}
+
+function peerAvgOrdersMedian(p, kNeighbors) {
+  if (!p || !_peerRoiIndex || !_peerRoiIndex.all.length) return null;
+  kNeighbors = kNeighbors || 25;
+
+  const gmv = Number(p.avgGMV || 0);
+  if (!(gmv > 0)) return null;
+  const logGmv = Math.log(gmv);
+  const seg = p.segment || 'unknown';
+
+  const pool = (_peerRoiIndex.bySeg[seg] && _peerRoiIndex.bySeg[seg].length >= Math.max(10, kNeighbors))
+    ? _peerRoiIndex.bySeg[seg]
+    : _peerRoiIndex.all;
+
+  let lo = 0, hi = pool.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (pool[mid].logGmv < logGmv) lo = mid + 1;
+    else hi = mid - 1;
+  }
+  const idx = clamp(lo, 0, Math.max(0, pool.length - 1));
+
+  const vals = [];
+  for (let d = -kNeighbors; d <= kNeighbors; d++) {
+    const j = idx + d;
+    if (j < 0 || j >= pool.length) continue;
+    const row = pool[j];
+    if (!row || row.key === p.name) continue;
+    const other = providerDB[row.key];
+    const o = Number(other && other.avgOrders);
+    if (isFinite(o) && o > 0) vals.push(o);
+  }
+  return median(vals);
+}
+
+function peerRoiUpliftScale(p) {
+  const mineI = _campIntensity(p);
+  const peerI = peerCampaignIntensityMedian(p, 25);
+  let scaleI = 1;
+  if (mineI !== null && peerI !== null && peerI > 0) {
+    const rel = mineI / peerI;
+    // If a brand already runs much higher campaign intensity vs similar-GM peers, assume less incremental headroom.
+    // If it runs lower, allow a bit more incremental response vs the generic uplift curve.
+    scaleI = clamp(1 + (1 - rel) * 0.35, 0.75, 1.25);
+  }
+
+  const mineO = Number(p && p.avgOrders);
+  const peerO = peerAvgOrdersMedian(p, 25);
+  let scaleO = 1;
+  if (isFinite(mineO) && mineO > 0 && peerO !== null && peerO > 0) {
+    const relO = peerO / mineO; // >1 if peers run higher order volumes at similar GMV
+    scaleO = clamp(0.85 + 0.15 * relO, 0.85, 1.15);
+  }
+
+  return clamp(scaleI * scaleO, 0.7, 1.35);
+}
+
 function loadEmbeddedData() {
   if (!_EMBEDDED_DATA || _EMBEDDED_DATA.length === 0) return;
   const segMap = { E: 'enterprise', M: 'mm', S: 'smb', T: 'stores' };
@@ -2612,6 +2749,7 @@ function loadEmbeddedData() {
     '<span class="count">' + pCount + '</span> providers / ' +
     '<span class="count">' + vCount + '</span> vendors / ' +
     '<span class="count">' + gCount + '</span> groups pre-loaded.';
+  rebuildPeerRoiIndex();
   switchToUploadedMode();
 }
 
@@ -2676,11 +2814,20 @@ function parseWideFormat(text) {
   // by looking at metric names in row1
   const metricsPerWeek = weekStarts.length > 1 ? weekStarts[1].colStart - weekStarts[0].colStart : (row0.length - weekStarts[0].colStart);
   let gmvOffset = -1, ordersOffset = -1;
+  const spendOffsets = [];
   const firstStart = weekStarts[0].colStart;
   for (let j = 0; j < metricsPerWeek; j++) {
     const metric = (row1[firstStart + j] || '').toLowerCase();
     if (gmvOffset < 0 && metric.includes('gmv') && !metric.includes('diff')) gmvOffset = j;
     if (ordersOffset < 0 && metric.includes('orders') && !metric.includes('diff')) ordersOffset = j;
+
+    const looksLikeSpend =
+      (metric.includes('spend') || metric.includes('subsidy') || metric.includes('discount') || metric.includes('incentive') || metric.includes('campaign')) &&
+      !metric.includes('gmv') &&
+      !metric.includes('orders') &&
+      !metric.includes('aov') &&
+      !metric.includes('diff');
+    if (looksLikeSpend) spendOffsets.push(j);
   }
   if (gmvOffset < 0) gmvOffset = 0;
   if (ordersOffset < 0) ordersOffset = 1;
@@ -2703,7 +2850,17 @@ function parseWideFormat(text) {
       const gmv = parseNumber(gmvRaw);
       const orders = parseNumber(ordersRaw);
       const aov = (orders > 0 && !isNaN(gmv)) ? gmv / orders : NaN;
-      providerDB[pid].weeks.push({ week: ws.week, orders, gmv, aov });
+      let spend = NaN;
+      if (spendOffsets.length) {
+        let ssum = 0;
+        let any = false;
+        spendOffsets.forEach(off => {
+          const v = parseNumber(cols[ws.colStart + off] || '');
+          if (!isNaN(v) && v > 0) { ssum += v; any = true; }
+        });
+        if (any) spend = ssum;
+      }
+      providerDB[pid].weeks.push({ week: ws.week, orders, gmv, aov, spend });
     });
   }
 
@@ -2722,8 +2879,19 @@ function parseWideFormat(text) {
       } else {
         p.estimatedCV = ORDER_VALUE_CV;
       }
+
+      const orderVals = valid.map(w => w.orders).filter(v => typeof v === 'number' && !isNaN(v) && v > 0);
+      if (orderVals.length >= 6 && p.avgOrders > 0) {
+        const meanO = orderVals.reduce((s, v) => s + v, 0) / orderVals.length;
+        const varO = orderVals.reduce((s, v) => s + Math.pow(v - meanO, 2), 0) / orderVals.length;
+        const cvO = Math.sqrt(varO) / meanO;
+        p.estimatedOrderCV = Math.max(0.15, Math.min(1.2, cvO));
+      } else {
+        p.estimatedOrderCV = null;
+      }
     } else {
       p.avgOrders = 0; p.avgGMV = 0; p.avgAOV = 0; p.estimatedCV = ORDER_VALUE_CV;
+      p.estimatedOrderCV = null;
     }
   });
 
@@ -2734,6 +2902,7 @@ function parseWideFormat(text) {
     `<span class="count">${count}</span> providers loaded across <strong>${nWeeks} weeks</strong> ` +
     `(${weekStarts[0].week} to ${weekStarts[nWeeks-1].week}).`;
   document.getElementById('columnMapper').style.display = 'none';
+  rebuildPeerRoiIndex();
   switchToUploadedMode();
 }
 
@@ -2758,6 +2927,11 @@ function parseLongFormat(text) {
   columnMap.gmv = guessCol(['gmv','grossmerchandisevalue','revenue','totalrevenue','total_gmv','totalgmv','sales','totalsales','grossrevenue','totalgmvbeforediscounts']);
   columnMap.aov = guessCol(['aov','averageordervalue','avg_order_value','avgordervalue','average_order_value','basketsize']);
   columnMap.segment = guessCol(['segment','businesssegment','storesegment','store_segment','business_segment','category']);
+  columnMap.campaign_spend = guessCol([
+    'campaignspend','campaign_spend','marketingcampaignspend','marketing_campaign_spend','mcspend','mc_spend',
+    'boltcampaignspend','bolt_campaign_spend','boltspend','bolt_spend','bolt_incentive_spend','incentive_spend',
+    'smartpromospend','smart_promo_spend','spspend','sp_spend','promo_spend','promotion_spend','subsidy','discount_spend'
+  ]);
 
   uploadedColumns = headers;
   showColumnMapper(headers);
@@ -2807,6 +2981,7 @@ function showColumnMapper(headers) {
     { key: 'orders', label: 'Orders' },
     { key: 'gmv', label: 'GMV' },
     { key: 'aov', label: 'AOV' },
+    { key: 'campaign_spend', label: 'Campaign spend (optional)' },
     { key: 'segment', label: 'Segment' },
   ];
 
@@ -2818,7 +2993,7 @@ function showColumnMapper(headers) {
     html += `<div class="map-group">
       <span class="map-label">${f.label}:</span>
       <select onchange="columnMap['${f.key}']=this.value; reBuildDB()">${
-        f.key === 'segment' || f.key === 'aov' ? '<option value="">(none)</option>' + opts : opts
+        f.key === 'segment' || f.key === 'aov' || f.key === 'campaign_spend' ? '<option value="">(none)</option>' + opts : opts
       }</select>
     </div>`;
   });
@@ -2838,6 +3013,7 @@ function reBuildDB() {
   const gmvCol = columnMap.gmv;
   const aovCol = columnMap.aov;
   const segCol = columnMap.segment;
+  const spendCol = columnMap.campaign_spend;
 
   if (!idCol) return;
 
@@ -2854,6 +3030,7 @@ function reBuildDB() {
     entry.orders = ordersCol ? parseNumber(row[ordersCol]) : NaN;
     entry.gmv = gmvCol ? parseNumber(row[gmvCol]) : NaN;
     entry.aov = aovCol ? parseNumber(row[aovCol]) : NaN;
+    entry.spend = spendCol ? parseNumber(row[spendCol]) : NaN;
     if (segCol) providerDB[pid].segment = row[segCol] || '';
 
     if (isNaN(entry.gmv) && !isNaN(entry.orders) && !isNaN(entry.aov)) entry.gmv = entry.orders * entry.aov;
@@ -2877,8 +3054,19 @@ function reBuildDB() {
       } else {
         p.estimatedCV = ORDER_VALUE_CV;
       }
+
+      const orderVals = valid.map(w => w.orders).filter(v => typeof v === 'number' && !isNaN(v) && v > 0);
+      if (orderVals.length >= 6 && p.avgOrders > 0) {
+        const meanO = orderVals.reduce((s, v) => s + v, 0) / orderVals.length;
+        const varO = orderVals.reduce((s, v) => s + Math.pow(v - meanO, 2), 0) / orderVals.length;
+        const cvO = Math.sqrt(varO) / meanO;
+        p.estimatedOrderCV = Math.max(0.15, Math.min(1.2, cvO));
+      } else {
+        p.estimatedOrderCV = null;
+      }
     } else {
       p.avgOrders = 0; p.avgGMV = 0; p.avgAOV = 0; p.estimatedCV = ORDER_VALUE_CV;
+      p.estimatedOrderCV = null;
     }
   });
 
@@ -2886,6 +3074,7 @@ function reBuildDB() {
   const count = Object.keys(providerDB).length;
   document.getElementById('uploadStatus').innerHTML =
     `<span class="count">${count}</span> providers loaded.`;
+  rebuildPeerRoiIndex();
   switchToUploadedMode();
 }
 
@@ -2979,7 +3168,14 @@ function onProviderPick() {
   if (!p) return;
 
   currentSource = 'uploaded';
-  _selectedProvider = { orders: Math.round(p.avgOrders), aov: p.avgAOV, gmv: Math.round(p.avgGMV), cv: p.estimatedCV || ORDER_VALUE_CV, commission: p.commission || 0 };
+  _selectedProvider = {
+    orders: Math.round(p.avgOrders),
+    aov: p.avgAOV,
+    gmv: Math.round(p.avgGMV),
+    cv: p.estimatedCV || ORDER_VALUE_CV,
+    orderCv: p.estimatedOrderCV,
+    commission: p.commission || 0
+  };
 
   document.getElementById('statOrders').textContent = Math.round(p.avgOrders).toLocaleString();
   document.getElementById('statAOV').textContent = '€' + p.avgAOV.toFixed(2);
@@ -3245,6 +3441,113 @@ function movQualifyingRate(aov, mov, cv) {
   return { rate, condMean };
 }
 
+// Historic repeat multiplier for ROI (NOT cost estimation): scales incremental GMV into "lifetime" GMV.
+// - If we have enough weekly order history, estimate persistence via forward order momentum vs a stable baseline.
+// - Otherwise (embedded snapshot), fall back to past campaign spend intensity vs trailing GMV as a weak proxy.
+function repeatMultiplierFromWeeklyOrders(weeks, horizon) {
+  const wks = (weeks || [])
+    .filter(w => !isNaN(w.orders) && w.orders > 0)
+    .slice()
+    .sort((a, b) => String(a.week || '').localeCompare(String(b.week || '')));
+  if (wks.length < 10 || horizon < 1) return null;
+
+  const orders = wks.map(w => w.orders);
+  const med = (arr) => {
+    const a = arr.slice().sort((x,y)=>x-y);
+    const m = Math.floor(a.length / 2);
+    return a.length % 2 ? a[m] : (a[m-1] + a[m]) / 2;
+  };
+  const baseline = Math.max(1, med(orders));
+  const lifts = [];
+  for (let i = 0; i < wks.length - horizon; i++) {
+    let fut = 0;
+    for (let k = 1; k <= horizon; k++) fut += wks[i + k].orders;
+    const expected = baseline * horizon;
+    lifts.push(fut / expected);
+  }
+  if (!lifts.length) return null;
+  const avgLift = lifts.reduce((s, v) => s + v, 0) / lifts.length;
+  // Map average forward volume vs baseline into a repeat multiplier.
+  // avgLift ~ 1.0 => ~4x (legacy default). Higher persistence => higher multiplier (capped).
+  const mult = clamp(1 + (avgLift - 1) * 6, 1.5, 8);
+  return { mult, detail: `from ${wks.length} weekly order points (vs ${horizon}w forward baseline)` };
+}
+
+function repeatMultiplierFromCampaignIntensity(campBolt, campMerch, totalGmv) {
+  const bolt = Number(campBolt || 0);
+  const merch = Number(campMerch || 0);
+  const gmv = Number(totalGmv || 0);
+  if (!(gmv > 0) || (bolt + merch) <= 0) return null;
+  const intensity = (bolt + merch) / gmv; // over the same history window as totals
+  // Higher sustained marketing intensity => assume stronger repeat / LTV effects (bounded).
+  const mult = clamp(2 + intensity * 40, 2, 8);
+  return { mult, detail: `from past campaign spend vs trailing GMV (intensity ${(intensity*100).toFixed(2)}%)` };
+}
+
+function resolveRepeatMultiplierForROI(p, horizon) {
+  const DEFAULT_MULT = 4;
+  if (!p) return { mult: DEFAULT_MULT, detail: 'default (no provider context)' };
+
+  const fromWeeks = repeatMultiplierFromWeeklyOrders(p.weeks, horizon);
+  if (fromWeeks) return Object.assign({ mult: fromWeeks.mult }, fromWeeks);
+
+  const fromCamp = repeatMultiplierFromCampaignIntensity(p.campBolt, p.campMerch, p.totalGMV);
+  if (fromCamp) return Object.assign({ mult: fromCamp.mult }, fromCamp);
+
+  return { mult: DEFAULT_MULT, detail: 'default (insufficient weekly history + no campaign spend signal)' };
+}
+
+function orderSeriesCvFromWeeks(weeks) {
+  const vals = (weeks || [])
+    .map(w => w.orders)
+    .filter(v => typeof v === 'number' && !isNaN(v) && v > 0);
+  if (vals.length < 6) return null;
+  const mean = vals.reduce((s, v) => s + v, 0) / vals.length;
+  if (!(mean > 0)) return null;
+  const varPop = vals.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / vals.length;
+  const sd = Math.sqrt(varPop);
+  return sd / mean;
+}
+
+// ROI-only: if weekly rows include promo/campaign spend, estimate a mild per-provider sensitivity scaler
+// from the observed association between spend and orders (NOT causal; better than identical uplift for everyone).
+function promoSensitivityRatioFromWeeks(weeks) {
+  const wks = (weeks || [])
+    .filter(w => !isNaN(w.orders) && w.orders > 0 && typeof w.spend === 'number' && !isNaN(w.spend) && w.spend >= 0)
+    .slice()
+    .sort((a, b) => String(a.week || '').localeCompare(String(b.week || '')));
+  if (wks.length < 10) return null;
+
+  const xs = wks.map(w => w.spend);
+  const ys = wks.map(w => w.orders);
+  if (xs.every(v => v === 0)) return null;
+
+  const mx = xs.reduce((s, v) => s + v, 0) / xs.length;
+  const my = ys.reduce((s, v) => s + v, 0) / ys.length;
+  if (!(my > 0)) return null;
+
+  let vxx = 0, vyy = 0, vxy = 0;
+  for (let i = 0; i < wks.length; i++) {
+    const dx = xs[i] - mx;
+    const dy = ys[i] - my;
+    vxx += dx * dx;
+    vyy += dy * dy;
+    vxy += dx * dy;
+  }
+  vxx /= wks.length;
+  vyy /= wks.length;
+  vxy /= wks.length;
+
+  if (!(vxx > 1e-9)) return null;
+
+  const beta = vxy / vxx; // orders per € spend (very rough)
+  if (!isFinite(beta) || beta <= 0) return null;
+
+  const elasticity = beta * (mx / my); // %Δorders / %Δspend (approx)
+  const ratio = clamp(0.85 + 0.35 * elasticity, 0.7, 1.35);
+  return ratio;
+}
+
 function est(orders, aov, disc, type, share, fdCap, mov, cv, itemShare, opts) {
   opts = opts || {};
   const bpPen = opts.boltPlusPct || BOLT_PLUS_PENETRATION;
@@ -3305,6 +3608,30 @@ function est(orders, aov, disc, type, share, fdCap, mov, cv, itemShare, opts) {
       }
     }
   }
+
+  // If we have provider-specific volatility signals, gently scale ROI uplift (does NOT affect cost estimate above).
+  const ocRaw = orderSeriesCvFromWeeks(opts.weekOrders);
+  const oc = (typeof opts.orderCv === 'number' && !isNaN(opts.orderCv))
+    ? opts.orderCv
+    : (ocRaw === null ? null : clamp(ocRaw, 0.15, 1.2));
+
+  const ac = (typeof opts.aovCv === 'number' && !isNaN(opts.aovCv)) ? opts.aovCv : null;
+
+  if (oc !== null || ac !== null) {
+    const orderBaseline = 0.35;
+    const aovBaseline = Math.max(0.2, ORDER_VALUE_CV || 0.45);
+    const orderRatio = oc !== null ? clamp(oc / orderBaseline, 0.65, 1.35) : 1;
+    const aovRatio = ac !== null ? clamp(ac / aovBaseline, 0.75, 1.25) : 1;
+    const volMix = Math.sqrt(orderRatio * aovRatio);
+    roiUplift = roiUplift * volMix;
+  }
+
+  const spr = promoSensitivityRatioFromWeeks(opts.weekOrders);
+  if (spr !== null) roiUplift = roiUplift * spr;
+
+  const pr = (typeof opts.peerRoiScale === 'number' && isFinite(opts.peerRoiScale)) ? opts.peerRoiScale : 1;
+  if (pr !== 1) roiUplift = roiUplift * pr;
+
   const incrementalOrders = baseOrders * roiUplift;
   const incrementalGMV = incrementalOrders * aov;
 
@@ -3348,7 +3675,18 @@ function calculate() {
 
   if (orders <= 0 || aov <= 0) return;
 
-  const r = est(orders, aov, disc, type, share, fdCap, mov, provCV, itemShare, { audience, boltPlusPct });
+  const dbCtx = dataLoaded ? getActiveDB() : null;
+  const pCtx = (dbCtx && pid && dbCtx[pid]) ? dbCtx[pid] : null;
+  const estOpts = {
+    audience,
+    boltPlusPct,
+    weekOrders: pCtx ? pCtx.weeks : null,
+    orderCv: (pCtx && typeof pCtx.estimatedOrderCV === 'number' && !isNaN(pCtx.estimatedOrderCV)) ? pCtx.estimatedOrderCV : null,
+    aovCv: provCV,
+    peerRoiScale: (dataLoaded && pCtx) ? peerRoiUpliftScale(pCtx) : 1
+  };
+
+  const r = est(orders, aov, disc, type, share, fdCap, mov, provCV, itemShare, estOpts);
   const pw = r.provShare, bw = r.boltShare, tw = r.total;
   const pt = pw * weeks, bt = bw * weeks, gt = tw * weeks;
 
@@ -3397,7 +3735,12 @@ function calculate() {
   // ROI & Investment Context
   // ROI = incremental revenue / campaign cost (how many € in sales per €1 invested)
   // Net ROI = (revenue - cost) / cost
-  const REPEAT_MULTIPLIER = 4;
+  const roiHorizon = clamp(Math.max(2, Math.min(8, weeks)), 2, 8);
+  const dbForRoi = getActiveDB();
+  const pForRoi = (dataLoaded && dbForRoi && pid && dbForRoi[pid]) ? dbForRoi[pid] : null;
+  const repeat = resolveRepeatMultiplierForROI(pForRoi, roiHorizon);
+  const REPEAT_MULTIPLIER = repeat.mult;
+  const repeatDetail = repeat.detail || '';
   const incGMVwk = r.incrementalGMV;
   const incGMVtotal = incGMVwk * weeks;
   const lifetimeGMV = incGMVtotal * REPEAT_MULTIPLIER;
@@ -3435,7 +3778,10 @@ function calculate() {
         <div class="result-card">
           <div class="label">Extra Revenue (incl. repeat orders)</div>
           <div class="value" style="color:var(--accent);font-size:20px;">${fmt(lifetimeGMV)}</div>
-          <div class="sub">${fmt(incGMVtotal)} direct + ${REPEAT_MULTIPLIER - 1}x repeat value · +${Math.round(r.upliftOrders)} new orders/wk</div>
+          <div class="sub">${fmt(incGMVtotal)} direct + ${(REPEAT_MULTIPLIER - 1).toFixed(2)}x repeat value · +${Math.round(r.upliftOrders)} new orders/wk</div>
+          <div class="sub" style="margin-top:6px;color:var(--text-dim);font-size:11px;line-height:1.35;">
+            Repeat multiplier: <strong>${REPEAT_MULTIPLIER.toFixed(2)}×</strong> (${repeatDetail})
+          </div>
         </div>
         <div class="result-card">
           <div class="label">Net Return</div>
@@ -3450,7 +3796,7 @@ function calculate() {
       </div>
       <div style="margin-top:12px;">
         <div class="breakdown-item"><span class="bi-label">Direct incremental GMV (${weeks} wk${weeks>1?'s':''})</span><span class="bi-value">${fmt(incGMVtotal)}</span></div>
-        <div class="breakdown-item"><span class="bi-label">Est. lifetime value (${REPEAT_MULTIPLIER}x repeat multiplier)</span><span class="bi-value" style="color:var(--accent);">${fmt(lifetimeGMV)}</span></div>
+        <div class="breakdown-item"><span class="bi-label">Est. lifetime value (${REPEAT_MULTIPLIER.toFixed(2)}× repeat multiplier)</span><span class="bi-value" style="color:var(--accent);">${fmt(lifetimeGMV)}</span></div>
         <div class="divider"></div>
         <div class="breakdown-item"><span class="bi-label">Cost per extra order — total</span><span class="bi-value">${fmtDec(costPerExtraOrder)}</span></div>
         ${pw > 0 ? `<div class="breakdown-item"><span class="bi-label">Cost per extra order — provider</span><span class="bi-value">${fmtDec(provCostPerExtraOrder)}</span></div>` : ''}
@@ -3496,8 +3842,7 @@ function calculate() {
   `;
 
   // Scenarios — compute all first to find best ROI
-  const estOpts = { audience, boltPlusPct };
-  const RM = 4;
+  const RM = REPEAT_MULTIPLIER;
 
   function scenarioROI(s, wks) {
     const ltGMV = s.incrementalGMV * wks * RM;
@@ -3571,7 +3916,7 @@ function calculate() {
 
   ['enterprise','mm','smb','stores'].forEach(sk => {
     const sb = SEGMENT_BENCHMARKS[sk];
-    const sr = est(sb.avgOrders, sb.avgAOV, disc, type, share, fdCap, mov, provCV, itemShare, estOpts);
+    const sr = est(sb.avgOrders, sb.avgAOV, disc, type, share, fdCap, mov, provCV, itemShare, { ...estOpts, weekOrders: null, orderCv: null, aovCv: null });
     const isCurrent = sk === segment;
     segHtml += `<div class="scenario-row" style="${isCurrent ? 'color:var(--bolt);' : ''}">
       <span>${segNames[sk]} avg${isCurrent ? ' (selected)' : ''}</span>
@@ -3585,8 +3930,9 @@ function calculate() {
 
   // Past campaigns panel (if data loaded and provider has data)
   const pcp = document.getElementById('pastCampaignsPanel');
-  if (dataLoaded && providerDB[pid]) {
-    const p = providerDB[pid];
+  const pPast = (dataLoaded && getActiveDB() && pid) ? getActiveDB()[pid] : null;
+  if (dataLoaded && pPast) {
+    const p = pPast;
     pcp.style.display = 'block';
     const wks = p.weeks.filter(w => !isNaN(w.orders));
     if (wks.length > 0) {
