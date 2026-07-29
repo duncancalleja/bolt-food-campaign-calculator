@@ -397,7 +397,7 @@
   <span id="lastUpdated" style="font-size:11px;color:var(--text-dim);display:none"></span>
   <button id="btnRefresh" onclick="loadLiveData()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:4px">&#x21bb; Refresh</button>
   <a href="am-portfolio.html" class="nav-link">AM Portfolio →</a>
-  <a href="campaign-cost-calculator.html" class="nav-link">← Cost Calculator</a>
+  <a href="campaign-cost-calculator.html" class="nav-link" style="margin-left:0">Cost Calculator →</a>
 </div>
 
 <div class="filter-bar">
@@ -11121,25 +11121,43 @@ function safeFloat(s) {
   return isNaN(n) ? 0 : n;
 }
 
+function _sheetColIdx(headers, needles, fallback) {
+  for (let i = 0; i < headers.length; i++) {
+    const h = String(headers[i] || '').toLowerCase();
+    if (needles.some(n => h.includes(n))) return i;
+  }
+  return fallback;
+}
+
 function buildCampaigns(csvRows) {
   // Skip first 3 header rows, data starts at row index 3
+  const hdr = csvRows[2] || [];
+  const hasTraitCol = _sheetColIdx(hdr, ['provider trait'], -1) >= 0;
+  const col = {
+    week: 0, pid: 1, city: 2, pname: 3, comment: 4, campType: 5,
+    bonusPct: 6, costShare: 7, users: 8,
+    discountCap: _sheetColIdx(hdr, ['discount cap'], hasTraitCol ? 10 : 9),
+    mov: _sheetColIdx(hdr, ['mov(', 'minimum basket'], hasTraitCol ? 11 : 10),
+    invReason: _sheetColIdx(hdr, ['investment', 'spend objective'], hasTraitCol ? 12 : 11),
+  };
+  const minLen = Math.max(12, col.invReason + 1);
   const dataRows = csvRows.slice(3);
   const campaigns = [];
 
   for (const r of dataRows) {
-    if (r.length < 12) continue;
-    const week = r[0].trim();
-    const pid = r[1].trim();
-    const city = r[2].trim();
-    const pname = r[3].trim();
-    const comment = (r[4] || '').trim().substring(0, 80);
-    const campType = (r[5] || '').trim();
-    const bonusPct = safeFloat(r[6]);
-    const costShare = safeFloat(r[7]);
-    const users = (r[8] || '').trim();
-    const discountCap = safeFloat(r[9]);
-    const mov = safeFloat(r[10]);
-    const invReason = (r[11] || '').trim();
+    if (r.length < minLen) continue;
+    const week = r[col.week].trim();
+    const pid = r[col.pid].trim();
+    const city = r[col.city].trim();
+    const pname = r[col.pname].trim();
+    const comment = (r[col.comment] || '').trim().substring(0, 80);
+    const campType = (r[col.campType] || '').trim();
+    const bonusPct = safeFloat(r[col.bonusPct]);
+    const costShare = safeFloat(r[col.costShare]);
+    const users = (r[col.users] || '').trim();
+    const discountCap = safeFloat(r[col.discountCap]);
+    const mov = safeFloat(r[col.mov]);
+    const invReason = (r[col.invReason] || '').trim();
 
     if (!pid || !/^\d+$/.test(pid) || !campType) continue;
 
