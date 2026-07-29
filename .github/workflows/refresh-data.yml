@@ -62,14 +62,43 @@ jobs:
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
         run: python3 scripts/refresh_investment_data.py
 
-      - name: Commit and push updated data
+      - name: Commit and push updated data (calc + dash)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          # *-calc.json → Cost Calculator · *-dash.json → AM Spend dashboard
           git add data/ investment-data/
           if git diff --cached --quiet; then
             echo "No data changes to commit."
           else
-            git commit -m "Auto-refresh data from Databricks ($(date -u +%Y-%m-%d) UTC)"
+            git commit -m "Auto-refresh calculator + spend data from Databricks ($(date -u +%Y-%m-%d) UTC)"
             git push
+          fi
+
+      # Optional: also push data to Boltable (team URL). Needs secret BOLTABLE_DEPLOY_TOKEN
+      # = classic PAT with repo scope, SSO-authorized for boltable org.
+      - name: Deploy data to Boltable
+        env:
+          TOKEN: ${{ secrets.BOLTABLE_DEPLOY_TOKEN }}
+        run: |
+          if [ -z "${TOKEN:-}" ]; then
+            echo "Skipping Boltable deploy — add repo secret BOLTABLE_DEPLOY_TOKEN to enable."
+            exit 0
+          fi
+          STAGE=$(mktemp -d)
+          git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/boltable/food-campaign-calculator.git" "$STAGE"
+          mkdir -p "$STAGE/public/data" "$STAGE/public/investment-data"
+          cp -R data/. "$STAGE/public/data/"
+          cp -R investment-data/. "$STAGE/public/investment-data/"
+          rm -f "$STAGE/public/data/SHEETS_AND_SNAPSHOTS.md" "$STAGE/public/data/WEBHOOK_SETUP.md" 2>/dev/null || true
+          cd "$STAGE"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/data public/investment-data
+          if git diff --cached --quiet; then
+            echo "Boltable already up to date."
+          else
+            git commit -m "Auto-refresh calculator + spend data ($(date -u +%Y-%m-%d) UTC)"
+            git push origin main
+            echo "Boltable updated: https://food-campaign-calculator.boltable.eu"
           fi
