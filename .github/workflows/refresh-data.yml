@@ -62,16 +62,50 @@ jobs:
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
         run: python3 scripts/refresh_investment_data.py
 
-      - name: Commit and push updated data (calc + dash)
+      - name: Refresh CA budget envelopes (V2)
+        env:
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: |
+          if [ -f scripts/refresh_budget_data.py ]; then
+            ARGS=""
+            if [ -n "${{ github.event.inputs.countries }}" ]; then
+              ARGS=$(echo "${{ github.event.inputs.countries }}" | tr ',' ' ')
+            fi
+            python3 scripts/refresh_budget_data.py $ARGS
+          else
+            echo "No refresh_budget_data.py — skip"
+          fi
+
+      - name: Rebuild peer cost benchmarks (V2)
+        env:
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: |
+          if [ -f scripts/build_cost_benchmarks.py ]; then
+            python3 scripts/build_cost_benchmarks.py || echo "benchmarks rebuild failed (non-fatal)"
+          else
+            echo "No build_cost_benchmarks.py — skip"
+          fi
+
+      - name: Learn from snapshots (V2)
+        env:
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: |
+          if [ -f scripts/learn_from_snapshots.py ]; then
+            python3 scripts/learn_from_snapshots.py || echo "learn_from_snapshots failed (non-fatal)"
+          else
+            echo "No learn_from_snapshots.py — skip"
+          fi
+
+      - name: Commit and push updated data (calc + dash + budget)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          # *-calc.json → Cost Calculator · *-dash.json → AM Spend dashboard
+          # *-calc.json → Cost Calculator · *-dash.json → AM Spend · *-budget.json → V2 envelope
           git add data/ investment-data/
           if git diff --cached --quiet; then
             echo "No data changes to commit."
           else
-            git commit -m "Auto-refresh calculator + spend data from Databricks ($(date -u +%Y-%m-%d) UTC)"
+            git commit -m "Auto-refresh V2 calculator + spend + budget ($(date -u +%Y-%m-%d) UTC)"
             git push
           fi
 
@@ -98,7 +132,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "Boltable already up to date."
           else
-            git commit -m "Auto-refresh calculator + spend data ($(date -u +%Y-%m-%d) UTC)"
+            git commit -m "Auto-refresh V2 calculator + spend + budget ($(date -u +%Y-%m-%d) UTC)"
             git push origin main
             echo "Boltable updated: https://food-campaign-calculator.boltable.eu"
           fi

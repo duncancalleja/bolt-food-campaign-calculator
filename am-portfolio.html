@@ -142,8 +142,7 @@
 <div class="header">
   <h1>AM Portfolio Overview</h1>
   <span class="badge">Bolt Food Malta</span>
-  <span id="dataRefreshBadge" style="font-size:11px;color:var(--text-dim);background:var(--surface2);padding:3px 10px;border-radius:8px">Loading provider data…</span>
-  <a href="am-spend-dashboard.html" class="nav-link">AM Spend &rarr;</a>
+  <a href="am-spend-dashboard.html" class="nav-link">Campaign Spend Dashboard &rarr;</a>
   <a href="campaign-cost-calculator.html" class="nav-link" style="margin-left:0">Cost Calculator &rarr;</a>
 </div>
 
@@ -6581,36 +6580,8 @@ function renderPortfolio() {
   document.getElementById('summaryCards').innerHTML = cards;
 }
 
-async function _loadPortfolioData() {
-  const badge = document.getElementById('dataRefreshBadge');
-  try {
-    const resp = await fetch('data/mt-dash.json');
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const data = await resp.json();
-    if (data.provider_lookup) {
-      Object.keys(_PROVIDER_LOOKUP).forEach(k => delete _PROVIDER_LOOKUP[k]);
-      Object.assign(_PROVIDER_LOOKUP, data.provider_lookup);
-    }
-    if (badge) {
-      badge.textContent = data.refreshed
-        ? 'Data: ' + data.refreshed + ' · last 8 wks (GMV > 0)'
-        : 'Live provider data loaded';
-      badge.style.color = 'var(--accent)';
-      badge.style.background = 'var(--accent-dim)';
-    }
-  } catch (e) {
-    console.warn('mt-dash load failed, using embedded fallback:', e);
-    if (badge) {
-      badge.textContent = 'Embedded data (mt-dash.json unavailable)';
-      badge.style.color = 'var(--provider)';
-      badge.style.background = 'var(--provider-dim)';
-    }
-  }
-  loadBrandGroupData();
-  renderPortfolio();
-}
-
-_loadPortfolioData();
+loadBrandGroupData();
+renderPortfolio();
 </script>
 </body>
 </html>
