@@ -25,9 +25,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, "data")
 TEAM_SNAPSHOTS = os.path.join(DATA, "team-snapshots.json")
 
-RATIO_MIN, RATIO_MAX = 0.5, 2.0
+# Portfolio/category caps: allow up to ~1.55x — Malta recently needed ~1.4x (was under-estimating).
+RATIO_MIN, RATIO_MAX = 0.55, 1.55
 PROVIDER_RATIO_MIN, PROVIDER_RATIO_MAX = 0.4, 2.5
 MAX_WEEKS = 8
+ROLLING_WEEKS = 4  # median of last N matched weeks for portfolio calibration
 
 
 def camp_type_to_cat(camp_type: str) -> str:
@@ -54,22 +56,47 @@ def load_local_snapshots(cc: str) -> list:
     return []
 
 
-def infer_target_week(snap: dict) -> tuple[int, int] | None:
-    """Return (year, iso_week) the snapshot's campaigns ran in."""
-    camps = snap.get("campaigns") or []
-    weeks = [c.get("week") for c in camps if c.get("week")]
-    if weeks:
-        wk = int(statistics.mode(weeks))
-    else:
-        wk = int(snap.get("isoWeek") or 0) + 1
-    if wk <= 0:
-        return None
-    year = int(str(snap.get("date", ""))[:4] or date.today().year)
-    return year, wk
-
-
 def week_key(year: int, iso_week: int) -> str:
-    return f"{year}-W{iso_week:02d}" if iso_week < 10 else f"{year}-W{iso_week}"
+    return f"{year}-W{int(iso_week):02d}"
+
+
+def infer_target_week(snap: dict, dbx_actuals: dict | None = None) -> tuple[int, int] | None:
+    """Return (year, iso_week) to match Databricks actuals.
+
+    Prefer snapshot ISO week (from snap date). Traitless column "week" is an
+    ops week number and often does NOT equal ISO week — using it alone caused
+    learning to miss most recent snaps (only 1 week evaluated).
+    """
+    year = int(str(snap.get("date", ""))[:4] or date.today().year)
+    candidates: list[int] = []
+    iso = int(snap.get("isoWeek") or 0)
+    if iso > 0:
+        candidates.append(iso)
+    camps = snap.get("campaigns") or []
+    camp_weeks = [int(c.get("week")) for c in camps if c.get("week")]
+    if camp_weeks:
+        try:
+            candidates.append(int(statistics.mode(camp_weeks)))
+        except statistics.StatisticsError:
+            candidates.append(int(statistics.median(camp_weeks)))
+    # Unique preserve order
+    seen = set()
+    ordered = []
+    for w in candidates:
+        if w > 0 and w not in seen:
+            seen.add(w)
+            ordered.append(w)
+    if not ordered:
+        return None
+    if dbx_actuals:
+        for w in ordered:
+            if week_key(year, w) in dbx_actuals:
+                return year, w
+        # try previous calendar year for early-Jan edge cases
+        for w in ordered:
+            if week_key(year - 1, w) in dbx_actuals:
+                return year - 1, w
+    return year, ordered[0]
 
 
 def aggregate_snapshot_by_provider(campaigns: list) -> dict[str, dict]:
@@ -104,6 +131,14 @@ def extract_actuals_for_provider(pid_data: dict, cats: set[str]) -> dict | None:
                 prov += float(v[1] or 0)
                 total += float(v[2] or 0)
                 found = True
+    # Fallback: sum all categories if type→cat mapping missed
+    if not found:
+        for v in pid_data.values():
+            if isinstance(v, list) and len(v) >= 3:
+                bolt += float(v[0] or 0)
+                prov += float(v[1] or 0)
+                total += float(v[2] or 0)
+                found = True
     if not found:
         return None
     if total <= 0 and (bolt or prov):
@@ -112,7 +147,7 @@ def extract_actuals_for_provider(pid_data: dict, cats: set[str]) -> dict | None:
 
 
 def compare_snapshot_to_actuals(snap: dict, dbx_actuals: dict) -> dict | None:
-    target = infer_target_week(snap)
+    target = infer_target_week(snap, dbx_actuals)
     if not target:
         return None
     year, wk = target
@@ -126,6 +161,7 @@ def compare_snapshot_to_actuals(snap: dict, dbx_actuals: dict) -> dict | None:
     provider_ratios: dict[str, list[float]] = defaultdict(list)
     cat_pairs: dict[str, list[tuple[float, float]]] = defaultdict(list)
     total_est = total_act = 0.0
+    bolt_est = bolt_act = 0.0
     matched = 0
 
     for pid, est in by_pid.items():
@@ -133,7 +169,13 @@ def compare_snapshot_to_actuals(snap: dict, dbx_actuals: dict) -> dict | None:
         if not act or act["total"] <= 0 or est["est_total"] <= 0:
             continue
         matched += 1
-        ratio = act["total"] / est["est_total"]
+        # Prefer Bolt share for AM budget calibration when available
+        if est["est_bolt"] > 0 and act["bolt"] > 0:
+            ratio = act["bolt"] / est["est_bolt"]
+            bolt_est += est["est_bolt"]
+            bolt_act += act["bolt"]
+        else:
+            ratio = act["total"] / est["est_total"]
         ratio = max(PROVIDER_RATIO_MIN, min(PROVIDER_RATIO_MAX, ratio))
         provider_ratios[pid].append(ratio)
         total_est += est["est_total"]
@@ -144,7 +186,10 @@ def compare_snapshot_to_actuals(snap: dict, dbx_actuals: dict) -> dict | None:
     if matched == 0:
         return None
 
-    portfolio_ratio = total_act / total_est if total_est > 0 else 1.0
+    if bolt_est > 0 and bolt_act > 0:
+        portfolio_ratio = bolt_act / bolt_est
+    else:
+        portfolio_ratio = total_act / total_est if total_est > 0 else 1.0
     return {
         "week": wk_str,
         "snap_date": snap.get("date"),
@@ -152,6 +197,8 @@ def compare_snapshot_to_actuals(snap: dict, dbx_actuals: dict) -> dict | None:
         "portfolio_ratio": round(portfolio_ratio, 4),
         "total_est": round(total_est, 2),
         "total_act": round(total_act, 2),
+        "bolt_est": round(bolt_est, 2),
+        "bolt_act": round(bolt_act, 2),
         "provider_ratios": {pid: statistics.median(r) for pid, r in provider_ratios.items()},
         "cat_est_act": {cat: list(v) for cat, v in cat_pairs.items()},
     }
@@ -171,17 +218,26 @@ def build_corrections(cc: str, snapshots: list, dbx_actuals: dict) -> dict | Non
     if not week_results:
         return None
 
+    # Rolling window for portfolio (most recent N matched weeks)
+    rolling = week_results[:ROLLING_WEEKS]
+
     # Rolling provider correction: median ratio across evaluated weeks.
     prov_accum: dict[str, list[float]] = defaultdict(list)
     cat_accum: dict[str, list[tuple[float, float]]] = defaultdict(list)
     port_ratios = []
 
-    for wr in week_results:
+    for wr in rolling:
         port_ratios.append(wr["portfolio_ratio"])
         for pid, ratio in wr["provider_ratios"].items():
             prov_accum[pid].append(ratio)
         for cat, pairs in wr["cat_est_act"].items():
             cat_accum[cat].extend(pairs)
+
+    # Still accumulate providers from all matched weeks (more stable per-PID)
+    for wr in week_results:
+        for pid, ratio in wr["provider_ratios"].items():
+            if pid not in prov_accum:
+                prov_accum[pid].append(ratio)
 
     by_provider = {}
     for pid, ratios in prov_accum.items():
@@ -207,11 +263,13 @@ def build_corrections(cc: str, snapshots: list, dbx_actuals: dict) -> dict | Non
         "country": cc,
         "refreshed": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "weeks_evaluated": len(week_results),
+        "rolling_weeks": len(rolling),
         "latest_week": week_results[0]["week"],
         "latest_snap_date": week_results[0]["snap_date"],
         "portfolio": {
             "ratio": round(portfolio_ratio, 4),
             "bias_pct": round((portfolio_ratio - 1) * 100, 1),
+            "method": f"median_bolt_act_over_est_last_{len(rolling)}_weeks",
         },
         "by_category": by_category,
         "by_provider": by_provider,
@@ -223,6 +281,8 @@ def build_corrections(cc: str, snapshots: list, dbx_actuals: dict) -> dict | Non
                 "ratio": w["portfolio_ratio"],
                 "est": w["total_est"],
                 "act": w["total_act"],
+                "bolt_est": w.get("bolt_est"),
+                "bolt_act": w.get("bolt_act"),
             }
             for w in week_results
         ],

@@ -679,16 +679,17 @@ function _effectiveCorrections() {
 /**
  * Learned correction multiplier from last week's snapshot vs Databricks actuals.
  * Priority: provider-specific → category → portfolio. Capped to avoid wild swings.
+ * Portfolio cap raised to 1.55 to allow ~40% under-estimate correction (MT Jun–Jul).
  */
 function _correctionMultiplier(pid, cat) {
   const corr = _effectiveCorrections();
   if (!corr) return 1.0;
   const p = (corr.by_provider || {})[String(pid)];
-  if (p && p.ratio) return Math.min(2, Math.max(0.5, p.ratio));
+  if (p && p.ratio) return Math.min(1.55, Math.max(0.55, p.ratio));
   const c = (corr.by_category || {})[cat];
-  if (c) return Math.min(2, Math.max(0.5, c));
+  if (c) return Math.min(1.55, Math.max(0.55, c));
   const pr = corr.portfolio && corr.portfolio.ratio;
-  if (pr) return Math.min(1.35, Math.max(0.65, pr));
+  if (pr) return Math.min(1.55, Math.max(0.55, pr));
   return 1.0;
 }
 
@@ -714,13 +715,24 @@ function _autoLearnFromSnapshots() {
 
   const weekResults = [];
   for (const snap of snaps.slice(0, 8)) {
-    const camps = snap.campaigns || [];
-    const weeks = camps.map(c => c.week).filter(Boolean);
-    const wk = weeks.length ? Math.round(weeks.reduce((a, b) => a + b, 0) / weeks.length) : (snap.isoWeek || 0) + 1;
     const year = parseInt(String(snap.date || '').slice(0, 4), 10) || new Date().getFullYear();
-    const wkStr = year + '-W' + String(wk).padStart(2, '0');
-    if (!_DBX_ACTUALS[wkStr]) continue;
+    // Prefer ISO week from snapshot date — Traitless "week" column ≠ ISO week.
+    const candidates = [];
+    if (snap.isoWeek) candidates.push(Number(snap.isoWeek));
+    const campWeeks = (snap.campaigns || []).map(c => c.week).filter(Boolean);
+    if (campWeeks.length) {
+      const avg = Math.round(campWeeks.reduce((a, b) => a + b, 0) / campWeeks.length);
+      candidates.push(avg);
+    }
+    let wkStr = null;
+    for (const wk of candidates) {
+      if (!wk) continue;
+      const key = year + '-W' + String(wk).padStart(2, '0');
+      if (_DBX_ACTUALS[key]) { wkStr = key; break; }
+    }
+    if (!wkStr) continue;
 
+    const camps = snap.campaigns || [];
     const byPid = _aggregateByProvider(camps);
     const actuals = _buildMatchedActuals(wkStr, byPid);
     if (!actuals) continue;
@@ -730,10 +742,21 @@ function _autoLearnFromSnapshots() {
 
     const providerRatios = {};
     const catAccum = {};
+    let boltEst = 0, boltAct = 0;
     for (const [pid, p] of Object.entries(byPid)) {
       const act = actuals[pid];
       if (!act || act.total <= 0 || p.estTotal <= 0) continue;
-      providerRatios[pid] = Math.min(2.5, Math.max(0.4, act.total / p.estTotal));
+      const estBolt = (p.campaigns || []).reduce((s, c) => s + (c.estBolt || 0), 0);
+      // Prefer Bolt ratio for AM budget calibration
+      let ratio;
+      if (estBolt > 0 && (act.bolt || 0) > 0) {
+        ratio = act.bolt / estBolt;
+        boltEst += estBolt;
+        boltAct += act.bolt;
+      } else {
+        ratio = act.total / p.estTotal;
+      }
+      providerRatios[pid] = Math.min(2.5, Math.max(0.4, ratio));
       p.campaigns.forEach(c => {
         const cat = _campTypeToCat(c.type);
         if (!catAccum[cat]) catAccum[cat] = { est: 0, act: 0 };
@@ -743,12 +766,15 @@ function _autoLearnFromSnapshots() {
     }
     const byCategory = {};
     for (const [cat, v] of Object.entries(catAccum)) {
-      if (v.est > 0) byCategory[cat] = Math.min(2, Math.max(0.5, v.act / v.est));
+      if (v.est > 0) byCategory[cat] = Math.min(1.55, Math.max(0.55, v.act / v.est));
     }
+    const portfolioRatio = (boltEst > 0 && boltAct > 0)
+      ? boltAct / boltEst
+      : (score.totalAct / score.totalEst);
     weekResults.push({
       week: wkStr,
       snap_date: snap.date,
-      portfolio_ratio: score.totalAct / score.totalEst,
+      portfolio_ratio: portfolioRatio,
       matched: score.matched,
       by_provider: providerRatios,
       by_category: byCategory,
@@ -756,6 +782,8 @@ function _autoLearnFromSnapshots() {
   }
   if (!weekResults.length) return;
 
+  // Rolling last 4 weeks for portfolio; all weeks for provider medians
+  const rolling = weekResults.slice(0, 4);
   const latest = weekResults[0];
   const provOut = {};
   weekResults.forEach(wr => {
@@ -767,10 +795,10 @@ function _autoLearnFromSnapshots() {
   const byProvider = {};
   for (const [pid, rs] of Object.entries(provOut)) {
     rs.sort((a, b) => a - b);
-    byProvider[pid] = { ratio: Math.min(2, Math.max(0.5, rs[Math.floor(rs.length / 2)])), weeks: rs.length };
+    byProvider[pid] = { ratio: Math.min(1.55, Math.max(0.55, rs[Math.floor(rs.length / 2)])), weeks: rs.length };
   }
   const catMerge = {};
-  weekResults.forEach(wr => {
+  rolling.forEach(wr => {
     for (const [cat, r] of Object.entries(wr.by_category)) {
       if (!catMerge[cat]) catMerge[cat] = [];
       catMerge[cat].push(r);
@@ -779,18 +807,26 @@ function _autoLearnFromSnapshots() {
   const byCategory = {};
   for (const [cat, rs] of Object.entries(catMerge)) {
     rs.sort((a, b) => a - b);
-    byCategory[cat] = Math.min(2, Math.max(0.5, rs[Math.floor(rs.length / 2)]));
+    byCategory[cat] = Math.min(1.55, Math.max(0.55, rs[Math.floor(rs.length / 2)]));
   }
-  const portRatios = weekResults.map(w => w.portfolio_ratio).sort((a, b) => a - b);
-  const portfolioRatio = Math.min(2, Math.max(0.5, portRatios[Math.floor(portRatios.length / 2)]));
+  const portRatios = rolling.map(w => w.portfolio_ratio).sort((a, b) => a - b);
+  const portfolioRatio = Math.min(1.55, Math.max(0.55, portRatios[Math.floor(portRatios.length / 2)]));
 
   _LIVE_CORRECTIONS = {
     latest_week: latest.week,
     latest_snap_date: latest.snap_date,
     weeks_evaluated: weekResults.length,
-    portfolio: { ratio: portfolioRatio, bias_pct: Math.round((portfolioRatio - 1) * 1000) / 10 },
+    rolling_weeks: rolling.length,
+    portfolio: {
+      ratio: portfolioRatio,
+      bias_pct: Math.round((portfolioRatio - 1) * 1000) / 10,
+      method: 'median_bolt_act_over_est_last_' + rolling.length + '_weeks'
+    },
     by_provider: byProvider,
     by_category: byCategory,
+    history: weekResults.map(w => ({
+      week: w.week, snap_date: w.snap_date, ratio: Math.round(w.portfolio_ratio * 1000) / 1000, matched: w.matched
+    })),
     _live: true,
   };
   _renderLearningBanner();
@@ -805,12 +841,15 @@ function _renderLearningBanner() {
   }
   const p = corr.portfolio || {};
   const bias = p.bias_pct != null ? p.bias_pct : Math.round(((p.ratio || 1) - 1) * 1000) / 10;
-  const biasNote = bias > 5 ? 'model was underestimating' : bias < -5 ? 'model was overestimating' : 'model was close';
+  const biasNote = bias > 5 ? 'model was underestimating — estimates scaled up' : bias < -5 ? 'model was overestimating — estimates scaled down' : 'model was close';
   const src = corr._live ? 'live' : 'server';
+  const roll = corr.rolling_weeks || corr.weeks_evaluated;
   el.style.display = '';
-  el.innerHTML = '<span style="font-weight:600">Learned from ' + corr.latest_week + '</span> · '
-    + corr.weeks_evaluated + ' week(s) · portfolio ' + (p.ratio || 1).toFixed(2) + 'x (' + (bias >= 0 ? '+' : '') + bias + '%) · '
-    + biasNote + ' · corrections applied to estimates'
+  el.innerHTML = '<span style="font-weight:600">Learning active</span> · '
+    + 'latest ' + (corr.latest_week || '') + ' · '
+    + corr.weeks_evaluated + ' week(s) matched · rolling ' + roll + ' · '
+    + 'portfolio ×' + (p.ratio || 1).toFixed(2) + ' (' + (bias >= 0 ? '+' : '') + bias + '%) · '
+    + biasNote
     + (src === 'live' ? ' <span style="opacity:.7">(browser)</span>' : '');
 }
 
@@ -12278,7 +12317,8 @@ function _buildMatchedActuals(weekKey, byPid) {
     const pidData = wd[pid];
     if (!pidData) continue;
     const cats = _providerCats(p);
-    const vals = _extractFromActualsEntry(pidData, cats);
+    let vals = _extractFromActualsEntry(pidData, cats);
+    if (!vals) vals = _extractAllFromEntry(pidData);
     if (vals) out[pid] = vals;
   }
   return out;

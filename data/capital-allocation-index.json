@@ -9,7 +9,12 @@
       "sheet_id": "1pPOHFsJwW_wF66_sHGtw0AKvuDqJpG0L02NQqq4v0SI",
       "label": "Capital Allocation Demand Incentive - JULY 2026",
       "targets_file": "capital-allocation-targets-2026-07.json"
+    },
+    "2026-08": {
+      "sheet_id": "1pPOHFsJwW_wF66_sHGtw0AKvuDqJpG0L02NQqq4v0SI",
+      "label": "AUGUST 2026 (provisional — DI% from July CA until Aug sheet published)",
+      "targets_file": "capital-allocation-targets-2026-07.json"
     }
   },
-  "default_month": "2026-06"
+  "default_month": "2026-08"
 }
