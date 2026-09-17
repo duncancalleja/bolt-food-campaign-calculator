@@ -31,8 +31,8 @@ DATA = os.path.join(ROOT, "data")
 MIN_PROVIDERS = 5
 TRIM = 0.10
 CR_MIN, CR_MAX = 0.001, 0.60
-FLAT_REDEMPTION = {"md": 0.92, "id": 0.35, "fd": 0.92}
-FLAT_BASKET = 0.30
+FLAT_REDEMPTION = {"md": 0.781, "id": 0.457, "fd": 0.92}
+FLAT_BASKET = 0.39
 AVG_DELIVERY_FEE = 1.75
 
 
