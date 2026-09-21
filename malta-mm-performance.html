@@ -195,6 +195,9 @@
       border: 1px solid #166534; padding: .65rem 1rem; border-radius: 10px; display: none; z-index: 50;
     }
     .toast.show { display: block; animation: fade .2s ease; }
+    .sync-ok { color: #86efac; }
+    .sync-saving { color: #fcd34d; }
+    .sync-offline { color: #fca5a5; }
 
     .list { margin: 0; padding-left: 1.1rem; color: var(--text); line-height: 1.55; }
     .list li { margin: .35rem 0; }
@@ -231,7 +234,7 @@
   <footer class="app-footer">
     <div class="wrap" id="footerText">Boltable static · unlisted</div>
   </footer>
-  <div class="toast" id="toast">Saved to this browser</div>
+  <div class="toast" id="toast">Saved for team</div>
 
   <script>
   const LS_KEY = 'mt-mm-performance-hub-v2';
@@ -321,34 +324,190 @@
   }
   function showToast(msg) {
     const t = document.getElementById('toast');
-    t.textContent = msg || 'Saved to this browser';
+    t.textContent = msg || 'Saved for team';
     t.classList.add('show');
     clearTimeout(showToast._t);
     showToast._t = setTimeout(() => t.classList.remove('show'), 1600);
   }
 
-  // Weekly notes and pipeline rows are stored per person + KPI, so two AMs working the same
-  // KPI never overwrite each other and a page reset only clears that person's KPI blocks.
+  // Shared state follows Duncan's mt-smb-mm-resegmentation pattern: field-level deltas go to a
+  // same-origin GET/PUT API, while localStorage is only a cache and one-time migration source.
+  // Keys remain per person + KPI, so two AMs never overwrite each other's weekly blocks.
   function stateKey(person, kpi) { return `${person}||${kpi}`; }
-  function loadState() {
+  const emptySharedState = () => ({
+    version: 0, updated_at: null, updated_by: null, entries: {}, next_steps: {}
+  });
+  let sharedState = emptySharedState();
+  let sharedOnline = false;
+  let pendingDeltas = { entries: {}, next_steps: {} };
+  let flushTimer = null;
+
+  function loadLocalState() {
     try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); }
     catch { return {}; }
   }
-  function saveState(state) { localStorage.setItem(LS_KEY, JSON.stringify(state)); }
+  function saveLocalState(state) {
+    localStorage.setItem(LS_KEY, JSON.stringify(state));
+  }
+  function loadState() {
+    if (!sharedOnline) return loadLocalState();
+    return Object.assign({}, sharedState.entries, sharedState.next_steps);
+  }
   function getEntry(person, kpi) {
     const state = loadState();
     return state[stateKey(person, kpi)] || {};
   }
   function patchEntry(person, kpi, patch) {
-    const state = loadState();
     const key = stateKey(person, kpi);
-    state[key] = Object.assign({}, state[key], patch);
-    saveState(state);
+    const local = loadLocalState();
+    local[key] = Object.assign({}, local[key], patch);
+    saveLocalState(local);
+    sharedState.entries[key] = Object.assign({}, sharedState.entries[key], patch);
+    pendingDeltas.entries[key] = Object.assign({}, pendingDeltas.entries[key], patch);
+    queueSharedSave();
   }
   function clearPerson(person) {
-    const state = loadState();
-    Object.keys(state).forEach(k => { if (k.startsWith(person + '||')) delete state[k]; });
-    saveState(state);
+    const local = loadLocalState();
+    const keys = new Set([
+      ...Object.keys(local),
+      ...Object.keys(sharedState.entries),
+    ].filter(k => k.startsWith(person + '||')));
+    keys.forEach(key => {
+      delete local[key];
+      delete sharedState.entries[key];
+      pendingDeltas.entries[key] = null;
+    });
+    saveLocalState(local);
+    queueSharedSave();
+  }
+  function patchNextStep(key, value) {
+    const clean = value.trim();
+    const local = loadLocalState();
+    if (clean) local[key] = clean;
+    else delete local[key];
+    saveLocalState(local);
+    if (clean) sharedState.next_steps[key] = clean;
+    else delete sharedState.next_steps[key];
+    pendingDeltas.next_steps[key] = clean || null;
+    queueSharedSave();
+  }
+  function updateSyncStatus(kind, text) {
+    const el = document.getElementById('syncStatus');
+    if (!el) return;
+    el.className = `pill sync-${kind}`;
+    el.innerHTML = `Team notes <strong>${esc(text)}</strong>`;
+  }
+  function mergePendingIntoShared() {
+    Object.entries(pendingDeltas.entries).forEach(([key, patch]) => {
+      if (patch === null) delete sharedState.entries[key];
+      else sharedState.entries[key] = Object.assign({}, sharedState.entries[key], patch);
+    });
+    Object.entries(pendingDeltas.next_steps).forEach(([key, value]) => {
+      if (value) sharedState.next_steps[key] = value;
+      else delete sharedState.next_steps[key];
+    });
+  }
+  function ingestSharedState(data) {
+    sharedState = Object.assign(emptySharedState(), data || {});
+    sharedState.entries ||= {};
+    sharedState.next_steps ||= {};
+    mergePendingIntoShared();
+    sharedOnline = true;
+  }
+  async function requestSharedState() {
+    const response = await fetch('/api/state', { cache: 'no-store' });
+    if (!response.ok) throw new Error(`Team state unavailable (${response.status})`);
+    return response.json();
+  }
+  function localMigrationDeltas() {
+    const entries = {};
+    const next_steps = {};
+    Object.entries(loadLocalState()).forEach(([key, value]) => {
+      if (key.startsWith('next||')) next_steps[key] = value;
+      else if (value && typeof value === 'object') entries[key] = value;
+    });
+    return { entries, next_steps };
+  }
+  async function initSharedState() {
+    try {
+      ingestSharedState(await requestSharedState());
+      const migration = localMigrationDeltas();
+      if (Object.keys(migration.entries).length || Object.keys(migration.next_steps).length) {
+        const response = await fetch('/api/state', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deltas: migration, migrate_missing: true, updated_by: 'local-migration' }),
+        });
+        if (response.ok) ingestSharedState(await response.json());
+      }
+    } catch (error) {
+      sharedOnline = false;
+      console.warn(error);
+    }
+  }
+  function queueSharedSave() {
+    updateSyncStatus('saving', 'saving…');
+    clearTimeout(flushTimer);
+    flushTimer = setTimeout(flushSharedSave, 600);
+  }
+  async function flushSharedSave() {
+    flushTimer = null;
+    const sending = pendingDeltas;
+    if (!Object.keys(sending.entries).length && !Object.keys(sending.next_steps).length) return;
+    pendingDeltas = { entries: {}, next_steps: {} };
+    try {
+      const response = await fetch('/api/state', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deltas: sending, updated_by: 'dashboard-user' }),
+      });
+      if (!response.ok) throw new Error(`Save failed (${response.status})`);
+      ingestSharedState(await response.json());
+      updateSyncStatus('ok', 'shared');
+      showToast('Saved for team');
+    } catch (error) {
+      Object.entries(sending.entries).forEach(([key, patch]) => {
+        if (patch === null) pendingDeltas.entries[key] = null;
+        else pendingDeltas.entries[key] = Object.assign({}, patch, pendingDeltas.entries[key]);
+      });
+      Object.assign(pendingDeltas.next_steps, sending.next_steps);
+      updateSyncStatus('offline', 'offline — retrying');
+      console.warn(error);
+      flushTimer = setTimeout(flushSharedSave, 3000);
+    }
+  }
+  async function pollSharedState() {
+    if (flushTimer || document.hidden) return;
+    try {
+      const data = await requestSharedState();
+      if (data.version !== sharedState.version) {
+        ingestSharedState(data);
+        applySharedStateToDom();
+        showToast(`Updated by ${data.updated_by || 'a teammate'}`);
+      }
+      updateSyncStatus('ok', 'shared');
+    } catch (error) {
+      updateSyncStatus('offline', 'offline');
+      console.warn(error);
+    }
+  }
+  function applySharedStateToDom() {
+    document.querySelectorAll('.kpi-block').forEach(block => {
+      const entry = getEntry(block.dataset.person, block.dataset.kpi);
+      block.querySelectorAll('textarea[data-field]').forEach(el => {
+        if (document.activeElement !== el) el.value = entry[el.dataset.field] ?? '';
+      });
+      const tbody = block.querySelector('tbody[data-rows]');
+      if (tbody && !block.contains(document.activeElement) && Array.isArray(entry.rows)) {
+        const rows = entry.rows.length ? entry.rows : [{}];
+        tbody.innerHTML = rows.map(pipeRowHtml).join('');
+        const foot = block.querySelector('[data-pipe-foot]');
+        if (foot) foot.textContent = pipeFooterText(rows, block.dataset.gap);
+      }
+    });
+    document.querySelectorAll('input[data-next-key]').forEach(input => {
+      if (document.activeElement !== input) input.value = sharedState.next_steps[input.dataset.nextKey] || '';
+    });
   }
 
   async function loadJSON(path) {
@@ -751,7 +910,7 @@
         <div class="toolbar" style="margin:.85rem 0 0">
           <button type="button" class="btn" data-action="copy-update">Copy weekly update</button>
           <button type="button" class="btn secondary" data-action="reset-person">Reset this page to pack defaults</button>
-          <span class="pill">Notes and pipeline rows save to this browser</span>
+          <span class="pill">Notes and pipeline rows are shared with the team</span>
         </div>
       </div>
       ${ordered.map(w => kpiBlockHtml(person, w, slRows, spRows)).join('')}`;
@@ -819,11 +978,7 @@
     body.addEventListener('change', e => {
       const input = e.target.closest('input[data-next-key]');
       if (!input) return;
-      const state = loadState();
-      if (input.value.trim()) state[input.dataset.nextKey] = input.value.trim();
-      else delete state[input.dataset.nextKey];
-      saveState(state);
-      showToast('Next step saved');
+      patchNextStep(input.dataset.nextKey, input.value);
     });
     paint();
   }
@@ -970,6 +1125,7 @@
         loadJSON('data/malta-mm/hub-data.json'),
         loadJSON('data/malta-mm/sl-targetable.json'),
         loadJSON('data/malta-mm/sp-targetable.json'),
+        initSharedState(),
       ]);
 
       const people = (hub.team || []).filter(t => OWNER_ALIASES[t.name]);
@@ -985,7 +1141,8 @@
         <span class="pill">AMs <strong>${people.length}</strong></span>
         <span class="pill">SL targetable <strong>${fmtNum(slTargetable.length)}</strong></span>
         <span class="pill">SP targetable <strong>${fmtNum(spTargetable.length)}</strong></span>
-        <span class="pill">Data as of <strong>${esc(asOf)}</strong></span>`;
+        <span class="pill">Data as of <strong>${esc(asOf)}</strong></span>
+        <span class="pill ${sharedOnline ? 'sync-ok' : 'sync-offline'}" id="syncStatus">Team notes <strong>${sharedOnline ? 'shared' : 'offline'}</strong></span>`;
       document.getElementById('footerText').textContent =
         `Boltable static · mt-mm-performance · unlisted · data as of ${asOf} · opened ${TODAY} Asia/Baku`;
 
@@ -1022,6 +1179,7 @@
       });
       const initial = (location.hash || '#overview').slice(1);
       activateTab(tabDefs.some(t => t.id === initial) ? initial : 'overview');
+      setInterval(pollSharedState, 8000);
     } catch (err) {
       const boot = document.getElementById('boot');
       if (boot) { boot.className = 'error'; boot.textContent = String(err.message || err); }
