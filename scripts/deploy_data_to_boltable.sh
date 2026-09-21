@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copy refreshed data/ + HTML into boltable clone and push.
+# Copy refreshed data/ + HTML + shared-state backend into boltable clone and push.
 # Updates BOTH cost calculator (data/*-calc.json) and AM spend (data/*-dash.json).
 # Also copies malta-mm-performance.html + data/malta-mm/ (unlisted; direct URL only).
 # Usage: bash scripts/deploy_data_to_boltable.sh
@@ -27,11 +27,15 @@ for f in am-spend-dashboard.html campaign-cost-calculator.html am-portfolio.html
   fi
 done
 
+# The Malta hub now needs a same-origin API. Move the deployed app from static nginx to the
+# FastAPI web process used by mt-smb-mm-resegmentation; it still serves every file in public/.
+cp "$SRC/boltable-backend/server.py" "$DEST/server.py"
+cp "$SRC/boltable-backend/requirements.txt" "$DEST/requirements.txt"
+cp "$SRC/boltable-backend/Procfile" "$DEST/Procfile"
+rm -f "$DEST/project.toml"
+
 cd "$DEST"
-git add public/data public/investment-data \
-  public/am-spend-dashboard.html public/campaign-cost-calculator.html \
-  public/am-portfolio.html public/investment-dashboard.html \
-  public/malta-mm-performance.html 2>/dev/null || true
+git add -A
 
 if git diff --cached --quiet; then
   echo "No Boltable data changes to push."
