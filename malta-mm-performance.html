@@ -127,6 +127,10 @@
     }
     .chip.active { border-color: var(--accent); color: var(--text); background: rgba(79,140,255,.15); }
     .chip .n { font-weight: 700; color: var(--text); margin-left: .25rem; }
+    .targetable { margin-top: .75rem; }
+    .targetable .count-pills { display: flex; flex-wrap: wrap; gap: .45rem; margin: .55rem 0 .85rem; }
+    .next-step { min-width: 180px; width: 100%; padding: .4rem .5rem; font-size: .85rem; }
+    .load-more { margin-top: .75rem; }
 
     .kpi-block { margin-bottom: 1rem; }
     .kpi-block > header {
@@ -223,12 +227,20 @@
   // Nothing outside this list is shown anywhere in the hub.
   const KPI_ORDER = ['Q3 Renegotiations', 'Sponsored Listings', 'Bolt Plus', 'Marketing Campaigns', 'Smart Promotions'];
 
-  // Account-level enrolment data only exists for Sponsored Listings (Databricks pull in sl-pipeline.json).
-  // Every other KPI gets an empty pipeline table for the AM to fill in — we never invent accounts.
-  const ENROLMENT_KPI = 'Sponsored Listings';
-  const ENROLMENT_STATUSES = ['Never enrolled', 'Enrolled in period', 'Currently enrolled', 'Churned / ended'];
+  // Account-level targetable lists exist for Sponsored Listings and Smart Promotions
+  // (full active Malta universe in sl-targetable.json / sp-targetable.json).
+  // Every other KPI keeps an empty pipeline table for the AM to fill in — we never invent accounts.
+  const TARGETABLE_KPIS = ['Sponsored Listings', 'Smart Promotions'];
+  const TARGETABLE_PAGE = 250;
+  const TARGETABLE_FILTERS = [
+    { key: 'pipeline', label: 'Pipeline (can target)', test: r => !r.currentlyOn },
+    { key: 'all', label: 'All targetable', test: () => true },
+    { key: 'never', label: 'Never had on', test: r => !r.everHadOn },
+    { key: 'churned', label: 'Ever had on (not current)', test: r => r.everHadOn && !r.currentlyOn },
+    { key: 'current', label: 'Currently on', test: r => r.currentlyOn },
+  ];
 
-  // Pipeline owner mapping. sl-pipeline.json carries the Salesforce owner string, which has shown up
+  // Pipeline owner mapping. Targetable JSON carries the Salesforce owner string, which has shown up
   // with accents, transliterations and short first names (Gülçin/Gulcin Ergüven, Yousef/Youssef/Yusuf
   // Moungad, Alena/Alyona/Elena Tokareva). Owner strings are normalised (lowercased, accents and
   // punctuation stripped) and matched against these aliases, with a surname fallback, so a spelling
@@ -336,12 +348,43 @@
     }, 0);
   }
 
+  function formatDate(value) {
+    if (!value) return '—';
+    const match = String(value).match(/^\d{4}-\d{2}-\d{2}/);
+    return match ? match[0] : String(value);
+  }
+
+  function targetableStats(rows) {
+    return {
+      all: rows.length,
+      current: rows.filter(r => r.currentlyOn).length,
+      ever: rows.filter(r => r.everHadOn).length,
+      never: rows.filter(r => !r.everHadOn).length,
+      pipeline: rows.filter(r => !r.currentlyOn).length,
+      churned: rows.filter(r => r.everHadOn && !r.currentlyOn).length,
+    };
+  }
+
+  function filterCount(rows, key) {
+    const f = TARGETABLE_FILTERS.find(x => x.key === key);
+    return f ? rows.filter(f.test).length : rows.length;
+  }
+
+  function bucketByOwner(rows, people) {
+    const map = new Map(people.map(p => [p.name, []]));
+    rows.forEach(row => {
+      const owner = canonicalOwner(row.owner);
+      if (owner && map.has(owner)) map.get(owner).push(row);
+    });
+    map.forEach(list => list.sort((a, b) => String(a.accountName || '').localeCompare(String(b.accountName || ''))));
+    return map;
+  }
+
   /* ---------------------------------------------------------------- overview */
 
-  function renderOverview(hub, summary, pipelineByOwner, people) {
+  function renderOverview(hub, people, slByOwner, spByOwner, slAll, spAll) {
     const kpis = hub.countryKpis || [];
     const scorecard = hub.scorecard || [];
-    const scope = summary.amScope || {};
 
     const kpiCards = kpis.map(k => {
       const trend = ['jun', 'jul', 'aug', 'sep']
@@ -409,20 +452,32 @@
         </tr>`;
     }).join('');
 
-    const pipeRows = people.map(p => {
-      const rows = pipelineByOwner.get(p.name) || [];
-      const count = s => rows.filter(r => r.enrolmentStatus === s).length;
-      return `
+    const ownerSummary = (byOwner) => {
+      const rows = people.map(p => {
+        const stats = targetableStats(byOwner.get(p.name) || []);
+        return `
+          <tr>
+            <td><strong>${esc(p.name)}</strong></td>
+            <td class="num">${fmtNum(stats.all)}</td>
+            <td class="num">${fmtNum(stats.current)}</td>
+            <td class="num">${fmtNum(stats.ever)}</td>
+            <td class="num">${fmtNum(stats.never)}</td>
+            <td class="num">${fmtNum(stats.pipeline)}</td>
+          </tr>`;
+      }).join('');
+      const totals = targetableStats(people.flatMap(p => byOwner.get(p.name) || []));
+      return `${rows}
         <tr>
-          <td><strong>${esc(p.name)}</strong></td>
-          <td class="num">${fmtNum(rows.length)}</td>
-          ${ENROLMENT_STATUSES.map(s => `<td class="num">${fmtNum(count(s))}</td>`).join('')}
+          <td><strong>Five AMs</strong></td>
+          <td class="num">${fmtNum(totals.all)}</td>
+          <td class="num">${fmtNum(totals.current)}</td>
+          <td class="num">${fmtNum(totals.ever)}</td>
+          <td class="num">${fmtNum(totals.never)}</td>
+          <td class="num">${fmtNum(totals.pipeline)}</td>
         </tr>`;
-    }).join('');
-    const allAmRows = people.flatMap(p => pipelineByOwner.get(p.name) || []);
-    const totalCount = s => allAmRows.filter(r => r.enrolmentStatus === s).length;
-
-    const u = summary.universe || {};
+    };
+    const slStats = targetableStats(slAll);
+    const spStats = targetableStats(spAll);
     const reqs = hub.advayRequirements || [];
 
     return `
@@ -462,28 +517,47 @@
       </div>
 
       <div class="grid grid-4" style="margin-bottom:1rem">
-        <div class="card stat"><div class="label">SL accounts owned by the 5 AMs</div><div class="value">${fmtNum(allAmRows.length)}</div><div class="hint">of ${fmtNum(scope.rowsOwnedByAms + scope.rowsOtherOwners || 0)} rows in the pull</div></div>
-        <div class="card stat"><div class="label">Never enrolled</div><div class="value">${fmtNum(totalCount('Never enrolled'))}</div><div class="hint">Universe: ${fmtNum(u.neverEnrolled)}</div></div>
-        <div class="card stat"><div class="label">Enrolled in period</div><div class="value">${fmtNum(totalCount('Enrolled in period'))}</div><div class="hint">Universe: ${fmtNum(u.enrolledInPeriod)}</div></div>
-        <div class="card stat"><div class="label">Currently enrolled</div><div class="value">${fmtNum(totalCount('Currently enrolled'))}</div><div class="hint">Universe: ${fmtNum(u.currentlyEnrolled)}</div></div>
+        <div class="card stat"><div class="label">SL targetable</div><div class="value">${fmtNum(slStats.all)}</div><div class="hint">Full active Malta universe</div></div>
+        <div class="card stat"><div class="label">SL currently on</div><div class="value">${fmtNum(slStats.current)}</div><div class="hint">${fmtNum(slStats.pipeline)} can target</div></div>
+        <div class="card stat"><div class="label">SP targetable</div><div class="value">${fmtNum(spStats.all)}</div><div class="hint">Full active Malta universe</div></div>
+        <div class="card stat"><div class="label">SP currently on</div><div class="value">${fmtNum(spStats.current)}</div><div class="hint">${fmtNum(spStats.pipeline)} can target</div></div>
       </div>
 
       <div class="card" style="margin-bottom:1rem">
-        <h2>Sponsored Listings pipeline by AM</h2>
-        <p class="sub">Databricks pull (${esc(summary.source || '')}), filtered to accounts owned by the five AMs. Sponsored Listings is the only KPI with an account-level pull.</p>
+        <h2>Sponsored Listings by AM</h2>
+        <p class="sub">Full targetable universe, filtered with the owner alias map. Pipeline = targetable and not currently on.</p>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>AM</th><th>Accounts</th>${ENROLMENT_STATUSES.map(s => `<th>${esc(s)}</th>`).join('')}</tr></thead>
-            <tbody>${pipeRows}
-              <tr><td><strong>Total</strong></td><td class="num">${fmtNum(allAmRows.length)}</td>${ENROLMENT_STATUSES.map(s => `<td class="num">${fmtNum(totalCount(s))}</td>`).join('')}</tr>
-            </tbody>
+            <thead><tr><th>AM</th><th>Targetable</th><th>Currently on</th><th>Ever on</th><th>Never</th><th>Pipeline can-target</th></tr></thead>
+            <tbody>${ownerSummary(slByOwner)}</tbody>
           </table>
         </div>
       </div>
 
+      <div class="card" style="margin-bottom:1rem">
+        <h2>Smart Promotions by AM</h2>
+        <p class="sub">Same 1,785 active Malta providers, filtered with the owner alias map.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>AM</th><th>Targetable</th><th>Currently on</th><th>Ever on</th><th>Never</th><th>Pipeline can-target</th></tr></thead>
+            <tbody>${ownerSummary(spByOwner)}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:1rem">
+        <h2>Sponsored Listings · full targetable list</h2>
+        ${targetableHtml('Overview', 'Sponsored Listings', slAll, { ownerFilter: true })}
+      </div>
+
+      <div class="card" style="margin-bottom:1rem">
+        <h2>Smart Promotions · full targetable list</h2>
+        ${targetableHtml('Overview', 'Smart Promotions', spAll, { ownerFilter: true })}
+      </div>
+
       <div class="card">
         <h2>What Advay expects per KPI</h2>
-        <p class="sub">Each AM page carries these three boxes for every KPI above.</p>
+        <p class="sub">Each AM page carries these three boxes for every KPI above. SL and SP also show the full targetable provider list.</p>
         <ol class="list">${reqs.map(r => `<li>${esc(r)}</li>`).join('')}</ol>
       </div>`;
   }
@@ -514,16 +588,18 @@
     return `${rows.length} account${rows.length === 1 ? '' : 's'} · pipeline ${fmtNum(size)} · weighted ${fmtNum(Math.round(weighted))} vs gap ${fmtNum(need)} — ${verdict}`;
   }
 
-  function kpiBlockHtml(person, w, accounts) {
+  function kpiBlockHtml(person, w, slRows, spRows) {
     const entry = getEntry(person, w.kpi);
     const rootCause = entry.rootCause ?? w.rootCause ?? '';
     const pipelineText = entry.pipeline ?? w.pipeline ?? '';
     const forecast = entry.forecast ?? w.forecast ?? '';
     const notes = entry.notes ?? w.notes ?? '';
     const rows = Array.isArray(entry.rows) && entry.rows.length ? entry.rows : [{}];
-
-    const enrolment = w.hasEnrolmentData ? enrolmentHtml(person, accounts) : `
-      <p class="sub" style="margin:.4rem 0 0">No Databricks account pull exists for ${esc(w.kpi)} — list the accounts you are working above. Enrolment lists are only shown for ${esc(ENROLMENT_KPI)}.</p>`;
+    const keepManualTable = !TARGETABLE_KPIS.includes(w.kpi);
+    const targetableRows = w.kpi === 'Sponsored Listings' ? slRows : w.kpi === 'Smart Promotions' ? spRows : [];
+    const targetable = TARGETABLE_KPIS.includes(w.kpi)
+      ? targetableHtml(person, w.kpi, targetableRows)
+      : `<p class="sub" style="margin:.4rem 0 0">No Databricks account pull exists for ${esc(w.kpi)} — list the accounts you are working above. Targetable provider lists are only shown for Sponsored Listings and Smart Promotions.</p>`;
 
     return `
       <div class="card kpi-block" data-person="${esc(person)}" data-kpi="${esc(w.kpi)}" data-gap="${esc(w.gap ?? 0)}">
@@ -555,6 +631,7 @@
           <textarea data-field="notes" placeholder="Optional notes…">${esc(notes)}</textarea>
         </div>
 
+        ${keepManualTable ? `
         <div class="subhead">
           <h4>${esc(w.kpi)} pipeline — named accounts</h4>
           <button type="button" class="btn secondary small" data-action="add-row">Add account</button>
@@ -563,35 +640,53 @@
           <thead><tr><th>Account</th><th>Size</th><th>Confidence</th><th>Next step</th><th></th></tr></thead>
           <tbody data-rows>${rows.map(pipeRowHtml).join('')}</tbody>
           <tfoot><tr><td colspan="5" data-pipe-foot>${esc(pipeFooterText(rows, w.gap))}</td></tr></tfoot>
-        </table>
-        ${enrolment}
+        </table>` : ''}
+        ${targetable}
       </div>`;
   }
 
-  function enrolmentHtml(person, accounts) {
-    const counts = ENROLMENT_STATUSES.map(s => ({ s, n: accounts.filter(a => a.enrolmentStatus === s).length }));
+  function targetableHtml(scope, product, rows, opts = {}) {
+    const stats = targetableStats(rows);
+    const first = String(scope || 'Overview').split(' ')[0];
+    const ownerOptions = opts.ownerFilter
+      ? `<select data-target-owner>
+          <option value="">All owners</option>
+          ${Object.keys(OWNER_ALIASES).map(name => `<option value="${esc(name)}">${esc(name)}</option>`).join('')}
+        </select>`
+      : '';
     return `
-      <div class="subhead">
-        <h4>Enrolment lists · ${esc(person.split(' ')[0])}'s ${esc(ENROLMENT_KPI)} accounts</h4>
-        <span class="pill">Databricks pull <strong>${fmtNum(accounts.length)}</strong></span>
-      </div>
-      <div class="chip-row" data-enrol-chips>
-        <button type="button" class="chip active" data-status="All">All <span class="n">${fmtNum(accounts.length)}</span></button>
-        ${counts.map(c => `<button type="button" class="chip" data-status="${esc(c.s)}">${esc(c.s)} <span class="n">${fmtNum(c.n)}</span></button>`).join('')}
-      </div>
-      <div class="toolbar">
-        <input type="search" data-enrol-search placeholder="Search ${esc(person.split(' ')[0])}'s accounts…" />
-        <span class="pill" data-enrol-shown>Showing ${fmtNum(accounts.length)}</span>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Account</th><th>Enrolment</th><th>From</th><th>To</th><th>Stage</th><th>Provider ID</th><th></th></tr></thead>
-          <tbody data-enrol-body></tbody>
-        </table>
+      <div class="targetable" data-product="${esc(product)}" data-scope="${esc(scope)}">
+        <div class="subhead">
+          <h4>Targetable providers · ${esc(first)}'s ${esc(product)}</h4>
+        </div>
+        <div class="count-pills">
+          <span class="pill">Total targetable <strong data-stat="all">${fmtNum(stats.all)}</strong></span>
+          <span class="pill">Currently on <strong data-stat="current">${fmtNum(stats.current)}</strong></span>
+          <span class="pill">Ever on <strong data-stat="ever">${fmtNum(stats.ever)}</strong></span>
+          <span class="pill">Never <strong data-stat="never">${fmtNum(stats.never)}</strong></span>
+          <span class="pill">Pipeline can-target <strong data-stat="pipeline">${fmtNum(stats.pipeline)}</strong></span>
+        </div>
+        <div class="chip-row" data-target-chips>
+          ${TARGETABLE_FILTERS.map((f, i) => `<button type="button" class="chip${i === 0 ? ' active' : ''}" data-filter="${f.key}">${esc(f.label)} <span class="n">${fmtNum(filterCount(rows, f.key))}</span></button>`).join('')}
+        </div>
+        <div class="toolbar">
+          <input type="search" data-target-search placeholder="Search account name…" />
+          ${ownerOptions}
+          <span class="pill" data-target-shown>Showing 0</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Account</th><th>Provider ID</th><th>Currently on</th><th>Ever had on</th><th>First start</th><th>Last end</th><th>Next step</th>
+            </tr></thead>
+            <tbody data-target-body></tbody>
+          </table>
+        </div>
+        <button type="button" class="btn secondary small load-more" data-action="load-more">Show next ${fmtNum(TARGETABLE_PAGE)}</button>
       </div>`;
   }
 
-  function renderPerson(hub, person, role, accounts) {
+  function renderPerson(hub, person, role, slRows, spRows) {
     const weekly = (hub.weeklyPerformance || []).filter(w => w.person === person);
     const ordered = KPI_ORDER.map(k => weekly.find(w => w.kpi === k)).filter(Boolean);
     const scorecard = (hub.scorecard || []).filter(r => r.person === person);
@@ -622,7 +717,8 @@
           </div>
           <div class="meta-pills">
             ${statusPill(overall)}
-            <span class="pill">SL accounts <strong>${fmtNum(accounts.length)}</strong></span>
+            <span class="pill">SL targetable <strong>${fmtNum(slRows.length)}</strong></span>
+            <span class="pill">SP targetable <strong>${fmtNum(spRows.length)}</strong></span>
           </div>
         </div>
         <div class="table-wrap" style="margin-top:.85rem">
@@ -637,12 +733,81 @@
           <span class="pill">Notes and pipeline rows save to this browser</span>
         </div>
       </div>
-      ${ordered.map(w => kpiBlockHtml(person, w, accounts)).join('')}`;
+      ${ordered.map(w => kpiBlockHtml(person, w, slRows, spRows)).join('')}`;
+  }
+
+  function wireTargetable(widget, rows) {
+    const product = widget.dataset.product;
+    const chips = widget.querySelector('[data-target-chips]');
+    const search = widget.querySelector('[data-target-search]');
+    const ownerSel = widget.querySelector('[data-target-owner]');
+    const shown = widget.querySelector('[data-target-shown]');
+    const body = widget.querySelector('[data-target-body]');
+    const loadMore = widget.querySelector('[data-action="load-more"]');
+    let filterKey = 'pipeline';
+    let renderLimit = TARGETABLE_PAGE;
+
+    const paint = () => {
+      const query = (search.value || '').trim().toLowerCase();
+      const owner = ownerSel?.value || '';
+      const test = TARGETABLE_FILTERS.find(f => f.key === filterKey)?.test || (() => true);
+      const scoped = rows.filter(r => !owner || canonicalOwner(r.owner) === owner);
+      const stats = targetableStats(scoped);
+      widget.querySelectorAll('[data-stat]').forEach(el => {
+        el.textContent = fmtNum(stats[el.dataset.stat]);
+      });
+      TARGETABLE_FILTERS.forEach(f => {
+        const n = chips.querySelector(`[data-filter="${f.key}"] .n`);
+        if (n) n.textContent = fmtNum(filterCount(scoped, f.key));
+      });
+      const matches = scoped.filter(r =>
+        test(r) &&
+        (!query || String(r.accountName || '').toLowerCase().includes(query)));
+      const visible = matches.slice(0, renderLimit);
+      shown.textContent = `Showing ${fmtNum(visible.length)} of ${fmtNum(matches.length)}`;
+      if (loadMore) loadMore.hidden = visible.length >= matches.length;
+      const state = loadState();
+      body.innerHTML = visible.map(r => {
+        const key = `next||${product}||${r.providerId}`;
+        return `
+          <tr>
+            <td><strong>${esc(r.accountName)}</strong></td>
+            <td class="num">${esc(r.providerId)}</td>
+            <td>${r.currentlyOn ? '<span class="status green">Yes</span>' : '<span class="status muted">No</span>'}</td>
+            <td>${r.everHadOn ? '<span class="status green">Yes</span>' : '<span class="status muted">No</span>'}</td>
+            <td class="num">${esc(formatDate(r.firstStart))}</td>
+            <td class="num">${esc(formatDate(r.lastEnd))}</td>
+            <td><input class="next-step" data-next-key="${esc(key)}" value="${esc(state[key] || '')}" placeholder="Add next step…" /></td>
+          </tr>`;
+      }).join('') || '<tr><td colspan="7" style="color:var(--muted)">No matching accounts</td></tr>';
+    };
+
+    chips.addEventListener('click', e => {
+      const chip = e.target.closest('.chip');
+      if (!chip) return;
+      filterKey = chip.dataset.filter;
+      renderLimit = TARGETABLE_PAGE;
+      chips.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c === chip));
+      paint();
+    });
+    search.addEventListener('input', () => { renderLimit = TARGETABLE_PAGE; paint(); });
+    ownerSel?.addEventListener('change', () => { renderLimit = TARGETABLE_PAGE; paint(); });
+    loadMore?.addEventListener('click', () => { renderLimit += TARGETABLE_PAGE; paint(); });
+    body.addEventListener('change', e => {
+      const input = e.target.closest('input[data-next-key]');
+      if (!input) return;
+      const state = loadState();
+      if (input.value.trim()) state[input.dataset.nextKey] = input.value.trim();
+      else delete state[input.dataset.nextKey];
+      saveState(state);
+      showToast('Next step saved');
+    });
+    paint();
   }
 
   /* ------------------------------------------------------------- behaviour */
 
-  function wirePerson(panel, hub, person, accounts) {
+  function wirePerson(panel, hub, person, slRows, spRows) {
     // A reset re-renders the panel in place, so drop the previous listeners first.
     panel._listeners?.abort();
     const { signal } = (panel._listeners = new AbortController());
@@ -706,7 +871,7 @@
       }
       if (btn.dataset.action === 'reset-person') {
         clearPerson(person);
-        renderPersonPanel(panel, hub, person, panel.dataset.role, accounts);
+        renderPersonPanel(panel, hub, person, panel.dataset.role, slRows, spRows);
         showToast('Reset to pack defaults');
         return;
       }
@@ -719,44 +884,11 @@
       }
     }, { signal });
 
-    // Enrolment list (Sponsored Listings only) — per-person filtering of the Databricks pull.
-    panel.querySelectorAll('.kpi-block').forEach(block => {
-      const body = block.querySelector('[data-enrol-body]');
-      if (!body) return;
-      const chips = block.querySelector('[data-enrol-chips]');
-      const search = block.querySelector('[data-enrol-search]');
-      const shown = block.querySelector('[data-enrol-shown]');
-      let status = 'All';
-
-      const paint = () => {
-        const q = (search.value || '').trim().toLowerCase();
-        const filtered = accounts.filter(a =>
-          (status === 'All' || a.enrolmentStatus === status) &&
-          (!q || (a.accountName || '').toLowerCase().includes(q)));
-        shown.textContent = `Showing ${fmtNum(filtered.length)}`;
-        body.innerHTML = filtered.map(a => `
-          <tr>
-            <td><strong>${esc(a.accountName)}</strong></td>
-            <td>${esc(a.enrolmentStatus)}</td>
-            <td class="num">${esc(a.from || '—')}</td>
-            <td class="num">${esc(a.to || '—')}</td>
-            <td>${esc(a.stage || '')}</td>
-            <td class="num">${esc(a.providerId)}</td>
-            <td><button type="button" class="btn secondary small" data-action="add-to-pipeline"
-              data-account="${esc(a.accountName)}"
-              data-next="${esc(a.enrolmentStatus === 'Churned / ended' ? 'Win-back call' : a.enrolmentStatus === 'Never enrolled' ? 'Book pitch' : 'Confirm live')}">Add</button></td>
-          </tr>`).join('') || '<tr><td colspan="7" style="color:var(--muted)">No matching accounts</td></tr>';
-      };
-
-      chips.addEventListener('click', e => {
-        const chip = e.target.closest('.chip');
-        if (!chip) return;
-        status = chip.dataset.status;
-        chips.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c === chip));
-        paint();
-      });
-      search.addEventListener('input', paint);
-      paint();
+    // Targetable lists for Sponsored Listings and Smart Promotions.
+    panel.querySelectorAll('.targetable').forEach(widget => {
+      const product = widget.dataset.product;
+      const source = product === 'Sponsored Listings' ? slRows : spRows;
+      wireTargetable(widget, source);
     });
   }
 
@@ -781,9 +913,9 @@
     return lines.join('\n');
   }
 
-  function renderPersonPanel(panel, hub, person, role, accounts) {
-    panel.innerHTML = renderPerson(hub, person, role, accounts);
-    wirePerson(panel, hub, person, accounts);
+  function renderPersonPanel(panel, hub, person, role, slRows, spRows) {
+    panel.innerHTML = renderPerson(hub, person, role, slRows, spRows);
+    wirePerson(panel, hub, person, slRows, spRows);
   }
 
   function activateTab(name) {
@@ -795,31 +927,25 @@
 
   async function main() {
     try {
-      const [hub, pipeline, summary] = await Promise.all([
+      const [hub, slTargetable, spTargetable] = await Promise.all([
         loadJSON('data/malta-mm/hub-data.json'),
-        loadJSON('data/malta-mm/sl-pipeline.json'),
-        loadJSON('data/malta-mm/summary.json'),
+        loadJSON('data/malta-mm/sl-targetable.json'),
+        loadJSON('data/malta-mm/sp-targetable.json'),
       ]);
 
       const people = (hub.team || []).filter(t => OWNER_ALIASES[t.name]);
-
-      // Pipeline rows are bucketed by canonical owner, so anything owned by the TL,
-      // an ex-AM or an unassigned CRM user never reaches an AM page.
-      const pipelineByOwner = new Map(people.map(p => [p.name, []]));
-      pipeline.forEach(row => {
-        const owner = canonicalOwner(row.owner);
-        if (owner && pipelineByOwner.has(owner)) pipelineByOwner.get(owner).push(row);
-      });
-      pipelineByOwner.forEach(rows => rows.sort((a, b) => (a.accountName || '').localeCompare(b.accountName || '')));
+      const slByOwner = bucketByOwner(slTargetable, people);
+      const spByOwner = bucketByOwner(spTargetable, people);
 
       document.getElementById('boot').remove();
 
-      const asOf = summary.asOf || TODAY;
+      const asOf = TODAY;
       document.getElementById('metaPills').innerHTML = `
         <span class="pill">Month <strong>${esc(hub.month || '')}</strong></span>
         <span class="pill">Week of <strong>${esc(hub.weekOf || '')}</strong></span>
         <span class="pill">AMs <strong>${people.length}</strong></span>
-        <span class="pill">KPIs <strong>${KPI_ORDER.length}</strong></span>
+        <span class="pill">SL targetable <strong>${fmtNum(slTargetable.length)}</strong></span>
+        <span class="pill">SP targetable <strong>${fmtNum(spTargetable.length)}</strong></span>
         <span class="pill">Data as of <strong>${esc(asOf)}</strong></span>`;
       document.getElementById('footerText').textContent =
         `Boltable static · mt-mm-performance · unlisted · data as of ${asOf} · opened ${TODAY} Asia/Baku`;
@@ -833,11 +959,22 @@
         `<button type="button" data-tab="${esc(t.id)}">${esc(t.label)}${t.role ? `<span class="tab-role">${esc(t.role)}</span>` : ''}</button>`).join('');
       panels.innerHTML = tabDefs.map(t => `<section class="panel" id="panel-${esc(t.id)}"></section>`).join('');
 
-      document.getElementById('panel-overview').innerHTML = renderOverview(hub, summary, pipelineByOwner, people);
+      document.getElementById('panel-overview').innerHTML = renderOverview(hub, people, slByOwner, spByOwner, slTargetable, spTargetable);
+      document.querySelectorAll('#panel-overview .targetable').forEach(widget => {
+        const source = widget.dataset.product === 'Sponsored Listings' ? slTargetable : spTargetable;
+        wireTargetable(widget, source);
+      });
       tabDefs.filter(t => t.person).forEach(t => {
         const panel = document.getElementById('panel-' + t.id);
         panel.dataset.role = t.person.role;
-        renderPersonPanel(panel, hub, t.person.name, t.person.role, pipelineByOwner.get(t.person.name) || []);
+        renderPersonPanel(
+          panel,
+          hub,
+          t.person.name,
+          t.person.role,
+          slByOwner.get(t.person.name) || [],
+          spByOwner.get(t.person.name) || []
+        );
       });
 
       tabs.addEventListener('click', e => {
