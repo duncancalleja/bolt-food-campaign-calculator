@@ -40,9 +40,11 @@ MAX_TEXT = 20_000
 MAX_KEYS = 20_000
 
 _lock = threading.RLock()
+_persist_lock = threading.Lock()
 _state = copy.deepcopy(EMPTY_STATE)
 _storage_warning: str | None = None
 _persist_seq = 0
+_shared_loaded = not USE_S3
 
 
 class StatePut(BaseModel):
@@ -136,17 +138,18 @@ def _run_bounded(function, timeout: float) -> tuple[bool, Any]:
 
 def _persist(snapshot: dict[str, Any], sequence: int) -> None:
     global _storage_warning
-    try:
-        _local_save(snapshot)
-    except OSError as exc:
-        _storage_warning = f"Local cache unavailable: {exc}"
-    if not USE_S3:
-        return
-    with _lock:
-        if sequence != _persist_seq:
+    with _persist_lock:
+        with _lock:
+            if sequence != _persist_seq:
+                return
+        try:
+            _local_save(snapshot)
+        except OSError as exc:
+            _storage_warning = f"Local cache unavailable: {exc}"
+        if not USE_S3:
             return
-    ok, result = _run_bounded(lambda: _s3_put(snapshot), S3_TIMEOUT)
-    _storage_warning = None if ok else f"Shared storage unavailable: {result}"
+        ok, result = _run_bounded(lambda: _s3_put(snapshot), S3_TIMEOUT)
+        _storage_warning = None if ok else f"Shared storage unavailable: {result}"
 
 
 def _queue_persist(snapshot: dict[str, Any]) -> None:
@@ -158,12 +161,13 @@ def _queue_persist(snapshot: dict[str, Any]) -> None:
 
 
 def _load_shared_state() -> None:
-    global _state, _storage_warning
+    global _state, _storage_warning, _shared_loaded
     if not USE_S3:
         return
     ok, result = _run_bounded(_s3_get, S3_TIMEOUT)
     if not ok:
         _storage_warning = f"Shared storage unavailable: {result}"
+        _shared_loaded = True
         return
     if result:
         with _lock:
@@ -174,6 +178,7 @@ def _load_shared_state() -> None:
                 except OSError:
                     pass
     _storage_warning = None
+    _shared_loaded = True
 
 
 def _clean_text(value: Any) -> str:
@@ -266,6 +271,8 @@ def health() -> dict[str, Any]:
 
 @app.get("/api/state")
 def get_state() -> dict[str, Any]:
+    if not _shared_loaded:
+        raise HTTPException(503, "Shared state is loading — retry shortly.")
     return _state_response()
 
 
@@ -275,6 +282,8 @@ def put_state(
     x_user_email: str | None = Header(default=None),
 ) -> dict[str, Any]:
     global _state
+    if not _shared_loaded:
+        raise HTTPException(503, "Shared state is loading — retry shortly.")
     with _lock:
         candidate = copy.deepcopy(_state)
         applied = apply_deltas(candidate, body.deltas, body.migrate_missing)
