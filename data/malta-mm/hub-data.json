@@ -1,0 +1,595 @@
+{
+  "title": "Malta MM Performance Hub",
+  "month": "Sep 2026",
+  "weekOf": "2026-09-22",
+  "audience": "Advay + Malta MM team",
+  "team": [
+    {
+      "name": "Duncan Calleja",
+      "role": "TL"
+    },
+    {
+      "name": "Yousef Moungad",
+      "role": "MM"
+    },
+    {
+      "name": "Gulcin Erguven",
+      "role": "MM"
+    },
+    {
+      "name": "Rico Spagnol",
+      "role": "MM"
+    },
+    {
+      "name": "Fiona Borg",
+      "role": "MM"
+    },
+    {
+      "name": "Alena Tokareva",
+      "role": "ENT"
+    }
+  ],
+  "advayCountryKpis": [
+    {
+      "kpi": "Q3 Renegotiations",
+      "jun": null,
+      "jul": null,
+      "aug": null,
+      "sep": 0.85,
+      "note": "46/54 = 85%. Advay: no concerns."
+    },
+    {
+      "kpi": "Sponsored Listings L2",
+      "jun": 1.13,
+      "jul": 1.15,
+      "aug": 0.97,
+      "sep": 0.56,
+      "note": "Sep red \u2014 missing L1+L2 not acceptable."
+    },
+    {
+      "kpi": "Sponsored Listings L1",
+      "jun": 0.39,
+      "jul": 0.87,
+      "aug": 0.64,
+      "sep": 0.35,
+      "note": "Already a concern."
+    },
+    {
+      "kpi": "Smart Promotions",
+      "jun": 1.1,
+      "jul": 1.0,
+      "aug": 0.93,
+      "sep": 0.88,
+      "note": "Trending down but still near target."
+    },
+    {
+      "kpi": "Marketing Campaigns",
+      "jun": 9.0,
+      "jul": 4.83,
+      "aug": 0.96,
+      "sep": 0.64,
+      "note": "Sep red."
+    },
+    {
+      "kpi": "Merchant Investment L1",
+      "jun": 1.17,
+      "jul": 0.74,
+      "aug": 0.77,
+      "sep": 0.72,
+      "note": "Red since Jul."
+    }
+  ],
+  "scorecard": [
+    {
+      "person": "Duncan Calleja",
+      "role": "TL",
+      "month": "Sep 2026",
+      "kpi": "Q3 Renegotiations",
+      "achievement": 3,
+      "target": 5,
+      "pct": 0.6,
+      "gap": 2,
+      "status": "Off track",
+      "comments": null
+    },
+    {
+      "person": "Duncan Calleja",
+      "role": "TL",
+      "month": "Sep 2026",
+      "kpi": "Sponsored Listings",
+      "achievement": 125,
+      "target": 171,
+      "pct": 0.73,
+      "gap": 46,
+      "status": "At risk",
+      "comments": null
+    },
+    {
+      "person": "Duncan Calleja",
+      "role": "TL",
+      "month": "Sep 2026",
+      "kpi": "Bolt Plus",
+      "achievement": 568,
+      "target": 570,
+      "pct": 1.0,
+      "gap": 2,
+      "status": "Strong",
+      "comments": null
+    },
+    {
+      "person": "Duncan Calleja",
+      "role": "TL",
+      "month": "Sep 2026",
+      "kpi": "Marketing Campaigns",
+      "achievement": 122,
+      "target": 177,
+      "pct": 0.69,
+      "gap": 55,
+      "status": "Off track",
+      "comments": null
+    },
+    {
+      "person": "Duncan Calleja",
+      "role": "TL",
+      "month": "Sep 2026",
+      "kpi": "Smart Promotions",
+      "achievement": 198,
+      "target": 198,
+      "pct": 1.0,
+      "gap": 0,
+      "status": "Strong",
+      "comments": null
+    },
+    {
+      "person": "Duncan Calleja",
+      "role": "TL",
+      "month": "Sep 2026",
+      "kpi": "Overall",
+      "achievement": null,
+      "target": null,
+      "pct": 0.65,
+      "gap": null,
+      "status": "Off track",
+      "comments": "Country overall from RAM tracker (65%). Gap focus: Sponsored Listings + Marketing Campaigns."
+    },
+    {
+      "person": "Yousef Moungad",
+      "role": "MM",
+      "month": "Sep 2026",
+      "kpi": "Q3 Renegotiations",
+      "achievement": 0,
+      "target": 1,
+      "pct": 0.0,
+      "gap": 1,
+      "status": "Off track",
+      "comments": null
+    },
+    {
+      "person": "Yousef Moungad",
+      "role": "MM",
+      "month": "Sep 2026",
+      "kpi": "Sponsored Listings",
+      "achievement": 24,
+      "target": 39,
+      "pct": 0.62,
+      "gap": 15,
+      "status": "Off track",
+      "comments": null
+    },
+    {
+      "person": "Yousef Moungad",
+      "role": "MM",
+      "month": "Sep 2026",
+      "kpi": "Bolt Plus",
+      "achievement": 143,
+      "target": 144,
+      "pct": 0.99,
+      "gap": 1,
+      "status": "On track",
+      "comments": null
+    },
+    {
+      "person": "Yousef Moungad",
+      "role": "MM",
+      "month": "Sep 2026",
+      "kpi": "Marketing Campaigns",
+      "achievement": 28,
+      "target": 43,
+      "pct": 0.65,
+      "gap": 15,
+      "status": "Off track",
+      "comments": null
+    },
+    {
+      "person": "Yousef Moungad",
+      "role": "MM",
+      "month": "Sep 2026",
+      "kpi": "Smart Promotions",
+      "achievement": 42,
+      "target": 54,
+      "pct": 0.78,
+      "gap": 12,
+      "status": "At risk",
+      "comments": null
+    },
+    {
+      "person": "Gulcin Erguven",
+      "role": "MM",
+      "month": "Sep 2026",
+      "kpi": "Q3 Renegotiations",
+      "achievement": 0,
+      "target": 1,
+      "pct": 0.0,
+      "gap": 1,
+      "status": "Off track",
+      "comments": null
+    },
+    {
+      "person": "Gulcin Erguven",
+      "role": "MM",
+      "month": "Sep 2026",
+      "kpi": "Sponsored Listings",
+      "achievement": 42,
+      "target": 39,
+      "pct": 1.08,
+      "gap": -3,
+      "status": "Strong",
+      "comments": null
+    },
+    {
+      "person": "Gulcin Erguven",
+      "role": "MM",
+      "month": "Sep 2026",
+      "kpi": "Bolt Plus",
+      "achievement": 153,
+      "target": 146,
+      "pct": 1.05,
+      "gap": -7,
+      "status": "Strong",
+      "comments": null
+    },
+    {
+      "person": "Gulcin Erguven",
+      "role": "MM",
+      "month": "Sep 2026",
+      "kpi": "Marketing Campaigns",
+      "achievement": 32,
+      "target": 43,
+      "pct": 0.74,
+      "gap": 11,
+      "status": "At risk",
+      "comments": null
+    },
+    {
+      "person": "Gulcin Erguven",
+      "role": "MM",
+      "month": "Sep 2026",
+      "kpi": "Smart Promotions",
+      "achievement": 46,
+      "target": 53,
+      "pct": 0.87,
+      "gap": 7,
+      "status": "At risk",
+      "comments": null
+    },
+    {
+      "person": "Rico Spagnol",
+      "role": "MM",
+      "month": "Sep 2026",
+      "kpi": "Q3 Renegotiations",
+      "achievement": 2,
+      "target": 1,
+      "pct": 2.0,
+      "gap": -1,
+      "status": "Strong",
+      "comments": null
+    },
+    {
+      "person": "Rico Spagnol",
+      "role": "MM",
+      "month": "Sep 2026",
+      "kpi": "Sponsored Listings",
+      "achievement": 38,
+      "target": 39,
+      "pct": 0.97,
+      "gap": 1,
+      "status": "On track",
+      "comments": null
+    },
+    {
+      "person": "Rico Spagnol",
+      "role": "MM",
+      "month": "Sep 2026",
+      "kpi": "Bolt Plus",
+      "achievement": 129,
+      "target": 157,
+      "pct": 0.82,
+      "gap": 28,
+      "status": "At risk",
+      "comments": null
+    },
+    {
+      "person": "Rico Spagnol",
+      "role": "MM",
+      "month": "Sep 2026",
+      "kpi": "Marketing Campaigns",
+      "achievement": 29,
+      "target": 40,
+      "pct": 0.73,
+      "gap": 11,
+      "status": "At risk",
+      "comments": null
+    },
+    {
+      "person": "Rico Spagnol",
+      "role": "MM",
+      "month": "Sep 2026",
+      "kpi": "Smart Promotions",
+      "achievement": 64,
+      "target": 59,
+      "pct": 1.08,
+      "gap": -5,
+      "status": "Strong",
+      "comments": null
+    },
+    {
+      "person": "Fiona Borg",
+      "role": "MM",
+      "month": "Sep 2026",
+      "kpi": "Q3 Renegotiations",
+      "achievement": 1,
+      "target": 1,
+      "pct": 1.0,
+      "gap": 0,
+      "status": "Strong",
+      "comments": null
+    },
+    {
+      "person": "Fiona Borg",
+      "role": "MM",
+      "month": "Sep 2026",
+      "kpi": "Sponsored Listings",
+      "achievement": 6,
+      "target": 10,
+      "pct": 0.6,
+      "gap": 4,
+      "status": "Off track",
+      "comments": null
+    },
+    {
+      "person": "Fiona Borg",
+      "role": "MM",
+      "month": "Sep 2026",
+      "kpi": "Bolt Plus",
+      "achievement": 39,
+      "target": 20,
+      "pct": 1.95,
+      "gap": -19,
+      "status": "Strong",
+      "comments": null
+    },
+    {
+      "person": "Fiona Borg",
+      "role": "MM",
+      "month": "Sep 2026",
+      "kpi": "Marketing Campaigns",
+      "achievement": 4,
+      "target": 20,
+      "pct": 0.2,
+      "gap": 16,
+      "status": "Off track",
+      "comments": null
+    },
+    {
+      "person": "Fiona Borg",
+      "role": "MM",
+      "month": "Sep 2026",
+      "kpi": "Smart Promotions",
+      "achievement": 16,
+      "target": 10,
+      "pct": 1.6,
+      "gap": -6,
+      "status": "Strong",
+      "comments": null
+    },
+    {
+      "person": "Alena Tokareva",
+      "role": "ENT",
+      "month": "Sep 2026",
+      "kpi": "Q3 Renegotiations",
+      "achievement": 0,
+      "target": 1,
+      "pct": 0.0,
+      "gap": 1,
+      "status": "Off track",
+      "comments": null
+    },
+    {
+      "person": "Alena Tokareva",
+      "role": "ENT",
+      "month": "Sep 2026",
+      "kpi": "Sponsored Listings",
+      "achievement": 15,
+      "target": 44,
+      "pct": 0.34,
+      "gap": 29,
+      "status": "Off track",
+      "comments": null
+    },
+    {
+      "person": "Alena Tokareva",
+      "role": "ENT",
+      "month": "Sep 2026",
+      "kpi": "Bolt Plus",
+      "achievement": 104,
+      "target": 103,
+      "pct": 1.01,
+      "gap": -1,
+      "status": "Strong",
+      "comments": null
+    },
+    {
+      "person": "Alena Tokareva",
+      "role": "ENT",
+      "month": "Sep 2026",
+      "kpi": "Marketing Campaigns",
+      "achievement": 29,
+      "target": 31,
+      "pct": 0.94,
+      "gap": 2,
+      "status": "On track",
+      "comments": null
+    },
+    {
+      "person": "Alena Tokareva",
+      "role": "ENT",
+      "month": "Sep 2026",
+      "kpi": "Smart Promotions",
+      "achievement": 30,
+      "target": 22,
+      "pct": 1.36,
+      "gap": -8,
+      "status": "Strong",
+      "comments": null
+    }
+  ],
+  "weeklyPerformance": [
+    {
+      "kpi": "Sponsored Listings",
+      "owner": "Duncan Calleja",
+      "weekOf": "2026-09-22",
+      "gap": 46,
+      "rootCause": "Sep run-rate dropped vs Jun/Jul. Need AM-level execution reason (not target debate).",
+      "pipeline": "List never-enrolled + churned SL accounts this week by AM; name providers and expected \u20ac/enrolments.",
+      "forecast": "Gap 46. Pipeline of X this week, confidence Y, expect Z conversions \u2192 EOW forecast = current + Z.",
+      "notes": "",
+      "status": "Draft"
+    },
+    {
+      "kpi": "Sponsored Listings L1",
+      "owner": "Duncan Calleja",
+      "weekOf": "2026-09-22",
+      "gap": null,
+      "rootCause": "L1 specifically called out by Advay as already a concern \u2014 fill from enrolment pull.",
+      "pipeline": "Dedicated L1 sprint list: never enrolled + not currently enrolled, owned by each MM.",
+      "forecast": "Honest EOM landing for L1 with conversion confidence.",
+      "notes": "",
+      "status": "Draft"
+    },
+    {
+      "kpi": "Sponsored Listings L2",
+      "owner": "Duncan Calleja",
+      "weekOf": "2026-09-22",
+      "gap": null,
+      "rootCause": "L2 at 56% in Advay pack for Sep \u2014 execution root cause required.",
+      "pipeline": "L2 pipeline for the week with named providers.",
+      "forecast": "EOW/EOM forecast for L2.",
+      "notes": "",
+      "status": "Draft"
+    },
+    {
+      "kpi": "Marketing Campaigns",
+      "owner": "Duncan Calleja",
+      "weekOf": "2026-09-22",
+      "gap": 55,
+      "rootCause": "Country 69% (122/177). Biggest MM gap drivers: Fiona 20%, Yousef 65%, Rico 73%.",
+      "pipeline": "Named campaign-ready accounts per AM this week; size the pipeline vs gap of 55.",
+      "forecast": "Example: Gap 55. Pipeline 80, low confidence \u2192 expect 20 \u2192 EOW forecast 142.",
+      "notes": "",
+      "status": "Draft"
+    },
+    {
+      "kpi": "Smart Promotions",
+      "owner": "Duncan Calleja",
+      "weekOf": "2026-09-22",
+      "gap": 0,
+      "rootCause": "On target country-level (100%). Keep light touch; protect run-rate.",
+      "pipeline": "Maintain enrolled base; top-up only where easy.",
+      "forecast": "Hold 198+.",
+      "notes": "",
+      "status": "Draft"
+    },
+    {
+      "kpi": "Q3 Renegotiations",
+      "owner": "Duncan Calleja",
+      "weekOf": "2026-09-22",
+      "gap": 2,
+      "rootCause": "Advay OK with 85% Q3 list historically; Sep MT tracker shows 3/5 (60%). Confirm list vs country KPI definition.",
+      "pipeline": "Remaining renegotiation targets named with owners.",
+      "forecast": "Close remaining gap this week / confirm if already done offline.",
+      "notes": "",
+      "status": "Draft"
+    },
+    {
+      "kpi": "Merchant Investment L1",
+      "owner": "Duncan Calleja",
+      "weekOf": "2026-09-22",
+      "gap": null,
+      "rootCause": "Advay pack shows L1 investment red since Jul \u2014 not on RAM Sept columns. Track separately here.",
+      "pipeline": "Investment L1 sprint list with never/current enrolment.",
+      "forecast": "EOM forecast for Investment L1.",
+      "notes": "",
+      "status": "Draft"
+    }
+  ],
+  "pipelineSamples": [
+    {
+      "account": "EXAMPLE \u2014 never enrolled SL",
+      "owner": "Yousef Moungad",
+      "product": "Sponsored Listings",
+      "enrolment": "Never enrolled",
+      "currentlyEnrolled": false,
+      "estConversions": 1,
+      "nextStep": "Book pitch this week",
+      "confidence": "Medium",
+      "stage": "To contact",
+      "sprint": "2026-09-22"
+    },
+    {
+      "account": "EXAMPLE \u2014 enrolled in period",
+      "owner": "Gulcin Erguven",
+      "product": "Sponsored Listings",
+      "enrolment": "Enrolled in period",
+      "from": "2026-09-01",
+      "to": "2026-09-30",
+      "currentlyEnrolled": true,
+      "estConversions": 1,
+      "nextStep": "Confirm live + upsell L2",
+      "confidence": "High",
+      "stage": "Enrolled",
+      "sprint": "2026-09-22"
+    },
+    {
+      "account": "EXAMPLE \u2014 currently enrolled",
+      "owner": "Rico Spagnol",
+      "product": "Smart Promotions",
+      "enrolment": "Currently enrolled",
+      "from": "2026-08-15",
+      "currentlyEnrolled": true,
+      "estConversions": 1,
+      "nextStep": "Retain",
+      "confidence": "High",
+      "stage": "Enrolled",
+      "sprint": "2026-09-22"
+    },
+    {
+      "account": "EXAMPLE \u2014 churned / ended",
+      "owner": "Fiona Borg",
+      "product": "Sponsored Listings",
+      "enrolment": "Churned / ended",
+      "from": "2026-06-01",
+      "to": "2026-08-20",
+      "currentlyEnrolled": false,
+      "estConversions": 1,
+      "nextStep": "Win-back call",
+      "confidence": "Low",
+      "stage": "To contact",
+      "sprint": "2026-09-22"
+    }
+  ],
+  "advayRequirements": [
+    "Root cause: specific execution reason for the gap (not target debate).",
+    "Pipeline: named providers this week, pipeline size, conversion confidence (gap \u2260 pipeline).",
+    "Forecast: honest EOW/EOM landing from pipeline \u00d7 confidence."
+  ]
+}

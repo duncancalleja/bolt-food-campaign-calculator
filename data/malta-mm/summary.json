@@ -1,0 +1,22 @@
+{
+  "asOf": "2026-09-21",
+  "asOfLabel": "2026-09-21 16:41 Asia/Baku (UTC+4)",
+  "product": "Sponsored Listings",
+  "sprintWeek": "2026-09-22",
+  "source": "Databricks dim_provider_v2 \u27d5 fact_provider_sponsored_listing_signup (country_code=mt, active)",
+  "universe": {
+    "totalActive": 1797,
+    "neverEnrolled": 1386,
+    "churnedEnded": 215,
+    "currentlyEnrolled": 131,
+    "enrolledInPeriod": 65
+  },
+  "loadedInApp": {
+    "Never enrolled": 300,
+    "Enrolled in period": 65,
+    "Churned / ended": 100,
+    "Currently enrolled": 50,
+    "total": 515
+  },
+  "notes": "515-row prioritized sample from Databricks pull. Universe = full active Malta population."
+}
