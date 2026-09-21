@@ -122,6 +122,15 @@
     }
     .chip.active { border-color: var(--accent); color: var(--text); background: rgba(79,140,255,.15); }
     .chip .n { font-weight: 700; color: var(--text); margin-left: .25rem; }
+    .pipeline-product { margin-top: 1rem; }
+    .pipeline-product:first-child { margin-top: 0; }
+    .pipeline-counts { display: flex; flex-wrap: wrap; gap: .45rem; margin: .75rem 0; }
+    .next-step {
+      min-width: 220px; width: 100%; background: var(--bg2); color: var(--text);
+      border: 1px solid var(--border); border-radius: 7px; padding: .4rem .5rem; font: inherit;
+    }
+    .owner-scope { margin-bottom: 1rem; }
+    .pipeline-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .75rem; align-items: baseline; }
 
     .weekly-card { margin-bottom: 1rem; }
     .weekly-card header {
@@ -215,7 +224,16 @@
 
   <script>
   const LS_KEY = 'mt-mm-performance-weekly-v1';
+  const PIPELINE_LS_KEY = 'mt-mm-targetable-next-steps-v1';
   const TODAY = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Baku' });
+  const ACCOUNT_MANAGERS = ['Alena Tokareva', 'Rico Spagnol', 'Yousef Moungad', 'Gulcin Erguven', 'Fiona Borg'];
+  const OWNER_ALIASES = {
+    'Alena Tokareva': ['alena tokareva', 'alena'],
+    'Rico Spagnol': ['rico spagnol', 'rico'],
+    'Yousef Moungad': ['yousef moungad', 'yousef'],
+    'Gulcin Erguven': ['gulcin erguven', 'gülcin erguven', 'gulcin'],
+    'Fiona Borg': ['fiona borg', 'fiona'],
+  };
 
   function pctClass(pct) {
     if (pct == null || Number.isNaN(Number(pct))) return 'muted';
@@ -272,11 +290,11 @@
     history.replaceState(null, '', '#' + name);
   }
 
-  function renderOverview(hub, summary) {
-    const u = summary.universe || {};
-    const loaded = summary.loadedInApp || {};
+  function renderOverview(hub, slTargetable, spTargetable) {
     const kpis = hub.advayCountryKpis || [];
     const team = hub.team || [];
+    const slCurrent = slTargetable.filter(r => r.currentlyOn).length;
+    const spCurrent = spTargetable.filter(r => r.currentlyOn).length;
 
     const kpiCards = kpis.map(k => `
       <div class="card stat">
@@ -292,10 +310,10 @@
 
     document.getElementById('panel-overview').innerHTML = `
       <div class="grid grid-4" style="margin-bottom:1rem">
-        <div class="card stat"><div class="label">Active Malta providers</div><div class="value">${fmtNum(u.totalActive)}</div><div class="hint">Universe</div></div>
-        <div class="card stat"><div class="label">Currently enrolled</div><div class="value">${fmtNum(u.currentlyEnrolled)}</div><div class="hint">In app sample: ${fmtNum(loaded['Currently enrolled'])}</div></div>
-        <div class="card stat"><div class="label">Enrolled in period</div><div class="value">${fmtNum(u.enrolledInPeriod)}</div><div class="hint">Sep 2026 overlap</div></div>
-        <div class="card stat"><div class="label">Never enrolled</div><div class="value">${fmtNum(u.neverEnrolled)}</div><div class="hint">In app sample: ${fmtNum(loaded['Never enrolled'])}</div></div>
+        <div class="card stat"><div class="label">SL targetable</div><div class="value">${fmtNum(slTargetable.length)}</div><div class="hint">Full active Malta universe</div></div>
+        <div class="card stat"><div class="label">SL currently on</div><div class="value">${fmtNum(slCurrent)}</div><div class="hint">${fmtNum(slTargetable.length - slCurrent)} can target</div></div>
+        <div class="card stat"><div class="label">SP targetable</div><div class="value">${fmtNum(spTargetable.length)}</div><div class="hint">Full active Malta universe</div></div>
+        <div class="card stat"><div class="label">SP currently on</div><div class="value">${fmtNum(spCurrent)}</div><div class="hint">${fmtNum(spTargetable.length - spCurrent)} can target</div></div>
       </div>
       <div class="card" style="margin-bottom:1rem">
         <h2>Team</h2>
@@ -435,91 +453,149 @@
     });
   }
 
-  function renderPipeline(pipeline, summary) {
-    const loaded = summary.loadedInApp || {};
-    const statuses = ['All', 'Currently enrolled', 'Enrolled in period', 'Never enrolled', 'Churned / ended'];
-    const counts = {
-      'All': loaded.total ?? pipeline.length,
-      'Currently enrolled': loaded['Currently enrolled'] ?? 0,
-      'Enrolled in period': loaded['Enrolled in period'] ?? 0,
-      'Never enrolled': loaded['Never enrolled'] ?? 0,
-      'Churned / ended': loaded['Churned / ended'] ?? 0,
-    };
-    const u = summary.universe || {};
+  function canonicalOwner(owner) {
+    const normalized = String(owner || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    return ACCOUNT_MANAGERS.find(name => OWNER_ALIASES[name].includes(normalized)) || '';
+  }
 
-    document.getElementById('panel-pipeline').innerHTML = `
-      <div class="grid grid-4" style="margin-bottom:1rem">
-        <div class="card stat"><div class="label">In this app</div><div class="value">${fmtNum(counts.All)}</div><div class="hint">Prioritized sample</div></div>
-        <div class="card stat"><div class="label">Universe currently enrolled</div><div class="value">${fmtNum(u.currentlyEnrolled)}</div><div class="hint">Full active Malta</div></div>
-        <div class="card stat"><div class="label">Universe never enrolled</div><div class="value">${fmtNum(u.neverEnrolled)}</div><div class="hint">Active only</div></div>
-        <div class="card stat"><div class="label">Universe churned / ended</div><div class="value">${fmtNum(u.churnedEnded)}</div><div class="hint">Active providers</div></div>
+  function loadNextSteps() {
+    try { return JSON.parse(localStorage.getItem(PIPELINE_LS_KEY) || '{}'); }
+    catch { return {}; }
+  }
+
+  function formatDate(value) {
+    if (!value) return '—';
+    const match = String(value).match(/^\d{4}-\d{2}-\d{2}/);
+    return match ? match[0] : String(value);
+  }
+
+  function renderTargetableProduct(container, rows, product) {
+    const counts = {
+      all: rows.length,
+      current: rows.filter(r => r.currentlyOn).length,
+      ever: rows.filter(r => r.everHadOn).length,
+      never: rows.filter(r => !r.everHadOn).length,
+      pipeline: rows.filter(r => !r.currentlyOn).length,
+      churned: rows.filter(r => r.everHadOn && !r.currentlyOn).length,
+    };
+    const filters = [
+      { key: 'pipeline', label: 'Pipeline (can target)', count: counts.pipeline, test: r => !r.currentlyOn },
+      { key: 'all', label: 'All targetable', count: counts.all, test: () => true },
+      { key: 'never', label: 'Never had on', count: counts.never, test: r => !r.everHadOn },
+      { key: 'churned', label: 'Ever had on (not current)', count: counts.churned, test: r => r.everHadOn && !r.currentlyOn },
+      { key: 'current', label: 'Currently on', count: counts.current, test: r => r.currentlyOn },
+    ];
+    let activeFilter = filters[0];
+    const nextSteps = loadNextSteps();
+
+    container.innerHTML = `
+      <div class="pipeline-heading">
+        <div>
+          <h2>${esc(product)}</h2>
+          <p class="sub">Full targetable provider list · defaults to providers who can still be targeted</p>
+        </div>
       </div>
-      <div class="card">
-        <h2>Account Pipeline · Sponsored Listings</h2>
-        <p class="sub">Sprint week ${esc(summary.sprintWeek || '2026-09-22')} · filter by enrolment · search by account name</p>
-        <div class="chip-row" id="statusChips">
-          ${statuses.map((s,i) => `<button type="button" class="chip${i===0?' active':''}" data-status="${esc(s)}">${esc(s)} <span class="n">${fmtNum(counts[s])}</span></button>`).join('')}
-        </div>
-        <div class="toolbar">
-          <input type="search" id="pipeSearch" placeholder="Search account name…" />
-          <select id="pipeOwner"><option value="">All owners</option></select>
-          <span class="pill" id="pipeShown">Showing 0</span>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr>
-              <th>Account</th><th>Owner</th><th>Enrolment</th><th>From</th><th>To</th><th>Current</th><th>Stage</th><th>Provider ID</th>
-            </tr></thead>
-            <tbody id="pipeBody"></tbody>
-          </table>
-        </div>
+      <div class="pipeline-counts">
+        <span class="pill">Total targetable <strong>${fmtNum(counts.all)}</strong></span>
+        <span class="pill">Currently on <strong>${fmtNum(counts.current)}</strong></span>
+        <span class="pill">Ever on <strong>${fmtNum(counts.ever)}</strong></span>
+        <span class="pill">Never <strong>${fmtNum(counts.never)}</strong></span>
+        <span class="pill">Pipeline can-target <strong>${fmtNum(counts.pipeline)}</strong></span>
+      </div>
+      <div class="chip-row">
+        ${filters.map((f, i) => `<button type="button" class="chip${i === 0 ? ' active' : ''}" data-filter="${f.key}">${esc(f.label)} <span class="n">${fmtNum(f.count)}</span></button>`).join('')}
+      </div>
+      <div class="toolbar">
+        <input type="search" placeholder="Search account name…" aria-label="Search ${esc(product)} by account name" />
+        <span class="pill pipeline-shown">Showing 0</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Account</th><th>Provider ID</th><th>Currently on</th><th>Ever had on</th><th>First start</th><th>Last end</th><th>Next step</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
       </div>`;
 
-    const owners = [...new Set(pipeline.map(r => r.owner).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-    const ownerSel = document.getElementById('pipeOwner');
-    owners.forEach(o => {
-      const opt = document.createElement('option');
-      opt.value = o; opt.textContent = o; ownerSel.appendChild(opt);
-    });
-
-    let statusFilter = 'All';
-    const searchEl = document.getElementById('pipeSearch');
-    const body = document.getElementById('pipeBody');
-    const shown = document.getElementById('pipeShown');
+    const searchEl = container.querySelector('input[type="search"]');
+    const shown = container.querySelector('.pipeline-shown');
+    const body = container.querySelector('tbody');
 
     function paint() {
-      const q = (searchEl.value || '').trim().toLowerCase();
-      const owner = ownerSel.value;
-      const filtered = pipeline.filter(r => {
-        if (statusFilter !== 'All' && r.enrolmentStatus !== statusFilter) return false;
-        if (owner && r.owner !== owner) return false;
-        if (q && !(r.accountName || '').toLowerCase().includes(q)) return false;
-        return true;
-      });
-      shown.textContent = `Showing ${filtered.length.toLocaleString('en-GB')}`;
-      body.innerHTML = filtered.map(r => `
-        <tr>
-          <td><strong>${esc(r.accountName)}</strong></td>
-          <td>${esc(r.owner)}</td>
-          <td>${esc(r.enrolmentStatus)}</td>
-          <td class="num">${esc(r.from || '—')}</td>
-          <td class="num">${esc(r.to || '—')}</td>
-          <td>${r.currentlyEnrolled ? '<span class="status green">Yes</span>' : '<span class="status muted">No</span>'}</td>
-          <td>${esc(r.stage || '')}</td>
-          <td class="num">${esc(r.providerId)}</td>
-        </tr>`).join('') || `<tr><td colspan="8" style="color:var(--muted)">No matching accounts</td></tr>`;
+      const query = searchEl.value.trim().toLowerCase();
+      const filtered = rows
+        .filter(activeFilter.test)
+        .filter(r => !query || String(r.accountName || '').toLowerCase().includes(query))
+        .sort((a, b) => String(a.accountName || '').localeCompare(String(b.accountName || '')));
+      shown.textContent = `Showing ${fmtNum(filtered.length)}`;
+      body.innerHTML = filtered.map(r => {
+        const stepKey = `${product}:${r.providerId}`;
+        return `
+          <tr>
+            <td><strong>${esc(r.accountName)}</strong></td>
+            <td class="num">${esc(r.providerId)}</td>
+            <td>${r.currentlyOn ? '<span class="status green">Yes</span>' : '<span class="status muted">No</span>'}</td>
+            <td>${r.everHadOn ? '<span class="status green">Yes</span>' : '<span class="status muted">No</span>'}</td>
+            <td class="num">${esc(formatDate(r.firstStart))}</td>
+            <td class="num">${esc(formatDate(r.lastEnd))}</td>
+            <td><input class="next-step" data-step-key="${esc(stepKey)}" value="${esc(nextSteps[stepKey] || '')}" placeholder="Add next step…" /></td>
+          </tr>`;
+      }).join('') || `<tr><td colspan="7" style="color:var(--muted)">No matching accounts</td></tr>`;
     }
 
-    document.getElementById('statusChips').addEventListener('click', (e) => {
-      const btn = e.target.closest('.chip');
-      if (!btn) return;
-      statusFilter = btn.dataset.status;
-      document.querySelectorAll('#statusChips .chip').forEach(c => c.classList.toggle('active', c === btn));
+    container.querySelector('.chip-row').addEventListener('click', event => {
+      const button = event.target.closest('button[data-filter]');
+      if (!button) return;
+      activeFilter = filters.find(f => f.key === button.dataset.filter) || filters[0];
+      container.querySelectorAll('.chip').forEach(chip => chip.classList.toggle('active', chip === button));
       paint();
     });
     searchEl.addEventListener('input', paint);
-    ownerSel.addEventListener('change', paint);
+    body.addEventListener('change', event => {
+      const input = event.target.closest('input[data-step-key]');
+      if (!input) return;
+      const saved = loadNextSteps();
+      if (input.value.trim()) {
+        saved[input.dataset.stepKey] = input.value.trim();
+        nextSteps[input.dataset.stepKey] = input.value.trim();
+      } else {
+        delete saved[input.dataset.stepKey];
+        delete nextSteps[input.dataset.stepKey];
+      }
+      localStorage.setItem(PIPELINE_LS_KEY, JSON.stringify(saved));
+      showToast('Next step saved');
+    });
     paint();
+  }
+
+  function renderPipeline(slTargetable, spTargetable) {
+    const panel = document.getElementById('panel-pipeline');
+    const scopes = ['Overview', ...ACCOUNT_MANAGERS];
+    panel.innerHTML = `
+      <div class="card owner-scope">
+        <h2>Targetable pipelines</h2>
+        <p class="sub">Overview includes all active Malta providers. Select an AM to use the owner alias map.</p>
+        <div class="chip-row">
+          ${scopes.map((scope, i) => `<button type="button" class="chip${i === 0 ? ' active' : ''}" data-owner="${esc(scope)}">${esc(scope)}</button>`).join('')}
+        </div>
+      </div>
+      <div class="card pipeline-product" data-product="sl"></div>
+      <div class="card pipeline-product" data-product="sp"></div>`;
+
+    function applyOwnerScope(owner) {
+      const scopeRows = rows => owner === 'Overview' ? rows : rows.filter(r => canonicalOwner(r.owner) === owner);
+      renderTargetableProduct(panel.querySelector('[data-product="sl"]'), scopeRows(slTargetable), 'Sponsored Listings');
+      renderTargetableProduct(panel.querySelector('[data-product="sp"]'), scopeRows(spTargetable), 'Smart Promotions');
+    }
+
+    panel.querySelector('.owner-scope .chip-row').addEventListener('click', event => {
+      const button = event.target.closest('button[data-owner]');
+      if (!button) return;
+      panel.querySelectorAll('.owner-scope button[data-owner]').forEach(chip => chip.classList.toggle('active', chip === button));
+      applyOwnerScope(button.dataset.owner);
+    });
+    applyOwnerScope('Overview');
   }
 
   function renderHowto(hub) {
@@ -561,29 +637,30 @@
 
   async function main() {
     try {
-      const [hub, pipeline, summary] = await Promise.all([
+      const [hub, slTargetable, spTargetable] = await Promise.all([
         loadJSON('data/malta-mm/hub-data.json'),
-        loadJSON('data/malta-mm/sl-pipeline.json'),
-        loadJSON('data/malta-mm/summary.json'),
+        loadJSON('data/malta-mm/sl-targetable.json'),
+        loadJSON('data/malta-mm/sp-targetable.json'),
       ]);
 
       document.getElementById('boot').remove();
 
-      const asOf = summary.asOf || TODAY;
+      const asOf = TODAY;
       document.getElementById('metaPills').innerHTML = `
         <span class="pill">Month <strong>${esc(hub.month || '')}</strong></span>
         <span class="pill">Week of <strong>${esc(hub.weekOf || '')}</strong></span>
         <span class="pill">Audience <strong>Advay</strong></span>
-        <span class="pill">Pipeline <strong>${fmtNum(pipeline.length)}</strong></span>
+        <span class="pill">SL targetable <strong>${fmtNum(slTargetable.length)}</strong></span>
+        <span class="pill">SP targetable <strong>${fmtNum(spTargetable.length)}</strong></span>
         <span class="pill">Data as of <strong>${esc(asOf)}</strong></span>`;
 
       document.getElementById('footerText').textContent =
         `Boltable static v1 · mt-mm-performance · data as of ${asOf} · ${TODAY} Asia/Baku`;
 
-      renderOverview(hub, summary);
+      renderOverview(hub, slTargetable, spTargetable);
       renderScorecard(hub);
       renderWeekly(hub);
-      renderPipeline(pipeline, summary);
+      renderPipeline(slTargetable, spTargetable);
       renderHowto(hub);
 
       document.getElementById('tabs').addEventListener('click', (e) => {
