@@ -138,12 +138,13 @@
       margin-top: 1rem; padding: .9rem; background: rgba(11,18,32,.45);
       border: 1px solid var(--border); border-radius: 10px;
     }
-    .pending-note {
-      margin: .6rem 0 .85rem; padding: .7rem .8rem; border-radius: 8px;
-      border: 1px solid rgba(245,158,11,.45); background: var(--amber-bg); color: #fcd34d;
-    }
     [hidden] { display: none !important; }
-    .next-step { min-width: 180px; width: 100%; padding: .4rem .5rem; font-size: .85rem; }
+    .am-comment { min-width: 180px; width: 100%; padding: .4rem .5rem; font-size: .85rem; }
+    .tgt-cell { width: 5.5rem; text-align: center; }
+    input[type="checkbox"] {
+      width: 1.05rem; height: 1.05rem; min-width: 0; padding: 0; margin: 0;
+      accent-color: var(--accent); cursor: pointer; vertical-align: middle;
+    }
     .load-more { margin-top: .75rem; }
 
     .kpi-block { margin-bottom: 1rem; }
@@ -165,22 +166,20 @@
     .notes-row { margin-top: .75rem; }
     .notes-row label { display: block; font-size: .75rem; color: var(--muted); font-weight: 700; margin-bottom: .35rem; text-transform: uppercase; letter-spacing: .04em; }
     .notes-row textarea { width: 100%; min-height: 2.8rem; }
+    .kpi-controls {
+      display: grid; grid-template-columns: minmax(10rem, .3fr) minmax(18rem, 1fr);
+      gap: .75rem; margin-top: .75rem;
+    }
+    .kpi-controls label { display: block; color: var(--muted); font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
+    .kpi-controls select, .kpi-controls textarea { width: 100%; }
+    .kpi-controls textarea { min-height: 2.8rem; resize: vertical; }
+    @media (max-width: 640px) { .kpi-controls { grid-template-columns: 1fr; } }
 
     .subhead {
       display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
       gap: .5rem; margin: 1rem 0 .5rem;
     }
     .subhead h4 { margin: 0; font-size: .85rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
-    .pipe-table input, .pipe-table select { width: 100%; padding: .4rem .5rem; font-size: .85rem; }
-    .pipe-table td { vertical-align: middle; }
-    .pipe-table .col-size { width: 8rem; }
-    .pipe-table .col-conf { width: 9rem; }
-    .pipe-table .col-x { width: 2.5rem; }
-    .icon-btn {
-      appearance: none; background: transparent; border: 1px solid var(--border); color: var(--muted);
-      border-radius: 6px; width: 1.9rem; height: 1.9rem; cursor: pointer; line-height: 1; font-size: .9rem;
-    }
-    .icon-btn:hover { color: #f87171; border-color: #7f1d1d; }
 
     .btn {
       appearance: none; border: 1px solid var(--border); background: var(--accent);
@@ -243,15 +242,19 @@
 
   // Account-level targetable lists exist for Sponsored Listings and Smart Promotions
   // (full active Malta universe in sl-targetable.json / sp-targetable.json).
-  // Marketing Campaigns has the same account-view shell but stays empty until its pull lands.
-  // Q3 Renegotiations and Bolt Plus remain manual pipelines — we never invent accounts.
+  // No account lists are shown for Q3 Renegotiations, Bolt Plus or Marketing Campaigns.
   const TARGETABLE_KPIS = ['Sponsored Listings', 'Smart Promotions'];
-  const ACCOUNT_VIEW_KPIS = [...TARGETABLE_KPIS, 'Marketing Campaigns'];
+  const ACCOUNT_VIEW_KPIS = TARGETABLE_KPIS;
   const TARGETABLE_PAGE = 250;
   const TARGETABLE_FILTERS = [
     { key: 'current', label: 'Already in', test: r => r.currentlyOn },
     { key: 'tried', label: 'Tried before', test: r => r.everHadOn && !r.currentlyOn },
     { key: 'never', label: 'Never tried', test: r => !r.everHadOn },
+  ];
+  const TARGETING_MODES = [
+    { key: 'all', label: 'All' },
+    { key: 'targeting', label: 'Targeting' },
+    { key: 'not', label: 'Not targeting' },
   ];
 
   // Pipeline owner mapping. Targetable JSON carries the Salesforce owner string, which has shown up
@@ -266,8 +269,6 @@
     'Gulcin Erguven': ['gulcin erguven', 'gulchin erguven', 'gulcin ergueven', 'erguven'],
     'Fiona Borg': ['fiona borg', 'borg fiona', 'fiona m borg'],
   };
-  const CONFIDENCE_WEIGHTS = { High: 0.8, Medium: 0.5, Low: 0.25 };
-
   function normaliseName(s) {
     return String(s || '')
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -351,18 +352,39 @@
     saveState(state);
   }
 
+  // AM comments were shipped as "next step" and stored under `next||<product>||<providerId>`.
+  // Reads still accept the old prefixes so nothing an AM typed disappears; the next save
+  // rewrites the value under the amComment key and drops the legacy one.
+  const LEGACY_COMMENT_PREFIXES = ['nextStep', 'next'];
+  function commentKey(product, providerId) { return `amComment||${product}||${providerId}`; }
+  function legacyCommentKeys(product, providerId) {
+    return LEGACY_COMMENT_PREFIXES.map(p => `${p}||${product}||${providerId}`);
+  }
+  function readComment(state, product, providerId) {
+    for (const key of [commentKey(product, providerId), ...legacyCommentKeys(product, providerId)]) {
+      if (state[key]) return state[key];
+    }
+    return '';
+  }
+  function writeComment(state, product, providerId, value) {
+    const key = commentKey(product, providerId);
+    if (value) state[key] = value;
+    else delete state[key];
+    legacyCommentKeys(product, providerId).forEach(k => delete state[k]);
+  }
+
+  // Targeting ticks are keyed on provider + product + the account's AM, so a tick made on the
+  // overview list shows up on that AM's page and an owner viewing another AM's list cannot
+  // overwrite it. Accounts whose owner is outside the five AMs fall into one shared bucket.
+  function targetingKey(product, row) {
+    return `targeting||${product}||${canonicalOwner(row.owner) || 'unassigned'}||${row.providerId}`;
+  }
+  function isTargeting(state, product, row) { return Boolean(state[targetingKey(product, row)]); }
+
   async function loadJSON(path) {
     const res = await fetch(path);
     if (!res.ok) throw new Error(`Failed to load ${path} (${res.status})`);
     return res.json();
-  }
-
-  function weightedPipeline(rows) {
-    return rows.reduce((sum, r) => {
-      const size = Number(r.size);
-      if (!size || Number.isNaN(size)) return sum;
-      return sum + size * (CONFIDENCE_WEIGHTS[r.confidence] ?? 0.5);
-    }, 0);
   }
 
   function formatDate(value) {
@@ -582,43 +604,22 @@
 
   /* --------------------------------------------------------------- AM pages */
 
-  function pipeRowHtml(row, idx) {
-    const conf = row.confidence || '';
-    const options = ['', 'High', 'Medium', 'Low']
-      .map(c => `<option value="${c}"${c === conf ? ' selected' : ''}>${c || '—'}</option>`).join('');
-    return `
-      <tr data-row="${idx}">
-        <td><input type="text" data-cell="account" value="${esc(row.account || '')}" placeholder="Named account" /></td>
-        <td class="col-size"><input type="number" min="0" step="1" data-cell="size" value="${esc(row.size ?? '')}" placeholder="0" /></td>
-        <td class="col-conf"><select data-cell="confidence">${options}</select></td>
-        <td><input type="text" data-cell="nextStep" value="${esc(row.nextStep || '')}" placeholder="Next step this week" /></td>
-        <td class="col-x"><button type="button" class="icon-btn" data-action="del-row" title="Remove row">×</button></td>
-      </tr>`;
-  }
-
-  function pipeFooterText(rows, gap) {
-    const size = rows.reduce((s, r) => s + (Number(r.size) || 0), 0);
-    const weighted = weightedPipeline(rows);
-    const need = Math.max(Number(gap) || 0, 0);
-    const verdict = need === 0
-      ? 'No gap — pipeline protects the run-rate.'
-      : (weighted >= need ? 'Weighted pipeline covers the gap.' : `Short of the gap by ${Math.round(need - weighted)} at current confidence.`);
-    return `${rows.length} account${rows.length === 1 ? '' : 's'} · pipeline ${fmtNum(size)} · weighted ${fmtNum(Math.round(weighted))} vs gap ${fmtNum(need)} — ${verdict}`;
-  }
-
   function kpiBlockHtml(person, w, slRows, spRows) {
     const entry = getEntry(person, w.kpi);
     const rootCause = entry.rootCause ?? w.rootCause ?? '';
     const pipelineText = entry.pipeline ?? w.pipeline ?? '';
     const forecast = entry.forecast ?? w.forecast ?? '';
     const notes = entry.notes ?? w.notes ?? '';
-    const rows = Array.isArray(entry.rows) && entry.rows.length ? entry.rows : [{}];
-    const keepManualTable = !TARGETABLE_KPIS.includes(w.kpi);
+    const legacyRow = Array.isArray(entry.rows) ? entry.rows[0] : null;
+    const confidence = entry.confidence ?? legacyRow?.confidence ?? '';
+    const amComment = entry.amComment ?? entry.nextStep ?? legacyRow?.amComment ?? legacyRow?.nextStep ?? '';
+    const confidenceOptions = ['', 'High', 'Medium', 'Low']
+      .map(c => `<option value="${c}"${c === confidence ? ' selected' : ''}>${c || '—'}</option>`).join('');
     const targetableRows = w.kpi === 'Sponsored Listings' ? slRows : w.kpi === 'Smart Promotions' ? spRows : [];
     const hasAccountView = ACCOUNT_VIEW_KPIS.includes(w.kpi);
     const targetable = hasAccountView
       ? `<div class="account-drilldown" id="${esc(accountViewId(person, w.kpi))}" data-account-view hidden>
-          ${targetableHtml(person, w.kpi, targetableRows, { pending: w.kpi === 'Marketing Campaigns' })}
+          ${targetableHtml(person, w.kpi, targetableRows)}
         </div>`
       : '';
 
@@ -640,28 +641,28 @@
           </div>
           <div class="box">
             <label>Pipeline</label>
-            <textarea data-field="pipeline" placeholder="Named accounts this week, sized vs the gap…">${esc(pipelineText)}</textarea>
+            <textarea data-field="pipeline" placeholder="Full-KPI pipeline and plan against the gap…">${esc(pipelineText)}</textarea>
           </div>
           <div class="box">
             <label>Forecast</label>
             <textarea data-field="forecast" placeholder="Honest EOW/EOM landing…">${esc(forecast)}</textarea>
           </div>
         </div>
+        <div class="kpi-controls">
+          <div>
+            <label for="${esc(accountViewId(person, w.kpi))}-confidence">Confidence</label>
+            <select id="${esc(accountViewId(person, w.kpi))}-confidence" data-field="confidence">${confidenceOptions}</select>
+          </div>
+          <div>
+            <label for="${esc(accountViewId(person, w.kpi))}-comment">AM comment</label>
+            <textarea id="${esc(accountViewId(person, w.kpi))}-comment" data-field="amComment" placeholder="AM comment for this KPI…">${esc(amComment)}</textarea>
+          </div>
+        </div>
+        ${hasAccountView ? '' : '<p class="sub" style="margin:.75rem 0 0">Targetable lists are on Sponsored Listings and Smart Promotions.</p>'}
         <div class="notes-row">
           <label>Notes</label>
           <textarea data-field="notes" placeholder="Optional notes…">${esc(notes)}</textarea>
         </div>
-
-        ${keepManualTable ? `
-        <div class="subhead">
-          <h4>${esc(w.kpi)} pipeline — named accounts</h4>
-          <button type="button" class="btn secondary small" data-action="add-row">Add account</button>
-        </div>
-        <table class="pipe-table">
-          <thead><tr><th>Account</th><th>Size</th><th>Confidence</th><th>Next step</th><th></th></tr></thead>
-          <tbody data-rows>${rows.map(pipeRowHtml).join('')}</tbody>
-          <tfoot><tr><td colspan="5" data-pipe-foot>${esc(pipeFooterText(rows, w.gap))}</td></tr></tfoot>
-        </table>` : ''}
         ${targetable}
       </div>`;
   }
@@ -682,9 +683,11 @@
         <p class="sub" style="margin:.15rem 0 .75rem">${opts.ownerFilter
           ? 'Use the owner filter to focus the account list.'
           : `Filtered to ${esc(first)}'s accounts using the existing owner alias map.`}</p>
-        ${opts.pending ? '<div class="pending-note" role="status">Marketing Campaigns enrolment data pending</div>' : ''}
         <div class="chip-row" data-target-chips>
           ${TARGETABLE_FILTERS.map((f, i) => `<button type="button" class="chip${i === 0 ? ' active' : ''}" data-filter="${f.key}">${esc(f.label)} <span class="n">${fmtNum(filterCount(rows, f.key))}</span></button>`).join('')}
+        </div>
+        <div class="chip-row" data-targeting-filters aria-label="Targeting filter">
+          ${TARGETING_MODES.map((m, i) => `<button type="button" class="chip${i === 0 ? ' active' : ''}" data-targeting-mode="${m.key}">${esc(m.label)}</button>`).join('')}
         </div>
         <div class="toolbar">
           <input type="search" data-target-search placeholder="Search account name…" />
@@ -694,7 +697,7 @@
         <div class="table-wrap">
           <table>
             <thead><tr>
-              <th>Account</th><th>Provider ID</th><th>Currently on</th><th>Ever had on</th><th>First start</th><th>Last end</th><th>Next step</th>
+              <th>Account</th><th>Provider ID</th><th>Currently on</th><th>Ever had on</th><th>First start</th><th>Last end</th><th>Targeting</th><th>AM comment</th>
             </tr></thead>
             <tbody data-target-body></tbody>
           </table>
@@ -751,7 +754,7 @@
         <div class="toolbar" style="margin:.85rem 0 0">
           <button type="button" class="btn" data-action="copy-update">Copy weekly update</button>
           <button type="button" class="btn secondary" data-action="reset-person">Reset this page to pack defaults</button>
-          <span class="pill">Notes and pipeline rows save to this browser</span>
+          <span class="pill">KPI notes, confidence, comments and targeting save to this browser</span>
         </div>
       </div>
       ${ordered.map(w => kpiBlockHtml(person, w, slRows, spRows)).join('')}`;
@@ -760,15 +763,18 @@
   function wireTargetable(widget, rows) {
     const product = widget.dataset.product;
     const chips = widget.querySelector('[data-target-chips]');
+    const targetingFilters = widget.querySelector('[data-targeting-filters]');
     const search = widget.querySelector('[data-target-search]');
     const ownerSel = widget.querySelector('[data-target-owner]');
     const shown = widget.querySelector('[data-target-shown]');
     const body = widget.querySelector('[data-target-body]');
     const loadMore = widget.querySelector('[data-action="load-more"]');
     let filterKey = 'current';
+    let targetingMode = 'all';
     let renderLimit = TARGETABLE_PAGE;
 
     const paint = () => {
+      const state = loadState();
       const query = (search.value || '').trim().toLowerCase();
       const owner = ownerSel?.value || '';
       const test = TARGETABLE_FILTERS.find(f => f.key === filterKey)?.test || (() => true);
@@ -783,14 +789,14 @@
       });
       const matches = scoped.filter(r =>
         test(r) &&
+        (targetingMode === 'all' || isTargeting(state, product, r) === (targetingMode === 'targeting')) &&
         (!query || String(r.accountName || '').toLowerCase().includes(query)));
       const visible = matches.slice(0, renderLimit);
-      shown.textContent = `Showing ${fmtNum(visible.length)} of ${fmtNum(matches.length)}`;
+      const targetingCount = scoped.filter(r => isTargeting(state, product, r)).length;
+      shown.textContent =
+        `Showing ${fmtNum(visible.length)} of ${fmtNum(matches.length)} · ${fmtNum(targetingCount)} targeting`;
       if (loadMore) loadMore.hidden = visible.length >= matches.length;
-      const state = loadState();
-      body.innerHTML = visible.map(r => {
-        const key = `next||${product}||${r.providerId}`;
-        return `
+      body.innerHTML = visible.map(r => `
           <tr>
             <td><strong>${esc(r.accountName)}</strong></td>
             <td class="num">${esc(r.providerId)}</td>
@@ -798,11 +804,13 @@
             <td>${r.everHadOn ? '<span class="status green">Yes</span>' : '<span class="status muted">No</span>'}</td>
             <td class="num">${esc(formatDate(r.firstStart))}</td>
             <td class="num">${esc(formatDate(r.lastEnd))}</td>
-            <td><input class="next-step" data-next-key="${esc(key)}" value="${esc(state[key] || '')}" placeholder="Add next step…" /></td>
-          </tr>`;
-      }).join('') || `<tr><td colspan="7" style="color:var(--muted)">${product === 'Marketing Campaigns'
-        ? 'Marketing Campaigns enrolment data pending'
-        : 'No matching accounts'}</td></tr>`;
+            <td class="tgt-cell"><input type="checkbox" data-targeting-key="${esc(targetingKey(product, r))}"${
+              isTargeting(state, product, r) ? ' checked' : ''
+            } aria-label="Targeting ${esc(r.accountName)}" /></td>
+            <td><input class="am-comment" data-comment-key data-provider="${esc(r.providerId)}" value="${
+              esc(readComment(state, product, r.providerId))
+            }" placeholder="Add AM comment…" /></td>
+          </tr>`).join('') || '<tr><td colspan="8" style="color:var(--muted)">No matching accounts</td></tr>';
     };
 
     chips.addEventListener('click', e => {
@@ -813,18 +821,46 @@
       chips.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c === chip));
       paint();
     });
+    targetingFilters.addEventListener('click', e => {
+      const chip = e.target.closest('[data-targeting-mode]');
+      if (!chip) return;
+      targetingMode = chip.dataset.targetingMode;
+      renderLimit = TARGETABLE_PAGE;
+      targetingFilters.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c === chip));
+      paint();
+    });
     search.addEventListener('input', () => { renderLimit = TARGETABLE_PAGE; paint(); });
     ownerSel?.addEventListener('change', () => { renderLimit = TARGETABLE_PAGE; paint(); });
     loadMore?.addEventListener('click', () => { renderLimit += TARGETABLE_PAGE; paint(); });
     body.addEventListener('change', e => {
-      const input = e.target.closest('input[data-next-key]');
+      const box = e.target.closest('input[data-targeting-key]');
+      if (box) {
+        const state = loadState();
+        if (box.checked) state[box.dataset.targetingKey] = true;
+        else delete state[box.dataset.targetingKey];
+        saveState(state);
+        showToast(box.checked ? 'Marked as targeting' : 'Targeting cleared');
+        // A tick can drop the row out of the current view, so only repaint when it filters.
+        if (targetingMode !== 'all') paint();
+        else shownCountOnly(state);
+        return;
+      }
+      const input = e.target.closest('input[data-comment-key]');
       if (!input) return;
       const state = loadState();
-      if (input.value.trim()) state[input.dataset.nextKey] = input.value.trim();
-      else delete state[input.dataset.nextKey];
+      writeComment(state, product, input.dataset.provider, input.value.trim());
       saveState(state);
-      showToast('Next step saved');
+      showToast('AM comment saved');
     });
+
+    // Keeping the "N targeting" count live without rebuilding rows, so a tick never steals focus.
+    function shownCountOnly(state) {
+      const owner = ownerSel?.value || '';
+      const scoped = rows.filter(r => !owner || canonicalOwner(r.owner) === owner);
+      const targetingCount = scoped.filter(r => isTargeting(state, product, r)).length;
+      shown.textContent = shown.textContent.replace(/[\d,]+ targeting$/, `${fmtNum(targetingCount)} targeting`);
+    }
+
     paint();
   }
 
@@ -835,22 +871,11 @@
     panel._listeners?.abort();
     const { signal } = (panel._listeners = new AbortController());
 
-    const rowsOf = block => {
-      const out = [];
-      block.querySelectorAll('tbody[data-rows] tr').forEach(tr => {
-        const row = {};
-        tr.querySelectorAll('[data-cell]').forEach(el => { row[el.dataset.cell] = el.value; });
-        out.push(row);
-      });
-      return out;
-    };
     const persistBlock = block => {
       const kpi = block.dataset.kpi;
-      const patch = { rows: rowsOf(block) };
-      block.querySelectorAll('textarea[data-field]').forEach(el => { patch[el.dataset.field] = el.value; });
+      const patch = {};
+      block.querySelectorAll('[data-field]').forEach(el => { patch[el.dataset.field] = el.value; });
       patchEntry(person, kpi, patch);
-      const foot = block.querySelector('[data-pipe-foot]');
-      if (foot) foot.textContent = pipeFooterText(patch.rows, block.dataset.gap);
     };
 
     let saveTimer;
@@ -886,28 +911,6 @@
         return;
       }
 
-      if (btn.dataset.action === 'add-row' && block) {
-        const tbody = block.querySelector('tbody[data-rows]');
-        tbody.insertAdjacentHTML('beforeend', pipeRowHtml({}, tbody.children.length));
-        persistBlock(block);
-        return;
-      }
-      if (btn.dataset.action === 'del-row' && block) {
-        const tbody = block.querySelector('tbody[data-rows]');
-        btn.closest('tr').remove();
-        if (!tbody.children.length) tbody.insertAdjacentHTML('beforeend', pipeRowHtml({}, 0));
-        persistBlock(block);
-        return;
-      }
-      if (btn.dataset.action === 'add-to-pipeline' && block) {
-        const tbody = block.querySelector('tbody[data-rows]');
-        const rows = rowsOf(block).filter(r => (r.account || '').trim());
-        rows.push({ account: btn.dataset.account, size: 1, confidence: 'Medium', nextStep: btn.dataset.next || '' });
-        tbody.innerHTML = rows.map(pipeRowHtml).join('');
-        persistBlock(block);
-        showToast(`${btn.dataset.account} added to pipeline`);
-        return;
-      }
       if (btn.dataset.action === 'reset-person') {
         clearPerson(person);
         renderPersonPanel(panel, hub, person, panel.dataset.role, slRows, spRows);
@@ -923,7 +926,7 @@
       }
     }, { signal });
 
-    // Account views for Sponsored Listings, Smart Promotions and the pending Marketing Campaigns pull.
+    // Account views only exist for Sponsored Listings and Smart Promotions.
     panel.querySelectorAll('.targetable').forEach(widget => {
       const product = widget.dataset.product;
       const source = product === 'Sponsored Listings' ? slRows : product === 'Smart Promotions' ? spRows : [];
@@ -936,16 +939,14 @@
     panel.querySelectorAll('.kpi-block').forEach(block => {
       const kpi = block.dataset.kpi;
       const val = f => (block.querySelector(`textarea[data-field="${f}"]`)?.value || '').trim();
-      const rows = [];
-      block.querySelectorAll('tbody[data-rows] tr').forEach(tr => {
-        const cell = n => tr.querySelector(`[data-cell="${n}"]`)?.value || '';
-        if (cell('account').trim()) rows.push(`${cell('account')} (${cell('size') || '?'}, ${cell('confidence') || 'no confidence'}) — ${cell('nextStep') || 'no next step'}`);
-      });
+      const confidence = block.querySelector('[data-field="confidence"]')?.value || '—';
       lines.push('', `## ${kpi} — gap ${block.dataset.gap}`);
       lines.push(`Root cause: ${val('rootCause')}`);
       lines.push(`Pipeline: ${val('pipeline')}`);
-      if (rows.length) lines.push(...rows.map(r => `  - ${r}`));
       lines.push(`Forecast: ${val('forecast')}`);
+      lines.push(`Confidence: ${confidence}`);
+      const amComment = val('amComment');
+      if (amComment) lines.push(`AM comment: ${amComment}`);
       const notes = val('notes');
       if (notes) lines.push(`Notes: ${notes}`);
     });
