@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Malta MM Performance Hub</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --bg2: #111a2e;
+      --card: #162038;
+      --card2: #1c2944;
+      --border: #2a3a5c;
+      --text: #e8eef9;
+      --muted: #93a0b8;
+      --accent: #4f8cff;
+      --accent2: #7c5cff;
+      --green: #22c55e;
+      --yellow: #eab308;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --green-bg: rgba(34,197,94,.15);
+      --yellow-bg: rgba(234,179,8,.15);
+      --amber-bg: rgba(245,158,11,.15);
+      --red-bg: rgba(239,68,68,.15);
+      --radius: 12px;
+      --shadow: 0 8px 24px rgba(0,0,0,.35);
+      --font: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: var(--font); }
+    body { min-height: 100vh; display: flex; flex-direction: column; }
+    a { color: var(--accent); }
+    .wrap { width: min(1280px, 100%); margin: 0 auto; padding: 0 1.25rem; }
+
+    header.app-header {
+      background: linear-gradient(135deg, #0f1b33 0%, #1a1040 55%, #0e2a4a 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 1.25rem 0 0;
+      position: sticky; top: 0; z-index: 40;
+      backdrop-filter: blur(8px);
+    }
+    .brand-row { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start; justify-content: space-between; }
+    .brand h1 { margin: 0; font-size: 1.45rem; letter-spacing: -.02em; }
+    .brand p { margin: .35rem 0 0; color: var(--muted); font-size: .92rem; }
+    .meta-pills { display: flex; flex-wrap: wrap; gap: .5rem; }
+    .pill {
+      background: rgba(255,255,255,.06); border: 1px solid var(--border);
+      border-radius: 999px; padding: .35rem .75rem; font-size: .8rem; color: var(--muted);
+    }
+    .pill strong { color: var(--text); font-weight: 600; }
+
+    nav.tabs {
+      display: flex; gap: .25rem; margin-top: 1rem; overflow-x: auto;
+      padding-bottom: 0; border-bottom: 1px solid transparent;
+    }
+    nav.tabs button {
+      appearance: none; border: 0; background: transparent; color: var(--muted);
+      padding: .75rem 1rem; font: inherit; font-weight: 600; font-size: .9rem;
+      cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap;
+    }
+    nav.tabs button:hover { color: var(--text); }
+    nav.tabs button.active { color: var(--text); border-bottom-color: var(--accent); }
+
+    main { flex: 1; padding: 1.25rem 0 2rem; }
+    .panel { display: none; animation: fade .2s ease; }
+    .panel.active { display: block; }
+    @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+    .grid { display: grid; gap: 1rem; }
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .grid-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    @media (max-width: 960px) {
+      .grid-2, .grid-3, .grid-4, .grid-6 { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 640px) {
+      .grid-2, .grid-3, .grid-4, .grid-6 { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1rem 1.1rem; box-shadow: var(--shadow);
+    }
+    .card h2, .card h3 { margin: 0 0 .75rem; font-size: 1rem; }
+    .card .sub { color: var(--muted); font-size: .85rem; margin: -.4rem 0 .85rem; }
+
+    .stat { text-align: left; }
+    .stat .label { color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
+    .stat .value { font-size: 1.55rem; font-weight: 700; margin-top: .25rem; }
+    .stat .hint { color: var(--muted); font-size: .8rem; margin-top: .2rem; }
+
+    .status {
+      display: inline-flex; align-items: center; gap: .35rem;
+      border-radius: 999px; padding: .2rem .55rem; font-size: .78rem; font-weight: 700;
+    }
+    .status.green { background: var(--green-bg); color: var(--green); }
+    .status.yellow { background: var(--yellow-bg); color: #facc15; }
+    .status.amber { background: var(--amber-bg); color: var(--amber); }
+    .status.red { background: var(--red-bg); color: #f87171; }
+    .status.muted { background: rgba(255,255,255,.06); color: var(--muted); }
+
+    table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+    th, td { text-align: left; padding: .55rem .5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .03em; position: sticky; top: 0; background: var(--card); z-index: 1; }
+    tr:hover td { background: rgba(255,255,255,.02); }
+    .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .table-wrap { overflow: auto; max-height: 62vh; border-radius: 8px; }
+
+    .toolbar { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; margin-bottom: 1rem; }
+    .toolbar input, .toolbar select, .toolbar textarea, .field textarea, .field input {
+      background: var(--bg2); color: var(--text); border: 1px solid var(--border);
+      border-radius: 8px; padding: .55rem .7rem; font: inherit;
+    }
+    .toolbar input[type="search"] { min-width: 220px; flex: 1; }
+    .toolbar select { min-width: 180px; }
+    .chip-row { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .85rem; }
+    .chip {
+      border: 1px solid var(--border); background: var(--bg2); color: var(--muted);
+      border-radius: 999px; padding: .3rem .7rem; font-size: .78rem; cursor: pointer;
+    }
+    .chip.active { border-color: var(--accent); color: var(--text); background: rgba(79,140,255,.15); }
+    .chip .n { font-weight: 700; color: var(--text); margin-left: .25rem; }
+
+    .weekly-card { margin-bottom: 1rem; }
+    .weekly-card header {
+      display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem;
+      align-items: baseline; margin-bottom: .75rem;
+    }
+    .weekly-card header h3 { margin: 0; }
+    .boxes { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: .75rem; }
+    @media (max-width: 900px) { .boxes { grid-template-columns: 1fr; } }
+    .box {
+      background: var(--card2); border: 1px solid var(--border); border-radius: 10px; padding: .75rem;
+    }
+    .box label { display: block; font-size: .75rem; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; margin-bottom: .4rem; }
+    .box .body { font-size: .9rem; line-height: 1.45; white-space: pre-wrap; min-height: 4.5rem; }
+    .box textarea {
+      width: 100%; min-height: 5.5rem; resize: vertical; background: transparent; border: 0; color: var(--text);
+      font: inherit; padding: 0; outline: none;
+    }
+    .notes-row { margin-top: .75rem; }
+    .notes-row label { display: block; font-size: .75rem; color: var(--muted); font-weight: 700; margin-bottom: .35rem; text-transform: uppercase; letter-spacing: .04em; }
+    .notes-row textarea { width: 100%; min-height: 2.8rem; }
+
+    .btn {
+      appearance: none; border: 1px solid var(--border); background: var(--accent);
+      color: white; font: inherit; font-weight: 600; font-size: .85rem;
+      border-radius: 8px; padding: .5rem .85rem; cursor: pointer;
+    }
+    .btn.secondary { background: transparent; color: var(--text); }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .toast {
+      position: fixed; bottom: 1.25rem; right: 1.25rem; background: #12301f; color: #86efac;
+      border: 1px solid #166534; padding: .65rem 1rem; border-radius: 10px; display: none; z-index: 50;
+    }
+    .toast.show { display: block; animation: fade .2s ease; }
+
+    .list { margin: 0; padding-left: 1.1rem; color: var(--text); line-height: 1.55; }
+    .list li { margin: .35rem 0; }
+    .team { display: flex; flex-wrap: wrap; gap: .5rem; }
+    .member {
+      background: var(--card2); border: 1px solid var(--border); border-radius: 10px;
+      padding: .55rem .8rem; min-width: 140px;
+    }
+    .member .name { font-weight: 700; }
+    .member .role { color: var(--muted); font-size: .8rem; }
+
+    footer.app-footer {
+      border-top: 1px solid var(--border); color: var(--muted); font-size: .8rem;
+      padding: 1rem 0 1.4rem; text-align: center;
+    }
+    .loading, .error {
+      padding: 2rem; text-align: center; color: var(--muted);
+    }
+    .error { color: #fca5a5; }
+    .legend { display: flex; flex-wrap: wrap; gap: .5rem; margin: .5rem 0 1rem; }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <div class="wrap">
+      <div class="brand-row">
+        <div class="brand">
+          <h1>Malta MM Performance Hub</h1>
+          <p>Duncan Calleja · TL · reporting for Advay</p>
+        </div>
+        <div class="meta-pills" id="metaPills"></div>
+      </div>
+      <nav class="tabs" id="tabs" role="tablist">
+        <button type="button" data-tab="overview" class="active">Overview</button>
+        <button type="button" data-tab="scorecard">Scorecard</button>
+        <button type="button" data-tab="weekly">Weekly</button>
+        <button type="button" data-tab="pipeline">Account Pipeline</button>
+        <button type="button" data-tab="howto">How to report</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div id="boot" class="loading">Loading hub data…</div>
+
+    <section class="panel" id="panel-overview"></section>
+    <section class="panel" id="panel-scorecard"></section>
+    <section class="panel" id="panel-weekly"></section>
+    <section class="panel" id="panel-pipeline"></section>
+    <section class="panel" id="panel-howto"></section>
+  </main>
+
+  <footer class="app-footer">
+    <div class="wrap" id="footerText">Boltable static v1 · data as of today</div>
+  </footer>
+  <div class="toast" id="toast">Saved to this browser</div>
+
+  <script>
+  const LS_KEY = 'mt-mm-performance-weekly-v1';
+  const TODAY = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Baku' });
+
+  function pctClass(pct) {
+    if (pct == null || Number.isNaN(Number(pct))) return 'muted';
+    const p = Number(pct);
+    if (p >= 1) return 'green';
+    if (p >= 0.9) return 'yellow';
+    if (p >= 0.7) return 'amber';
+    return 'red';
+  }
+  function fmtPct(pct) {
+    if (pct == null || pct === '') return '—';
+    return Math.round(Number(pct) * 100) + '%';
+  }
+  function fmtNum(n) {
+    if (n == null || n === '') return '—';
+    return Number(n).toLocaleString('en-GB');
+  }
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function statusPill(pct) {
+    const cls = pctClass(pct);
+    return `<span class="status ${cls}">${fmtPct(pct)}</span>`;
+  }
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg || 'Saved to this browser';
+    t.classList.add('show');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => t.classList.remove('show'), 1600);
+  }
+
+  function loadWeeklyEdits() {
+    try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); }
+    catch { return {}; }
+  }
+  function saveWeeklyEdits(map) {
+    localStorage.setItem(LS_KEY, JSON.stringify(map));
+  }
+
+  async function loadJSON(path) {
+    const res = await fetch(path);
+    if (!res.ok) throw new Error(`Failed to load ${path} (${res.status})`);
+    return res.json();
+  }
+
+  function activateTab(name) {
+    document.querySelectorAll('nav.tabs button').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === name);
+    });
+    document.querySelectorAll('main .panel').forEach(p => {
+      p.classList.toggle('active', p.id === 'panel-' + name);
+    });
+    history.replaceState(null, '', '#' + name);
+  }
+
+  function renderOverview(hub, summary) {
+    const u = summary.universe || {};
+    const loaded = summary.loadedInApp || {};
+    const kpis = hub.advayCountryKpis || [];
+    const team = hub.team || [];
+
+    const kpiCards = kpis.map(k => `
+      <div class="card stat">
+        <div class="label">${esc(k.kpi)}</div>
+        <div class="value">${statusPill(k.sep)}</div>
+        <div class="hint">Jun ${fmtPct(k.jun)} · Jul ${fmtPct(k.jul)} · Aug ${fmtPct(k.aug)}</div>
+        <div class="hint" style="margin-top:.45rem">${esc(k.note || '')}</div>
+      </div>`).join('');
+
+    const teamHtml = team.map(t => `
+      <div class="member"><div class="name">${esc(t.name)}</div><div class="role">${esc(t.role)}</div></div>
+    `).join('');
+
+    document.getElementById('panel-overview').innerHTML = `
+      <div class="grid grid-4" style="margin-bottom:1rem">
+        <div class="card stat"><div class="label">Active Malta providers</div><div class="value">${fmtNum(u.totalActive)}</div><div class="hint">Universe</div></div>
+        <div class="card stat"><div class="label">Currently enrolled</div><div class="value">${fmtNum(u.currentlyEnrolled)}</div><div class="hint">In app sample: ${fmtNum(loaded['Currently enrolled'])}</div></div>
+        <div class="card stat"><div class="label">Enrolled in period</div><div class="value">${fmtNum(u.enrolledInPeriod)}</div><div class="hint">Sep 2026 overlap</div></div>
+        <div class="card stat"><div class="label">Never enrolled</div><div class="value">${fmtNum(u.neverEnrolled)}</div><div class="hint">In app sample: ${fmtNum(loaded['Never enrolled'])}</div></div>
+      </div>
+      <div class="card" style="margin-bottom:1rem">
+        <h2>Team</h2>
+        <div class="team">${teamHtml}</div>
+      </div>
+      <div class="card">
+        <h2>Advay country KPIs · Sep 2026</h2>
+        <p class="sub">Status colours: green ≥100% · yellow ≥90% · amber ≥70% · red &lt;70%</p>
+        <div class="grid grid-3">${kpiCards}</div>
+      </div>`;
+  }
+
+  function renderScorecard(hub) {
+    const rows = hub.scorecard || [];
+    const people = [...new Set(rows.map(r => r.person))];
+    const legend = `
+      <div class="legend">
+        <span class="status green">≥100%</span>
+        <span class="status yellow">≥90%</span>
+        <span class="status amber">≥70%</span>
+        <span class="status red">&lt;70%</span>
+      </div>`;
+
+    const overall = rows.filter(r => r.kpi === 'Overall');
+    const overallCards = (overall.length ? overall : people.map(p => {
+      const personRows = rows.filter(r => r.person === p && r.kpi !== 'Overall');
+      const avg = personRows.length ? personRows.reduce((s,r)=>s+Number(r.pct||0),0)/personRows.length : null;
+      return { person: p, role: personRows[0]?.role, pct: avg, status: '', comments: '' };
+    })).map(o => `
+      <div class="card stat">
+        <div class="label">${esc(o.person)} · ${esc(o.role || '')}</div>
+        <div class="value">${statusPill(o.pct)}</div>
+        <div class="hint">${esc(o.status || '')}${o.comments ? ' — ' + esc(o.comments) : ''}</div>
+      </div>`).join('');
+
+    const body = rows.map(r => `
+      <tr>
+        <td>${esc(r.person)}</td>
+        <td>${esc(r.role)}</td>
+        <td>${esc(r.kpi)}</td>
+        <td class="num">${fmtNum(r.achievement)}</td>
+        <td class="num">${fmtNum(r.target)}</td>
+        <td>${statusPill(r.pct)}</td>
+        <td class="num">${r.gap == null ? '—' : fmtNum(r.gap)}</td>
+        <td>${esc(r.status || '')}</td>
+        <td>${esc(r.comments || '')}</td>
+      </tr>`).join('');
+
+    document.getElementById('panel-scorecard').innerHTML = `
+      <div class="grid grid-3" style="margin-bottom:1rem">${overallCards}</div>
+      <div class="card">
+        <h2>Scorecard · ${esc(hub.month || 'Sep 2026')}</h2>
+        ${legend}
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Person</th><th>Role</th><th>KPI</th><th>Ach.</th><th>Target</th><th>%</th><th>Gap</th><th>Status</th><th>Comments</th>
+            </tr></thead>
+            <tbody>${body}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  function renderWeekly(hub) {
+    const items = hub.weeklyPerformance || [];
+    const edits = loadWeeklyEdits();
+    const html = items.map((w, i) => {
+      const key = w.kpi;
+      const e = edits[key] || {};
+      const root = e.rootCause ?? w.rootCause ?? '';
+      const pipe = e.pipeline ?? w.pipeline ?? '';
+      const fore = e.forecast ?? w.forecast ?? '';
+      const notes = e.notes ?? w.notes ?? '';
+      return `
+        <div class="card weekly-card" data-kpi="${esc(key)}">
+          <header>
+            <h3>${esc(w.kpi)}</h3>
+            <div class="meta-pills">
+              <span class="pill">Owner <strong>${esc(w.owner || '')}</strong></span>
+              <span class="pill">Week <strong>${esc(w.weekOf || hub.weekOf || '')}</strong></span>
+              <span class="pill">Gap <strong>${w.gap == null ? '—' : fmtNum(w.gap)}</strong></span>
+              <span class="pill">${esc(w.status || 'Draft')}</span>
+            </div>
+          </header>
+          <div class="boxes">
+            <div class="box">
+              <label>Root cause</label>
+              <textarea data-field="rootCause" data-kpi="${esc(key)}" placeholder="Specific execution reason…">${esc(root)}</textarea>
+            </div>
+            <div class="box">
+              <label>Pipeline</label>
+              <textarea data-field="pipeline" data-kpi="${esc(key)}" placeholder="Named providers this week…">${esc(pipe)}</textarea>
+            </div>
+            <div class="box">
+              <label>Forecast</label>
+              <textarea data-field="forecast" data-kpi="${esc(key)}" placeholder="Honest EOW/EOM landing…">${esc(fore)}</textarea>
+            </div>
+          </div>
+          <div class="notes-row">
+            <label>Notes</label>
+            <textarea data-field="notes" data-kpi="${esc(key)}" placeholder="Optional notes…">${esc(notes)}</textarea>
+          </div>
+        </div>`;
+    }).join('');
+
+    document.getElementById('panel-weekly').innerHTML = `
+      <div class="card" style="margin-bottom:1rem">
+        <h2>Weekly performance · week of ${esc(hub.weekOf || '2026-09-22')}</h2>
+        <p class="sub">Edits persist in this browser (localStorage). Three boxes Advay expects: root cause, pipeline, forecast.</p>
+        <div class="toolbar">
+          <button type="button" class="btn" id="btnSaveWeekly">Save edits</button>
+          <button type="button" class="btn secondary" id="btnResetWeekly">Reset to pack defaults</button>
+        </div>
+      </div>
+      ${html || '<div class="card">No weekly rows in hub-data.</div>'}`;
+
+    const persist = () => {
+      const map = loadWeeklyEdits();
+      document.querySelectorAll('#panel-weekly textarea[data-kpi]').forEach(el => {
+        const k = el.dataset.kpi;
+        map[k] = map[k] || {};
+        map[k][el.dataset.field] = el.value;
+      });
+      saveWeeklyEdits(map);
+      showToast('Weekly edits saved');
+    };
+    document.getElementById('btnSaveWeekly')?.addEventListener('click', persist);
+    document.getElementById('btnResetWeekly')?.addEventListener('click', () => {
+      localStorage.removeItem(LS_KEY);
+      renderWeekly(hub);
+      showToast('Reset to pack defaults');
+    });
+    // auto-save on blur
+    document.querySelectorAll('#panel-weekly textarea[data-kpi]').forEach(el => {
+      el.addEventListener('change', persist);
+    });
+  }
+
+  function renderPipeline(pipeline, summary) {
+    const loaded = summary.loadedInApp || {};
+    const statuses = ['All', 'Currently enrolled', 'Enrolled in period', 'Never enrolled', 'Churned / ended'];
+    const counts = {
+      'All': loaded.total ?? pipeline.length,
+      'Currently enrolled': loaded['Currently enrolled'] ?? 0,
+      'Enrolled in period': loaded['Enrolled in period'] ?? 0,
+      'Never enrolled': loaded['Never enrolled'] ?? 0,
+      'Churned / ended': loaded['Churned / ended'] ?? 0,
+    };
+    const u = summary.universe || {};
+
+    document.getElementById('panel-pipeline').innerHTML = `
+      <div class="grid grid-4" style="margin-bottom:1rem">
+        <div class="card stat"><div class="label">In this app</div><div class="value">${fmtNum(counts.All)}</div><div class="hint">Prioritized sample</div></div>
+        <div class="card stat"><div class="label">Universe currently enrolled</div><div class="value">${fmtNum(u.currentlyEnrolled)}</div><div class="hint">Full active Malta</div></div>
+        <div class="card stat"><div class="label">Universe never enrolled</div><div class="value">${fmtNum(u.neverEnrolled)}</div><div class="hint">Active only</div></div>
+        <div class="card stat"><div class="label">Universe churned / ended</div><div class="value">${fmtNum(u.churnedEnded)}</div><div class="hint">Active providers</div></div>
+      </div>
+      <div class="card">
+        <h2>Account Pipeline · Sponsored Listings</h2>
+        <p class="sub">Sprint week ${esc(summary.sprintWeek || '2026-09-22')} · filter by enrolment · search by account name</p>
+        <div class="chip-row" id="statusChips">
+          ${statuses.map((s,i) => `<button type="button" class="chip${i===0?' active':''}" data-status="${esc(s)}">${esc(s)} <span class="n">${fmtNum(counts[s])}</span></button>`).join('')}
+        </div>
+        <div class="toolbar">
+          <input type="search" id="pipeSearch" placeholder="Search account name…" />
+          <select id="pipeOwner"><option value="">All owners</option></select>
+          <span class="pill" id="pipeShown">Showing 0</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Account</th><th>Owner</th><th>Enrolment</th><th>From</th><th>To</th><th>Current</th><th>Stage</th><th>Provider ID</th>
+            </tr></thead>
+            <tbody id="pipeBody"></tbody>
+          </table>
+        </div>
+      </div>`;
+
+    const owners = [...new Set(pipeline.map(r => r.owner).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+    const ownerSel = document.getElementById('pipeOwner');
+    owners.forEach(o => {
+      const opt = document.createElement('option');
+      opt.value = o; opt.textContent = o; ownerSel.appendChild(opt);
+    });
+
+    let statusFilter = 'All';
+    const searchEl = document.getElementById('pipeSearch');
+    const body = document.getElementById('pipeBody');
+    const shown = document.getElementById('pipeShown');
+
+    function paint() {
+      const q = (searchEl.value || '').trim().toLowerCase();
+      const owner = ownerSel.value;
+      const filtered = pipeline.filter(r => {
+        if (statusFilter !== 'All' && r.enrolmentStatus !== statusFilter) return false;
+        if (owner && r.owner !== owner) return false;
+        if (q && !(r.accountName || '').toLowerCase().includes(q)) return false;
+        return true;
+      });
+      shown.textContent = `Showing ${filtered.length.toLocaleString('en-GB')}`;
+      body.innerHTML = filtered.map(r => `
+        <tr>
+          <td><strong>${esc(r.accountName)}</strong></td>
+          <td>${esc(r.owner)}</td>
+          <td>${esc(r.enrolmentStatus)}</td>
+          <td class="num">${esc(r.from || '—')}</td>
+          <td class="num">${esc(r.to || '—')}</td>
+          <td>${r.currentlyEnrolled ? '<span class="status green">Yes</span>' : '<span class="status muted">No</span>'}</td>
+          <td>${esc(r.stage || '')}</td>
+          <td class="num">${esc(r.providerId)}</td>
+        </tr>`).join('') || `<tr><td colspan="8" style="color:var(--muted)">No matching accounts</td></tr>`;
+    }
+
+    document.getElementById('statusChips').addEventListener('click', (e) => {
+      const btn = e.target.closest('.chip');
+      if (!btn) return;
+      statusFilter = btn.dataset.status;
+      document.querySelectorAll('#statusChips .chip').forEach(c => c.classList.toggle('active', c === btn));
+      paint();
+    });
+    searchEl.addEventListener('input', paint);
+    ownerSel.addEventListener('change', paint);
+    paint();
+  }
+
+  function renderHowto(hub) {
+    const reqs = hub.advayRequirements || [
+      'Root cause: specific execution reason for the gap (not target debate).',
+      'Pipeline: named providers this week, pipeline size, conversion confidence (gap ≠ pipeline).',
+      'Forecast: honest EOW/EOM landing from pipeline × confidence.',
+    ];
+    document.getElementById('panel-howto').innerHTML = `
+      <div class="card" style="margin-bottom:1rem">
+        <h2>How to report to Advay</h2>
+        <p class="sub">Every underperforming KPI needs these three answers before the weekly sync.</p>
+        <ol class="list">${reqs.map(r => `<li>${esc(r)}</li>`).join('')}</ol>
+      </div>
+      <div class="grid grid-3">
+        <div class="card">
+          <h3>1 · Root cause</h3>
+          <p class="sub">Execution reason — capacity, pitch quality, pricing, churn, coverage — not “target too high”.</p>
+        </div>
+        <div class="card">
+          <h3>2 · Pipeline</h3>
+          <p class="sub">Named providers for this sprint week, sized vs gap, with conversion confidence.</p>
+        </div>
+        <div class="card">
+          <h3>3 · Forecast</h3>
+          <p class="sub">Honest EOW/EOM landing = current + (pipeline × confidence). Gap ≠ pipeline.</p>
+        </div>
+      </div>
+      <div class="card" style="margin-top:1rem">
+        <h3>Status colour legend</h3>
+        <div class="legend" style="margin-top:.75rem">
+          <span class="status green">Green ≥ 100%</span>
+          <span class="status yellow">Yellow ≥ 90%</span>
+          <span class="status amber">Amber ≥ 70%</span>
+          <span class="status red">Red &lt; 70%</span>
+        </div>
+      </div>`;
+  }
+
+  async function main() {
+    try {
+      const [hub, pipeline, summary] = await Promise.all([
+        loadJSON('data/malta-mm/hub-data.json'),
+        loadJSON('data/malta-mm/sl-pipeline.json'),
+        loadJSON('data/malta-mm/summary.json'),
+      ]);
+
+      document.getElementById('boot').remove();
+
+      const asOf = summary.asOf || TODAY;
+      document.getElementById('metaPills').innerHTML = `
+        <span class="pill">Month <strong>${esc(hub.month || '')}</strong></span>
+        <span class="pill">Week of <strong>${esc(hub.weekOf || '')}</strong></span>
+        <span class="pill">Audience <strong>Advay</strong></span>
+        <span class="pill">Pipeline <strong>${fmtNum(pipeline.length)}</strong></span>
+        <span class="pill">Data as of <strong>${esc(asOf)}</strong></span>`;
+
+      document.getElementById('footerText').textContent =
+        `Boltable static v1 · mt-mm-performance · data as of ${asOf} · ${TODAY} Asia/Baku`;
+
+      renderOverview(hub, summary);
+      renderScorecard(hub);
+      renderWeekly(hub);
+      renderPipeline(pipeline, summary);
+      renderHowto(hub);
+
+      document.getElementById('tabs').addEventListener('click', (e) => {
+        const b = e.target.closest('button[data-tab]');
+        if (b) activateTab(b.dataset.tab);
+      });
+      const initial = (location.hash || '#overview').slice(1);
+      activateTab(['overview','scorecard','weekly','pipeline','howto'].includes(initial) ? initial : 'overview');
+    } catch (err) {
+      document.getElementById('boot').className = 'error';
+      document.getElementById('boot').textContent = String(err.message || err);
+    }
+  }
+  main();
+  </script>
+</body>
+</html>
