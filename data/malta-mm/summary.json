@@ -3,7 +3,7 @@
   "asOfLabel": "2026-09-21 16:41 Asia/Baku (UTC+4)",
   "product": "Sponsored Listings",
   "sprintWeek": "2026-09-22",
-  "source": "Databricks dim_provider_v2 \u27d5 fact_provider_sponsored_listing_signup (country_code=mt, active)",
+  "source": "Databricks dim_provider_v2 ⟕ fact_provider_sponsored_listing_signup (country_code=mt, active)",
   "universe": {
     "totalActive": 1797,
     "neverEnrolled": 1386,
@@ -18,5 +18,54 @@
     "Currently enrolled": 50,
     "total": 515
   },
-  "notes": "515-row prioritized sample from Databricks pull. Universe = full active Malta population."
+  "notes": "515-row prioritized sample from Databricks pull. Universe = full active Malta population.",
+  "amScope": {
+    "owners": [
+      "Alena Tokareva",
+      "Rico Spagnol",
+      "Yousef Moungad",
+      "Gulcin Erguven",
+      "Fiona Borg"
+    ],
+    "note": "sl-pipeline.json keeps the full Databricks pull; the hub filters it to these five AM owners in JS. Rows owned by anyone else (TL, unassigned, ex-AMs) are never shown.",
+    "rowsOwnedByAms": 242,
+    "rowsOtherOwners": 273,
+    "byOwner": {
+      "Alena Tokareva": {
+        "total": 41,
+        "Never enrolled": 2,
+        "Enrolled in period": 7,
+        "Currently enrolled": 6,
+        "Churned / ended": 26
+      },
+      "Rico Spagnol": {
+        "total": 46,
+        "Never enrolled": 18,
+        "Enrolled in period": 6,
+        "Currently enrolled": 11,
+        "Churned / ended": 11
+      },
+      "Yousef Moungad": {
+        "total": 43,
+        "Never enrolled": 24,
+        "Enrolled in period": 3,
+        "Currently enrolled": 3,
+        "Churned / ended": 13
+      },
+      "Gulcin Erguven": {
+        "total": 74,
+        "Never enrolled": 38,
+        "Enrolled in period": 14,
+        "Currently enrolled": 10,
+        "Churned / ended": 12
+      },
+      "Fiona Borg": {
+        "total": 38,
+        "Never enrolled": 22,
+        "Enrolled in period": 10,
+        "Currently enrolled": 0,
+        "Churned / ended": 6
+      }
+    }
+  }
 }
