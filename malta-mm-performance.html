@@ -129,6 +129,7 @@
       min-width: 220px; width: 100%; background: var(--bg2); color: var(--text);
       border: 1px solid var(--border); border-radius: 7px; padding: .4rem .5rem; font: inherit;
     }
+    .load-more { margin-top: .75rem; }
     .owner-scope { margin-bottom: 1rem; }
     .pipeline-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .75rem; align-items: baseline; }
 
@@ -486,6 +487,8 @@
       { key: 'current', label: 'Currently on', count: counts.current, test: r => r.currentlyOn },
     ];
     let activeFilter = filters[0];
+    const pageSize = 250;
+    let renderLimit = pageSize;
     const nextSteps = loadNextSteps();
 
     container.innerHTML = `
@@ -516,20 +519,24 @@
           </tr></thead>
           <tbody></tbody>
         </table>
-      </div>`;
+      </div>
+      <button type="button" class="btn secondary load-more">Show next ${fmtNum(pageSize)}</button>`;
 
     const searchEl = container.querySelector('input[type="search"]');
     const shown = container.querySelector('.pipeline-shown');
     const body = container.querySelector('tbody');
+    const loadMore = container.querySelector('.load-more');
 
     function paint() {
       const query = searchEl.value.trim().toLowerCase();
-      const filtered = rows
+      const matches = rows
         .filter(activeFilter.test)
         .filter(r => !query || String(r.accountName || '').toLowerCase().includes(query))
         .sort((a, b) => String(a.accountName || '').localeCompare(String(b.accountName || '')));
-      shown.textContent = `Showing ${fmtNum(filtered.length)}`;
-      body.innerHTML = filtered.map(r => {
+      const visible = matches.slice(0, renderLimit);
+      shown.textContent = `Showing ${fmtNum(visible.length)} of ${fmtNum(matches.length)}`;
+      loadMore.hidden = visible.length >= matches.length;
+      body.innerHTML = visible.map(r => {
         const stepKey = `${product}:${r.providerId}`;
         return `
           <tr>
@@ -548,10 +555,18 @@
       const button = event.target.closest('button[data-filter]');
       if (!button) return;
       activeFilter = filters.find(f => f.key === button.dataset.filter) || filters[0];
+      renderLimit = pageSize;
       container.querySelectorAll('.chip').forEach(chip => chip.classList.toggle('active', chip === button));
       paint();
     });
-    searchEl.addEventListener('input', paint);
+    searchEl.addEventListener('input', () => {
+      renderLimit = pageSize;
+      paint();
+    });
+    loadMore.addEventListener('click', () => {
+      renderLimit += pageSize;
+      paint();
+    });
     body.addEventListener('change', event => {
       const input = event.target.closest('input[data-step-key]');
       if (!input) return;
