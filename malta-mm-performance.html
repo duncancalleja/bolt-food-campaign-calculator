@@ -393,6 +393,26 @@
     return match ? match[0] : String(value);
   }
 
+  function kpiPipelineCopy(value, kpi) {
+    let text = String(value || '');
+    if (TARGETABLE_KPIS.includes(kpi)) {
+      text = text.replace(
+        /^No account-level pull exists for [^—]+ — name the accounts, size, confidence and next step in the pipeline table below\./i,
+        'Use the targetable account list below. Set confidence and add an AM comment for the full KPI.'
+      );
+      text = text.replace(
+        /Name this week's accounts in the pipeline table below and size them against/gi,
+        'Use the targetable account list below and size the full-KPI pipeline against'
+      );
+    } else {
+      text = text.replace(
+        / — name the accounts, size, confidence and next step in the pipeline table below\./gi,
+        '. Set confidence and add an AM comment for the full KPI.'
+      );
+    }
+    return text.replace(/\bnext step\b/gi, 'AM comment');
+  }
+
   function targetableStats(rows) {
     return {
       all: rows.length,
@@ -607,7 +627,7 @@
   function kpiBlockHtml(person, w, slRows, spRows) {
     const entry = getEntry(person, w.kpi);
     const rootCause = entry.rootCause ?? w.rootCause ?? '';
-    const pipelineText = entry.pipeline ?? w.pipeline ?? '';
+    const pipelineText = kpiPipelineCopy(entry.pipeline ?? w.pipeline ?? '', w.kpi);
     const forecast = entry.forecast ?? w.forecast ?? '';
     const notes = entry.notes ?? w.notes ?? '';
     const legacyRow = Array.isArray(entry.rows) ? entry.rows[0] : null;
