@@ -129,6 +129,20 @@
     .chip .n { font-weight: 700; color: var(--text); margin-left: .25rem; }
     .targetable { margin-top: .75rem; }
     .targetable .count-pills { display: flex; flex-wrap: wrap; gap: .45rem; margin: .55rem 0 .85rem; }
+    .kpi-link {
+      appearance: none; border: 0; border-bottom: 1px solid currentColor; background: transparent;
+      color: var(--accent); padding: 0; font: inherit; font-weight: 700; cursor: pointer; text-align: left;
+    }
+    .kpi-link:hover, .kpi-link:focus-visible { color: #8bb4ff; }
+    .account-drilldown {
+      margin-top: 1rem; padding: .9rem; background: rgba(11,18,32,.45);
+      border: 1px solid var(--border); border-radius: 10px;
+    }
+    .pending-note {
+      margin: .6rem 0 .85rem; padding: .7rem .8rem; border-radius: 8px;
+      border: 1px solid rgba(245,158,11,.45); background: var(--amber-bg); color: #fcd34d;
+    }
+    [hidden] { display: none !important; }
     .next-step { min-width: 180px; width: 100%; padding: .4rem .5rem; font-size: .85rem; }
     .load-more { margin-top: .75rem; }
 
@@ -229,15 +243,15 @@
 
   // Account-level targetable lists exist for Sponsored Listings and Smart Promotions
   // (full active Malta universe in sl-targetable.json / sp-targetable.json).
-  // Every other KPI keeps an empty pipeline table for the AM to fill in — we never invent accounts.
+  // Marketing Campaigns has the same account-view shell but stays empty until its pull lands.
+  // Q3 Renegotiations and Bolt Plus remain manual pipelines — we never invent accounts.
   const TARGETABLE_KPIS = ['Sponsored Listings', 'Smart Promotions'];
+  const ACCOUNT_VIEW_KPIS = [...TARGETABLE_KPIS, 'Marketing Campaigns'];
   const TARGETABLE_PAGE = 250;
   const TARGETABLE_FILTERS = [
-    { key: 'pipeline', label: 'Pipeline (can target)', test: r => !r.currentlyOn },
-    { key: 'all', label: 'All targetable', test: () => true },
-    { key: 'never', label: 'Never had on', test: r => !r.everHadOn },
-    { key: 'churned', label: 'Ever had on (not current)', test: r => r.everHadOn && !r.currentlyOn },
-    { key: 'current', label: 'Currently on', test: r => r.currentlyOn },
+    { key: 'current', label: 'Already in', test: r => r.currentlyOn },
+    { key: 'tried', label: 'Tried before', test: r => r.everHadOn && !r.currentlyOn },
+    { key: 'never', label: 'Never tried', test: r => !r.everHadOn },
   ];
 
   // Pipeline owner mapping. Targetable JSON carries the Salesforce owner string, which has shown up
@@ -302,6 +316,9 @@
   function slug(name) {
     return normaliseName(name).split(' ')[0];
   }
+  function accountViewId(person, kpi) {
+    return `account-view-${normaliseName(person).replace(/\s+/g, '-')}-${normaliseName(kpi).replace(/\s+/g, '-')}`;
+  }
   function showToast(msg) {
     const t = document.getElementById('toast');
     t.textContent = msg || 'Saved to this browser';
@@ -362,6 +379,7 @@
       never: rows.filter(r => !r.everHadOn).length,
       pipeline: rows.filter(r => !r.currentlyOn).length,
       churned: rows.filter(r => r.everHadOn && !r.currentlyOn).length,
+      tried: rows.filter(r => r.everHadOn && !r.currentlyOn).length,
     };
   }
 
@@ -597,9 +615,12 @@
     const rows = Array.isArray(entry.rows) && entry.rows.length ? entry.rows : [{}];
     const keepManualTable = !TARGETABLE_KPIS.includes(w.kpi);
     const targetableRows = w.kpi === 'Sponsored Listings' ? slRows : w.kpi === 'Smart Promotions' ? spRows : [];
-    const targetable = TARGETABLE_KPIS.includes(w.kpi)
-      ? targetableHtml(person, w.kpi, targetableRows)
-      : `<p class="sub" style="margin:.4rem 0 0">No Databricks account pull exists for ${esc(w.kpi)} — list the accounts you are working above. Targetable provider lists are only shown for Sponsored Listings and Smart Promotions.</p>`;
+    const hasAccountView = ACCOUNT_VIEW_KPIS.includes(w.kpi);
+    const targetable = hasAccountView
+      ? `<div class="account-drilldown" id="${esc(accountViewId(person, w.kpi))}" data-account-view hidden>
+          ${targetableHtml(person, w.kpi, targetableRows, { pending: w.kpi === 'Marketing Campaigns' })}
+        </div>`
+      : '';
 
     return `
       <div class="card kpi-block" data-person="${esc(person)}" data-kpi="${esc(w.kpi)}" data-gap="${esc(w.gap ?? 0)}">
@@ -646,7 +667,6 @@
   }
 
   function targetableHtml(scope, product, rows, opts = {}) {
-    const stats = targetableStats(rows);
     const first = String(scope || 'Overview').split(' ')[0];
     const ownerOptions = opts.ownerFilter
       ? `<select data-target-owner>
@@ -657,15 +677,12 @@
     return `
       <div class="targetable" data-product="${esc(product)}" data-scope="${esc(scope)}">
         <div class="subhead">
-          <h4>Targetable providers · ${esc(first)}'s ${esc(product)}</h4>
+          <h4>${esc(product)} account view</h4>
         </div>
-        <div class="count-pills">
-          <span class="pill">Total targetable <strong data-stat="all">${fmtNum(stats.all)}</strong></span>
-          <span class="pill">Currently on <strong data-stat="current">${fmtNum(stats.current)}</strong></span>
-          <span class="pill">Ever on <strong data-stat="ever">${fmtNum(stats.ever)}</strong></span>
-          <span class="pill">Never <strong data-stat="never">${fmtNum(stats.never)}</strong></span>
-          <span class="pill">Pipeline can-target <strong data-stat="pipeline">${fmtNum(stats.pipeline)}</strong></span>
-        </div>
+        <p class="sub" style="margin:.15rem 0 .75rem">${opts.ownerFilter
+          ? 'Use the owner filter to focus the account list.'
+          : `Filtered to ${esc(first)}'s accounts using the existing owner alias map.`}</p>
+        ${opts.pending ? '<div class="pending-note" role="status">Marketing Campaigns enrolment data pending</div>' : ''}
         <div class="chip-row" data-target-chips>
           ${TARGETABLE_FILTERS.map((f, i) => `<button type="button" class="chip${i === 0 ? ' active' : ''}" data-filter="${f.key}">${esc(f.label)} <span class="n">${fmtNum(filterCount(rows, f.key))}</span></button>`).join('')}
         </div>
@@ -697,9 +714,13 @@
     const scoreRows = KPI_ORDER.map(k => {
       const r = scorecard.find(x => x.kpi === k);
       if (!r) return '';
+      const canDrillDown = ACCOUNT_VIEW_KPIS.includes(r.kpi);
+      const kpiName = canDrillDown
+        ? `<button type="button" class="kpi-link" data-action="open-account-view" data-kpi="${esc(r.kpi)}" aria-controls="${esc(accountViewId(person, r.kpi))}" aria-expanded="false">${esc(r.kpi)}</button>`
+        : `<strong>${esc(r.kpi)}</strong>`;
       return `
         <tr>
-          <td><strong>${esc(r.kpi)}</strong></td>
+          <td>${kpiName}</td>
           <td class="num">${fmtNum(r.achievement)}</td>
           <td class="num">${fmtNum(r.target)}</td>
           <td>${statusPill(r.pct)}</td>
@@ -744,7 +765,7 @@
     const shown = widget.querySelector('[data-target-shown]');
     const body = widget.querySelector('[data-target-body]');
     const loadMore = widget.querySelector('[data-action="load-more"]');
-    let filterKey = 'pipeline';
+    let filterKey = 'current';
     let renderLimit = TARGETABLE_PAGE;
 
     const paint = () => {
@@ -779,7 +800,9 @@
             <td class="num">${esc(formatDate(r.lastEnd))}</td>
             <td><input class="next-step" data-next-key="${esc(key)}" value="${esc(state[key] || '')}" placeholder="Add next step…" /></td>
           </tr>`;
-      }).join('') || '<tr><td colspan="7" style="color:var(--muted)">No matching accounts</td></tr>';
+      }).join('') || `<tr><td colspan="7" style="color:var(--muted)">${product === 'Marketing Campaigns'
+        ? 'Marketing Campaigns enrolment data pending'
+        : 'No matching accounts'}</td></tr>`;
     };
 
     chips.addEventListener('click', e => {
@@ -847,6 +870,22 @@
       if (!btn) return;
       const block = btn.closest('.kpi-block');
 
+      if (btn.dataset.action === 'open-account-view') {
+        const targetBlock = Array.from(panel.querySelectorAll('.kpi-block'))
+          .find(candidate => candidate.dataset.kpi === btn.dataset.kpi);
+        const accountView = targetBlock?.querySelector('[data-account-view]');
+        if (accountView) {
+          panel.querySelectorAll('[data-account-view]').forEach(view => { view.hidden = view !== accountView; });
+          accountView.hidden = false;
+          panel.querySelectorAll('[data-action="open-account-view"]').forEach(link => {
+            link.setAttribute('aria-expanded', String(link === btn));
+          });
+          accountView.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          accountView.querySelector('[data-target-search]')?.focus({ preventScroll: true });
+        }
+        return;
+      }
+
       if (btn.dataset.action === 'add-row' && block) {
         const tbody = block.querySelector('tbody[data-rows]');
         tbody.insertAdjacentHTML('beforeend', pipeRowHtml({}, tbody.children.length));
@@ -884,10 +923,10 @@
       }
     }, { signal });
 
-    // Targetable lists for Sponsored Listings and Smart Promotions.
+    // Account views for Sponsored Listings, Smart Promotions and the pending Marketing Campaigns pull.
     panel.querySelectorAll('.targetable').forEach(widget => {
       const product = widget.dataset.product;
-      const source = product === 'Sponsored Listings' ? slRows : spRows;
+      const source = product === 'Sponsored Listings' ? slRows : product === 'Smart Promotions' ? spRows : [];
       wireTargetable(widget, source);
     });
   }
