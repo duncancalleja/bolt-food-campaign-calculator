@@ -486,7 +486,7 @@
 
     const countryRow = `
       <tr>
-        <td><strong>Country overview</strong><div class="hint">Country KPI target · roll-up of the 5 AMs</div></td>
+        <td><strong>Malta</strong><div class="hint">Country KPI target · roll-up of the 5 AMs</div></td>
         ${KPI_ORDER.map(k => {
           const c = kpis.find(x => x.kpi === k);
           if (!c) return '<td>—</td>';
@@ -555,16 +555,8 @@
       </div>
 
       <div class="card" style="margin-bottom:1rem">
-        <div class="brand-row">
-          <div>
-            <h2 style="margin:0 0 .25rem">Country KPI target</h2>
-            <p class="sub" style="margin:0">The five Malta MM KPI targets at country level. This is a country overview, not an individual owner.</p>
-          </div>
-          <div class="meta-pills">
-            <span class="pill"><strong>Country overview</strong></span>
-            <span class="pill">Malta</span>
-          </div>
-        </div>
+        <h2 style="margin:0 0 .25rem">Country KPI target</h2>
+        <p class="sub" style="margin:0">The five Malta MM KPI targets at country level — the roll-up of the five AMs, not a sixth owner.</p>
       </div>
 
       <div class="grid grid-5" style="margin-bottom:1rem">${kpiCards}</div>
@@ -582,7 +574,7 @@
 
       <div class="card" style="margin-bottom:1rem">
         <h2>Weekly country gaps · week of ${esc(hub.weekOf || '')}</h2>
-        <p class="sub">The country KPI target versus the AMs carrying each gap. Open an AM page for the root cause, pipeline and forecast.</p>
+        <p class="sub">Country KPI target versus the AMs carrying each gap. Open an AM page for the root cause, pipeline and forecast.</p>
         <div class="table-wrap">
           <table>
             <thead><tr><th>KPI</th><th>%</th><th>Ach. / target</th><th>Gap</th><th>AMs behind target</th></tr></thead>
@@ -1106,7 +1098,7 @@
         <span class="pill">Month <strong>${esc(hub.month || '')}</strong></span>
         <span class="pill">Week of <strong>${esc(hub.weekOf || '')}</strong></span>
         <span class="pill">AMs <strong>${people.length}</strong></span>
-        <span class="pill">Country KPI target <strong>Overview</strong></span>
+        <span class="pill">Country KPI target</span>
         <span class="pill">SL enrolled <strong>${fmtNum(slCountryStats.current)}</strong> · target <strong>${fmtNum(slCountryStats.pipeline)}</strong></span>
         <span class="pill">SP enrolled <strong>${fmtNum(spCountryStats.current)}</strong> · target <strong>${fmtNum(spCountryStats.pipeline)}</strong></span>
         <span class="pill">MC enrolled <strong>${fmtNum(mcCountryStats.current)}</strong> · target <strong>${fmtNum(mcCountryStats.pipeline)}</strong></span>
