@@ -110,6 +110,7 @@
     tr:hover td { background: rgba(255,255,255,.02); }
     tfoot td { color: var(--muted); font-size: .82rem; border-bottom: 0; }
     .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    td.muted-cell { color: var(--muted); }
     .table-wrap { overflow: auto; max-height: 48vh; border-radius: 8px; }
     .table-wrap.tall { max-height: 62vh; }
 
@@ -360,6 +361,23 @@
     return `targeting||${product}||${canonicalOwner(row.owner) || 'unassigned'}||${row.providerId}`;
   }
   function isTargeting(state, product, row) { return Boolean(state[targetingKey(product, row)]); }
+  // Only target-list rows carry a targeting checkbox, so enrolled accounts never count.
+  function targetingCount(state, product, rows) {
+    return rows.filter(r => !r.currentlyOn && isTargeting(state, product, r)).length;
+  }
+
+  // The scorecard "Targeted" cells live outside the target-list widget that owns the ticks, so the
+  // rows behind each cell are registered here and every cell is repainted whenever a tick changes —
+  // including a tick made on the overview list for another AM's account.
+  const TARGETED_ROWS = new Map();
+  function targetedRowsKey(person, product) { return `${person}||${product}`; }
+  function refreshTargetedCounts() {
+    const state = loadState();
+    document.querySelectorAll('[data-targeted-cell]').forEach(cell => {
+      const rows = TARGETED_ROWS.get(targetedRowsKey(cell.dataset.person, cell.dataset.product)) || [];
+      cell.textContent = fmtNum(targetingCount(state, cell.dataset.product, rows));
+    });
+  }
 
   async function loadJSON(path) {
     const res = await fetch(path);
@@ -747,7 +765,10 @@
       : null;
     const slStats = targetableStats(slRows);
     const spStats = targetableStats(spRows);
+    TARGETED_ROWS.set(targetedRowsKey(person, 'Sponsored Listings'), slRows);
+    TARGETED_ROWS.set(targetedRowsKey(person, 'Smart Promotions'), spRows);
 
+    const state = loadState();
     const scoreRows = KPI_ORDER.map(k => {
       const r = scorecard.find(x => x.kpi === k);
       if (!r) return '';
@@ -755,6 +776,11 @@
       const kpiName = canDrillDown
         ? `<button type="button" class="kpi-link" data-action="open-account-view" data-kpi="${esc(r.kpi)}" aria-controls="${esc(accountViewId(person, r.kpi))}" aria-expanded="false">${esc(r.kpi)}</button>`
         : `<strong>${esc(r.kpi)}</strong>`;
+      // A KPI without a target list has no targeting UI at all, so it shows a dash rather than a 0.
+      const targetRows = r.kpi === 'Sponsored Listings' ? slRows : r.kpi === 'Smart Promotions' ? spRows : null;
+      const targetedCell = targetRows
+        ? `<td class="num" data-targeted-cell data-person="${esc(person)}" data-product="${esc(r.kpi)}" title="Accounts ticked as Targeting on the ${esc(r.kpi)} target list">${fmtNum(targetingCount(state, r.kpi, targetRows))}</td>`
+        : '<td class="num muted-cell" title="No target list for this KPI">—</td>';
       return `
         <tr>
           <td>${kpiName}</td>
@@ -762,6 +788,7 @@
           <td class="num">${fmtNum(r.target)}</td>
           <td>${statusPill(r.pct)}</td>
           <td class="num">${fmtNum(r.gap)}</td>
+          ${targetedCell}
           <td>${esc(r.status || '')}</td>
         </tr>`;
     }).join('');
@@ -781,7 +808,7 @@
         </div>
         <div class="table-wrap" style="margin-top:.85rem">
           <table>
-            <thead><tr><th>KPI</th><th>Ach.</th><th>Target</th><th>%</th><th>Gap</th><th>Status</th></tr></thead>
+            <thead><tr><th>KPI</th><th>Ach.</th><th>Target</th><th>%</th><th>Gap</th><th title="Accounts ticked as Targeting on that KPI's target list">Targeted</th><th>Status</th></tr></thead>
             <tbody>${scoreRows}</tbody>
           </table>
         </div>
@@ -881,6 +908,7 @@
       if (box.checked) state[box.dataset.targetingKey] = true;
       else delete state[box.dataset.targetingKey];
       saveState(state);
+      refreshTargetedCounts();
       showToast(box.checked ? 'Marked as targeting' : 'Targeting cleared');
       // A tick can drop the row out of the current view, so only repaint when it filters.
       if (targetingMode !== 'all') paint();
