@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="robots" content="noindex, nofollow" />
-  <title>Malta MM Performance Hub</title>
+  <title>Malta Performance Hub</title>
   <style>
     :root {
       --bg: #0b1220;
@@ -139,8 +139,9 @@
       border: 1px solid var(--border); border-radius: 10px;
     }
     [hidden] { display: none !important; }
-    .am-comment { min-width: 180px; width: 100%; padding: .4rem .5rem; font-size: .85rem; }
     .tgt-cell { width: 5.5rem; text-align: center; }
+    .account-table { margin-top: 1.1rem; padding-top: .35rem; border-top: 1px solid var(--border); }
+    .account-table .subhead h4 { color: var(--text); font-size: .9rem; }
     input[type="checkbox"] {
       width: 1.05rem; height: 1.05rem; min-width: 0; padding: 0; margin: 0;
       accent-color: var(--accent); cursor: pointer; vertical-align: middle;
@@ -213,7 +214,7 @@
     <div class="wrap">
       <div class="brand-row">
         <div class="brand">
-          <h1>Malta MM Performance Hub</h1>
+          <h1>Malta Performance Hub</h1>
           <p>Overview plus one page per AM · KPIs are the Malta MM columns of the shared RAM sheet</p>
         </div>
         <div class="meta-pills" id="metaPills"></div>
@@ -244,13 +245,13 @@
   // (full active Malta universe in sl-targetable.json / sp-targetable.json).
   // No account lists are shown for Q3 Renegotiations, Bolt Plus or Marketing Campaigns.
   const TARGETABLE_KPIS = ['Sponsored Listings', 'Smart Promotions'];
+  // Country KPI targets belong to the Malta TL, not to any of the five AM pages.
+  const COUNTRY_OWNER = { name: 'Duncan Calleja', firstName: 'Duncan', role: 'TL' };
   const ACCOUNT_VIEW_KPIS = TARGETABLE_KPIS;
   const TARGETABLE_PAGE = 250;
-  const TARGETABLE_FILTERS = [
-    { key: 'current', label: 'Already in', test: r => r.currentlyOn },
-    { key: 'tried', label: 'Tried before', test: r => r.everHadOn && !r.currentlyOn },
-    { key: 'never', label: 'Never tried', test: r => !r.everHadOn },
-  ];
+  // Enrolled accounts (currentlyOn) and target accounts (everything else) are rendered as two
+  // separate tables: an account that already has the product on has nothing left to target, so the
+  // targeting checkbox and the targeting filter only exist on the target table.
   const TARGETING_MODES = [
     { key: 'all', label: 'All' },
     { key: 'targeting', label: 'Targeting' },
@@ -352,27 +353,6 @@
     saveState(state);
   }
 
-  // AM comments were shipped as "next step" and stored under `next||<product>||<providerId>`.
-  // Reads still accept the old prefixes so nothing an AM typed disappears; the next save
-  // rewrites the value under the amComment key and drops the legacy one.
-  const LEGACY_COMMENT_PREFIXES = ['nextStep', 'next'];
-  function commentKey(product, providerId) { return `amComment||${product}||${providerId}`; }
-  function legacyCommentKeys(product, providerId) {
-    return LEGACY_COMMENT_PREFIXES.map(p => `${p}||${product}||${providerId}`);
-  }
-  function readComment(state, product, providerId) {
-    for (const key of [commentKey(product, providerId), ...legacyCommentKeys(product, providerId)]) {
-      if (state[key]) return state[key];
-    }
-    return '';
-  }
-  function writeComment(state, product, providerId, value) {
-    const key = commentKey(product, providerId);
-    if (value) state[key] = value;
-    else delete state[key];
-    legacyCommentKeys(product, providerId).forEach(k => delete state[k]);
-  }
-
   // Targeting ticks are keyed on provider + product + the account's AM, so a tick made on the
   // overview list shows up on that AM's page and an owner viewing another AM's list cannot
   // overwrite it. Accounts whose owner is outside the five AMs fall into one shared bucket.
@@ -398,11 +378,11 @@
     if (TARGETABLE_KPIS.includes(kpi)) {
       text = text.replace(
         /^No account-level pull exists for [^—]+ — name the accounts, size, confidence and next step in the pipeline table below\./i,
-        'Use the targetable account list below. Set confidence and add an AM comment for the full KPI.'
+        'Use the target list below. Set confidence and add an AM comment for the full KPI.'
       );
       text = text.replace(
         /Name this week's accounts in the pipeline table below and size them against/gi,
-        'Use the targetable account list below and size the full-KPI pipeline against'
+        'Use the target list below and size the full-KPI pipeline against'
       );
     } else {
       text = text.replace(
@@ -417,17 +397,10 @@
     return {
       all: rows.length,
       current: rows.filter(r => r.currentlyOn).length,
-      ever: rows.filter(r => r.everHadOn).length,
-      never: rows.filter(r => !r.everHadOn).length,
       pipeline: rows.filter(r => !r.currentlyOn).length,
-      churned: rows.filter(r => r.everHadOn && !r.currentlyOn).length,
+      never: rows.filter(r => !r.everHadOn).length,
       tried: rows.filter(r => r.everHadOn && !r.currentlyOn).length,
     };
-  }
-
-  function filterCount(rows, key) {
-    const f = TARGETABLE_FILTERS.find(x => x.key === key);
-    return f ? rows.filter(f.test).length : rows.length;
   }
 
   function bucketByOwner(rows, people) {
@@ -485,7 +458,7 @@
 
     const countryRow = `
       <tr>
-        <td><strong>Malta MM total</strong><div class="hint">Roll-up of the 5 AMs</div></td>
+        <td><strong>${esc(COUNTRY_OWNER.name)}</strong><div class="hint">${esc(COUNTRY_OWNER.role)} · Country KPI target · roll-up of the 5 AMs</div></td>
         ${KPI_ORDER.map(k => {
           const c = kpis.find(x => x.kpi === k);
           if (!c) return '<td>—</td>';
@@ -520,9 +493,9 @@
             <td><strong>${esc(p.name)}</strong></td>
             <td class="num">${fmtNum(stats.all)}</td>
             <td class="num">${fmtNum(stats.current)}</td>
-            <td class="num">${fmtNum(stats.ever)}</td>
-            <td class="num">${fmtNum(stats.never)}</td>
             <td class="num">${fmtNum(stats.pipeline)}</td>
+            <td class="num">${fmtNum(stats.never)}</td>
+            <td class="num">${fmtNum(stats.tried)}</td>
           </tr>`;
       }).join('');
       const totals = targetableStats(people.flatMap(p => byOwner.get(p.name) || []));
@@ -531,9 +504,9 @@
           <td><strong>Five AMs</strong></td>
           <td class="num">${fmtNum(totals.all)}</td>
           <td class="num">${fmtNum(totals.current)}</td>
-          <td class="num">${fmtNum(totals.ever)}</td>
-          <td class="num">${fmtNum(totals.never)}</td>
           <td class="num">${fmtNum(totals.pipeline)}</td>
+          <td class="num">${fmtNum(totals.never)}</td>
+          <td class="num">${fmtNum(totals.tried)}</td>
         </tr>`;
     };
     const slStats = targetableStats(slAll);
@@ -542,7 +515,7 @@
 
     return `
       <div class="card" style="margin-bottom:1rem">
-        <h2>Malta MM · ${esc(hub.month || '')}</h2>
+        <h2>Malta Performance Hub · ${esc(hub.month || '')}</h2>
         <p class="sub">${esc(hub.scope || '')}</p>
         <div class="legend">
           <span class="status green">≥100%</span>
@@ -552,14 +525,27 @@
         </div>
       </div>
 
+      <div class="card" style="margin-bottom:1rem">
+        <div class="brand-row">
+          <div>
+            <h2 style="margin:0 0 .25rem">Country KPI target</h2>
+            <p class="sub" style="margin:0">The five Malta MM KPI targets at country level. Owned by ${esc(COUNTRY_OWNER.name)}, not by an individual AM.</p>
+          </div>
+          <div class="meta-pills">
+            <span class="pill">Owner <strong>${esc(COUNTRY_OWNER.name)}</strong></span>
+            <span class="pill">${esc(COUNTRY_OWNER.role)} · Malta</span>
+          </div>
+        </div>
+      </div>
+
       <div class="grid grid-5" style="margin-bottom:1rem">${kpiCards}</div>
 
       <div class="card" style="margin-bottom:1rem">
         <h2>Team scorecard roll-up</h2>
-        <p class="sub">The five RAM sheet KPIs across the five AMs. Overall is the average attainment, capped at 100% per KPI.</p>
+        <p class="sub">The five RAM sheet KPIs across the five AMs, with ${esc(COUNTRY_OWNER.firstName)}'s country KPI target as the bottom row. Overall is the average attainment, capped at 100% per KPI.</p>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>AM</th>${KPI_ORDER.map(k => `<th>${esc(k)}</th>`).join('')}<th>Overall</th></tr></thead>
+            <thead><tr><th>Owner</th>${KPI_ORDER.map(k => `<th>${esc(k)}</th>`).join('')}<th>Overall</th></tr></thead>
             <tbody>${matrixRows}${countryRow}</tbody>
           </table>
         </div>
@@ -567,7 +553,7 @@
 
       <div class="card" style="margin-bottom:1rem">
         <h2>Weekly country gaps · week of ${esc(hub.weekOf || '')}</h2>
-        <p class="sub">Where the country gap sits and which AMs carry it. Open an AM page for the root cause, pipeline and forecast.</p>
+        <p class="sub">${esc(COUNTRY_OWNER.firstName)}'s country KPI target versus the AMs carrying each gap. Open an AM page for the root cause, pipeline and forecast.</p>
         <div class="table-wrap">
           <table>
             <thead><tr><th>KPI</th><th>%</th><th>Ach. / target</th><th>Gap</th><th>AMs behind target</th></tr></thead>
@@ -577,18 +563,18 @@
       </div>
 
       <div class="grid grid-4" style="margin-bottom:1rem">
-        <div class="card stat"><div class="label">SL targetable</div><div class="value">${fmtNum(slStats.all)}</div><div class="hint">Full active Malta universe</div></div>
-        <div class="card stat"><div class="label">SL currently on</div><div class="value">${fmtNum(slStats.current)}</div><div class="hint">${fmtNum(slStats.pipeline)} can target</div></div>
-        <div class="card stat"><div class="label">SP targetable</div><div class="value">${fmtNum(spStats.all)}</div><div class="hint">Full active Malta universe</div></div>
-        <div class="card stat"><div class="label">SP currently on</div><div class="value">${fmtNum(spStats.current)}</div><div class="hint">${fmtNum(spStats.pipeline)} can target</div></div>
+        <div class="card stat"><div class="label">SL already enrolled</div><div class="value">${fmtNum(slStats.current)}</div><div class="hint">Of ${fmtNum(slStats.all)} active Malta providers</div></div>
+        <div class="card stat"><div class="label">SL target list</div><div class="value">${fmtNum(slStats.pipeline)}</div><div class="hint">${fmtNum(slStats.never)} never tried · ${fmtNum(slStats.tried)} tried before</div></div>
+        <div class="card stat"><div class="label">SP already enrolled</div><div class="value">${fmtNum(spStats.current)}</div><div class="hint">Of ${fmtNum(spStats.all)} active Malta providers</div></div>
+        <div class="card stat"><div class="label">SP target list</div><div class="value">${fmtNum(spStats.pipeline)}</div><div class="hint">${fmtNum(spStats.never)} never tried · ${fmtNum(spStats.tried)} tried before</div></div>
       </div>
 
       <div class="card" style="margin-bottom:1rem">
         <h2>Sponsored Listings by AM</h2>
-        <p class="sub">Full targetable universe, filtered with the owner alias map. Pipeline = targetable and not currently on.</p>
+        <p class="sub">Active Malta providers split with the owner alias map. Enrolled accounts have nothing left to target; the target list is everything not on SL today.</p>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>AM</th><th>Targetable</th><th>Currently on</th><th>Ever on</th><th>Never</th><th>Pipeline can-target</th></tr></thead>
+            <thead><tr><th>AM</th><th>Accounts</th><th>Already enrolled</th><th>Target list</th><th>Never tried</th><th>Tried before</th></tr></thead>
             <tbody>${ownerSummary(slByOwner)}</tbody>
           </table>
         </div>
@@ -599,25 +585,25 @@
         <p class="sub">Same 1,785 active Malta providers, filtered with the owner alias map.</p>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>AM</th><th>Targetable</th><th>Currently on</th><th>Ever on</th><th>Never</th><th>Pipeline can-target</th></tr></thead>
+            <thead><tr><th>AM</th><th>Accounts</th><th>Already enrolled</th><th>Target list</th><th>Never tried</th><th>Tried before</th></tr></thead>
             <tbody>${ownerSummary(spByOwner)}</tbody>
           </table>
         </div>
       </div>
 
       <div class="card" style="margin-bottom:1rem">
-        <h2>Sponsored Listings · full targetable list</h2>
+        <h2>Sponsored Listings · enrolled and target lists</h2>
         ${targetableHtml('Overview', 'Sponsored Listings', slAll, { ownerFilter: true })}
       </div>
 
       <div class="card" style="margin-bottom:1rem">
-        <h2>Smart Promotions · full targetable list</h2>
+        <h2>Smart Promotions · enrolled and target lists</h2>
         ${targetableHtml('Overview', 'Smart Promotions', spAll, { ownerFilter: true })}
       </div>
 
       <div class="card">
         <h2>What Advay expects per KPI</h2>
-        <p class="sub">Each AM page carries these three boxes for every KPI above. SL and SP also show the full targetable provider list.</p>
+        <p class="sub">Each AM page carries these three boxes for every KPI above. SL and SP also show the enrolled list and the target list.</p>
         <ol class="list">${reqs.map(r => `<li>${esc(r)}</li>`).join('')}</ol>
       </div>`;
   }
@@ -678,7 +664,7 @@
             <textarea id="${esc(accountViewId(person, w.kpi))}-comment" data-field="amComment" placeholder="AM comment for this KPI…">${esc(amComment)}</textarea>
           </div>
         </div>
-        ${hasAccountView ? '' : '<p class="sub" style="margin:.75rem 0 0">Targetable lists are on Sponsored Listings and Smart Promotions.</p>'}
+        ${hasAccountView ? '' : '<p class="sub" style="margin:.75rem 0 0">Enrolled and target lists are on Sponsored Listings and Smart Promotions.</p>'}
         <div class="notes-row">
           <label>Notes</label>
           <textarea data-field="notes" placeholder="Optional notes…">${esc(notes)}</textarea>
@@ -698,31 +684,57 @@
     return `
       <div class="targetable" data-product="${esc(product)}" data-scope="${esc(scope)}">
         <div class="subhead">
-          <h4>${esc(product)} account view</h4>
+          <h4>${esc(product)} accounts</h4>
         </div>
         <p class="sub" style="margin:.15rem 0 .75rem">${opts.ownerFilter
-          ? 'Use the owner filter to focus the account list.'
+          ? 'Use the owner filter to focus both tables on one AM.'
           : `Filtered to ${esc(first)}'s accounts using the existing owner alias map.`}</p>
-        <div class="chip-row" data-target-chips>
-          ${TARGETABLE_FILTERS.map((f, i) => `<button type="button" class="chip${i === 0 ? ' active' : ''}" data-filter="${f.key}">${esc(f.label)} <span class="n">${fmtNum(filterCount(rows, f.key))}</span></button>`).join('')}
-        </div>
-        <div class="chip-row" data-targeting-filters aria-label="Targeting filter">
-          ${TARGETING_MODES.map((m, i) => `<button type="button" class="chip${i === 0 ? ' active' : ''}" data-targeting-mode="${m.key}">${esc(m.label)}</button>`).join('')}
-        </div>
         <div class="toolbar">
           <input type="search" data-target-search placeholder="Search account name…" />
           ${ownerOptions}
-          <span class="pill" data-target-shown>Showing 0</span>
+          <span class="pill">Search and owner apply to both tables</span>
         </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr>
-              <th>Account</th><th>Provider ID</th><th>Currently on</th><th>Ever had on</th><th>First start</th><th>Last end</th><th>Targeting</th><th>AM comment</th>
-            </tr></thead>
-            <tbody data-target-body></tbody>
-          </table>
-        </div>
-        <button type="button" class="btn secondary small load-more" data-action="load-more">Show next ${fmtNum(TARGETABLE_PAGE)}</button>
+
+        <section class="account-table" data-list="enrolled">
+          <div class="subhead">
+            <h4>Already enrolled</h4>
+            <span class="pill" data-enrolled-shown>Showing 0</span>
+          </div>
+          <p class="sub" style="margin:.15rem 0 .75rem">Already on ${esc(product)} — nothing to target here.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th>Account</th><th>Provider ID</th><th>First start</th><th>Current end</th>
+              </tr></thead>
+              <tbody data-enrolled-body></tbody>
+            </table>
+          </div>
+          <button type="button" class="btn secondary small load-more" data-action="load-more" data-list="enrolled">Show next ${fmtNum(TARGETABLE_PAGE)}</button>
+        </section>
+
+        <section class="account-table" data-list="target">
+          <div class="subhead">
+            <h4>Target list</h4>
+            <span class="pill" data-target-shown>Showing 0</span>
+          </div>
+          <p class="sub" style="margin:.15rem 0 .75rem">Not on ${esc(product)} today — the only accounts that can be targeted.</p>
+          <div class="count-pills">
+            <span class="pill">Never tried <strong data-stat="never">0</strong></span>
+            <span class="pill">Tried before <strong data-stat="tried">0</strong></span>
+          </div>
+          <div class="chip-row" data-targeting-filters aria-label="Targeting filter">
+            ${TARGETING_MODES.map((m, i) => `<button type="button" class="chip${i === 0 ? ' active' : ''}" data-targeting-mode="${m.key}">${esc(m.label)}</button>`).join('')}
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th>Account</th><th>Provider ID</th><th>History</th><th>First start</th><th>Last end</th><th>Targeting</th>
+              </tr></thead>
+              <tbody data-target-body></tbody>
+            </table>
+          </div>
+          <button type="button" class="btn secondary small load-more" data-action="load-more" data-list="target">Show next ${fmtNum(TARGETABLE_PAGE)}</button>
+        </section>
       </div>`;
   }
 
@@ -733,6 +745,8 @@
     const overall = scorecard.length
       ? scorecard.reduce((s, r) => s + Math.min(Number(r.pct || 0), 1), 0) / scorecard.length
       : null;
+    const slStats = targetableStats(slRows);
+    const spStats = targetableStats(spRows);
 
     const scoreRows = KPI_ORDER.map(k => {
       const r = scorecard.find(x => x.kpi === k);
@@ -761,8 +775,8 @@
           </div>
           <div class="meta-pills">
             ${statusPill(overall)}
-            <span class="pill">SL targetable <strong>${fmtNum(slRows.length)}</strong></span>
-            <span class="pill">SP targetable <strong>${fmtNum(spRows.length)}</strong></span>
+            <span class="pill">SL enrolled <strong>${fmtNum(slStats.current)}</strong> · target <strong>${fmtNum(slStats.pipeline)}</strong></span>
+            <span class="pill">SP enrolled <strong>${fmtNum(spStats.current)}</strong> · target <strong>${fmtNum(spStats.pipeline)}</strong></span>
           </div>
         </div>
         <div class="table-wrap" style="margin-top:.85rem">
@@ -782,103 +796,101 @@
 
   function wireTargetable(widget, rows) {
     const product = widget.dataset.product;
-    const chips = widget.querySelector('[data-target-chips]');
     const targetingFilters = widget.querySelector('[data-targeting-filters]');
     const search = widget.querySelector('[data-target-search]');
     const ownerSel = widget.querySelector('[data-target-owner]');
-    const shown = widget.querySelector('[data-target-shown]');
-    const body = widget.querySelector('[data-target-body]');
-    const loadMore = widget.querySelector('[data-action="load-more"]');
-    let filterKey = 'current';
+    const enrolledShown = widget.querySelector('[data-enrolled-shown]');
+    const targetShown = widget.querySelector('[data-target-shown]');
+    const enrolledBody = widget.querySelector('[data-enrolled-body]');
+    const targetBody = widget.querySelector('[data-target-body]');
+    const enrolledMore = widget.querySelector('[data-action="load-more"][data-list="enrolled"]');
+    const targetMore = widget.querySelector('[data-action="load-more"][data-list="target"]');
     let targetingMode = 'all';
-    let renderLimit = TARGETABLE_PAGE;
+    let limits = { enrolled: TARGETABLE_PAGE, target: TARGETABLE_PAGE };
+
+    const scopedRows = () => {
+      const query = (search.value || '').trim().toLowerCase();
+      const owner = ownerSel?.value || '';
+      return rows.filter(r =>
+        (!owner || canonicalOwner(r.owner) === owner) &&
+        (!query || String(r.accountName || '').toLowerCase().includes(query)));
+    };
 
     const paint = () => {
       const state = loadState();
-      const query = (search.value || '').trim().toLowerCase();
-      const owner = ownerSel?.value || '';
-      const test = TARGETABLE_FILTERS.find(f => f.key === filterKey)?.test || (() => true);
-      const scoped = rows.filter(r => !owner || canonicalOwner(r.owner) === owner);
+      const scoped = scopedRows();
       const stats = targetableStats(scoped);
       widget.querySelectorAll('[data-stat]').forEach(el => {
         el.textContent = fmtNum(stats[el.dataset.stat]);
       });
-      TARGETABLE_FILTERS.forEach(f => {
-        const n = chips.querySelector(`[data-filter="${f.key}"] .n`);
-        if (n) n.textContent = fmtNum(filterCount(scoped, f.key));
-      });
-      const matches = scoped.filter(r =>
-        test(r) &&
-        (targetingMode === 'all' || isTargeting(state, product, r) === (targetingMode === 'targeting')) &&
-        (!query || String(r.accountName || '').toLowerCase().includes(query)));
-      const visible = matches.slice(0, renderLimit);
-      const targetingCount = scoped.filter(r => isTargeting(state, product, r)).length;
-      shown.textContent =
-        `Showing ${fmtNum(visible.length)} of ${fmtNum(matches.length)} · ${fmtNum(targetingCount)} targeting`;
-      if (loadMore) loadMore.hidden = visible.length >= matches.length;
-      body.innerHTML = visible.map(r => `
+
+      const enrolled = scoped.filter(r => r.currentlyOn);
+      const enrolledVisible = enrolled.slice(0, limits.enrolled);
+      enrolledShown.textContent = `Showing ${fmtNum(enrolledVisible.length)} of ${fmtNum(enrolled.length)} enrolled`;
+      if (enrolledMore) enrolledMore.hidden = enrolledVisible.length >= enrolled.length;
+      enrolledBody.innerHTML = enrolledVisible.map(r => `
           <tr>
             <td><strong>${esc(r.accountName)}</strong></td>
             <td class="num">${esc(r.providerId)}</td>
-            <td>${r.currentlyOn ? '<span class="status green">Yes</span>' : '<span class="status muted">No</span>'}</td>
-            <td>${r.everHadOn ? '<span class="status green">Yes</span>' : '<span class="status muted">No</span>'}</td>
+            <td class="num">${esc(formatDate(r.firstStart))}</td>
+            <td class="num">${esc(formatDate(r.lastEnd))}</td>
+          </tr>`).join('') || '<tr><td colspan="4" style="color:var(--muted)">No enrolled accounts</td></tr>';
+
+      const targets = scoped.filter(r => !r.currentlyOn);
+      const matches = targets.filter(r =>
+        targetingMode === 'all' || isTargeting(state, product, r) === (targetingMode === 'targeting'));
+      const targetVisible = matches.slice(0, limits.target);
+      const targetingCount = targets.filter(r => isTargeting(state, product, r)).length;
+      targetShown.textContent =
+        `Showing ${fmtNum(targetVisible.length)} of ${fmtNum(matches.length)} · ${fmtNum(targetingCount)} targeting`;
+      if (targetMore) targetMore.hidden = targetVisible.length >= matches.length;
+      targetBody.innerHTML = targetVisible.map(r => `
+          <tr>
+            <td><strong>${esc(r.accountName)}</strong></td>
+            <td class="num">${esc(r.providerId)}</td>
+            <td>${r.everHadOn
+              ? '<span class="status yellow">Tried before</span>'
+              : '<span class="status muted">Never tried</span>'}</td>
             <td class="num">${esc(formatDate(r.firstStart))}</td>
             <td class="num">${esc(formatDate(r.lastEnd))}</td>
             <td class="tgt-cell"><input type="checkbox" data-targeting-key="${esc(targetingKey(product, r))}"${
               isTargeting(state, product, r) ? ' checked' : ''
             } aria-label="Targeting ${esc(r.accountName)}" /></td>
-            <td><input class="am-comment" data-comment-key data-provider="${esc(r.providerId)}" value="${
-              esc(readComment(state, product, r.providerId))
-            }" placeholder="Add AM comment…" /></td>
-          </tr>`).join('') || '<tr><td colspan="8" style="color:var(--muted)">No matching accounts</td></tr>';
+          </tr>`).join('') || '<tr><td colspan="6" style="color:var(--muted)">No matching accounts</td></tr>';
     };
 
-    chips.addEventListener('click', e => {
-      const chip = e.target.closest('.chip');
-      if (!chip) return;
-      filterKey = chip.dataset.filter;
-      renderLimit = TARGETABLE_PAGE;
-      chips.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c === chip));
-      paint();
-    });
+    const resetLimits = () => { limits = { enrolled: TARGETABLE_PAGE, target: TARGETABLE_PAGE }; };
+
     targetingFilters.addEventListener('click', e => {
       const chip = e.target.closest('[data-targeting-mode]');
       if (!chip) return;
       targetingMode = chip.dataset.targetingMode;
-      renderLimit = TARGETABLE_PAGE;
+      limits.target = TARGETABLE_PAGE;
       targetingFilters.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c === chip));
       paint();
     });
-    search.addEventListener('input', () => { renderLimit = TARGETABLE_PAGE; paint(); });
-    ownerSel?.addEventListener('change', () => { renderLimit = TARGETABLE_PAGE; paint(); });
-    loadMore?.addEventListener('click', () => { renderLimit += TARGETABLE_PAGE; paint(); });
-    body.addEventListener('change', e => {
+    search.addEventListener('input', () => { resetLimits(); paint(); });
+    ownerSel?.addEventListener('change', () => { resetLimits(); paint(); });
+    widget.querySelectorAll('[data-action="load-more"]').forEach(btn => {
+      btn.addEventListener('click', () => { limits[btn.dataset.list] += TARGETABLE_PAGE; paint(); });
+    });
+    targetBody.addEventListener('change', e => {
       const box = e.target.closest('input[data-targeting-key]');
-      if (box) {
-        const state = loadState();
-        if (box.checked) state[box.dataset.targetingKey] = true;
-        else delete state[box.dataset.targetingKey];
-        saveState(state);
-        showToast(box.checked ? 'Marked as targeting' : 'Targeting cleared');
-        // A tick can drop the row out of the current view, so only repaint when it filters.
-        if (targetingMode !== 'all') paint();
-        else shownCountOnly(state);
-        return;
-      }
-      const input = e.target.closest('input[data-comment-key]');
-      if (!input) return;
+      if (!box) return;
       const state = loadState();
-      writeComment(state, product, input.dataset.provider, input.value.trim());
+      if (box.checked) state[box.dataset.targetingKey] = true;
+      else delete state[box.dataset.targetingKey];
       saveState(state);
-      showToast('AM comment saved');
+      showToast(box.checked ? 'Marked as targeting' : 'Targeting cleared');
+      // A tick can drop the row out of the current view, so only repaint when it filters.
+      if (targetingMode !== 'all') paint();
+      else targetingCountOnly(state);
     });
 
     // Keeping the "N targeting" count live without rebuilding rows, so a tick never steals focus.
-    function shownCountOnly(state) {
-      const owner = ownerSel?.value || '';
-      const scoped = rows.filter(r => !owner || canonicalOwner(r.owner) === owner);
-      const targetingCount = scoped.filter(r => isTargeting(state, product, r)).length;
-      shown.textContent = shown.textContent.replace(/[\d,]+ targeting$/, `${fmtNum(targetingCount)} targeting`);
+    function targetingCountOnly(state) {
+      const targetingCount = scopedRows().filter(r => !r.currentlyOn && isTargeting(state, product, r)).length;
+      targetShown.textContent = targetShown.textContent.replace(/[\d,]+ targeting$/, `${fmtNum(targetingCount)} targeting`);
     }
 
     paint();
@@ -955,7 +967,7 @@
   }
 
   function buildUpdateText(hub, person, panel) {
-    const lines = [`${person} · Malta MM · week of ${hub.weekOf || ''}`];
+    const lines = [`${person} · Malta Performance Hub · week of ${hub.weekOf || ''}`];
     panel.querySelectorAll('.kpi-block').forEach(block => {
       const kpi = block.dataset.kpi;
       const val = f => (block.querySelector(`textarea[data-field="${f}"]`)?.value || '').trim();
@@ -996,6 +1008,8 @@
       const people = (hub.team || []).filter(t => OWNER_ALIASES[t.name]);
       const slByOwner = bucketByOwner(slTargetable, people);
       const spByOwner = bucketByOwner(spTargetable, people);
+      const slCountryStats = targetableStats(slTargetable);
+      const spCountryStats = targetableStats(spTargetable);
 
       document.getElementById('boot').remove();
 
@@ -1004,8 +1018,9 @@
         <span class="pill">Month <strong>${esc(hub.month || '')}</strong></span>
         <span class="pill">Week of <strong>${esc(hub.weekOf || '')}</strong></span>
         <span class="pill">AMs <strong>${people.length}</strong></span>
-        <span class="pill">SL targetable <strong>${fmtNum(slTargetable.length)}</strong></span>
-        <span class="pill">SP targetable <strong>${fmtNum(spTargetable.length)}</strong></span>
+        <span class="pill">Country KPI target <strong>${esc(COUNTRY_OWNER.name)}</strong> ${esc(COUNTRY_OWNER.role)}</span>
+        <span class="pill">SL enrolled <strong>${fmtNum(slCountryStats.current)}</strong> · target <strong>${fmtNum(slCountryStats.pipeline)}</strong></span>
+        <span class="pill">SP enrolled <strong>${fmtNum(spCountryStats.current)}</strong> · target <strong>${fmtNum(spCountryStats.pipeline)}</strong></span>
         <span class="pill">Data as of <strong>${esc(asOf)}</strong></span>`;
       document.getElementById('footerText').textContent =
         `Boltable static · mt-mm-performance · unlisted · data as of ${asOf} · opened ${TODAY} Asia/Baku`;
