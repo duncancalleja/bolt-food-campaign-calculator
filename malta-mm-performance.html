@@ -140,6 +140,8 @@
     }
     [hidden] { display: none !important; }
     .tgt-cell { width: 5.5rem; text-align: center; }
+    .am-comment-cell { min-width: 12rem; width: 16rem; }
+    .am-comment { width: 100%; min-width: 0; padding: .4rem .5rem; font-size: .85rem; }
     .account-table { margin-top: 1.1rem; padding-top: .35rem; border-top: 1px solid var(--border); }
     .account-table .subhead h4 { color: var(--text); font-size: .9rem; }
     input[type="checkbox"] {
@@ -360,6 +362,30 @@
     return `targeting||${product}||${canonicalOwner(row.owner) || 'unassigned'}||${row.providerId}`;
   }
   function isTargeting(state, product, row) { return Boolean(state[targetingKey(product, row)]); }
+
+  // Per-account AM comments sit on the target list only and are keyed the same way as
+  // Targeting. Earlier builds stored them without the AM and under a "next step" name;
+  // those keys are still read and are dropped once the AM saves over them.
+  const LEGACY_COMMENT_PREFIXES = ['amComment', 'nextStep', 'next'];
+  function commentKey(product, row) {
+    return `amComment||${product}||${canonicalOwner(row.owner) || 'unassigned'}||${row.providerId}`;
+  }
+  function legacyCommentKeys(product, providerId) {
+    return LEGACY_COMMENT_PREFIXES.map(p => `${p}||${product}||${providerId}`);
+  }
+  function readComment(state, product, row) {
+    if (state[commentKey(product, row)]) return state[commentKey(product, row)];
+    for (const key of legacyCommentKeys(product, row.providerId)) {
+      if (state[key]) return state[key];
+    }
+    return '';
+  }
+  function writeComment(state, product, input) {
+    const value = input.value.trim();
+    if (value) state[input.dataset.commentKey] = value;
+    else delete state[input.dataset.commentKey];
+    legacyCommentKeys(product, input.dataset.provider).forEach(k => delete state[k]);
+  }
 
   async function loadJSON(path) {
     const res = await fetch(path);
@@ -717,7 +743,7 @@
             <h4>Target list</h4>
             <span class="pill" data-target-shown>Showing 0</span>
           </div>
-          <p class="sub" style="margin:.15rem 0 .75rem">Not on ${esc(product)} today — the only accounts that can be targeted.</p>
+          <p class="sub" style="margin:.15rem 0 .75rem">Not on ${esc(product)} today — the only accounts that can be targeted. Tick Targeting and add an AM comment per account.</p>
           <div class="count-pills">
             <span class="pill">Never tried <strong data-stat="never">0</strong></span>
             <span class="pill">Tried before <strong data-stat="tried">0</strong></span>
@@ -728,7 +754,7 @@
           <div class="table-wrap">
             <table>
               <thead><tr>
-                <th>Account</th><th>Provider ID</th><th>History</th><th>First start</th><th>Last end</th><th>Targeting</th>
+                <th>Targeting</th><th>AM comment</th><th>Account</th><th>Provider ID</th><th>History</th><th>First start</th><th>Last end</th>
               </tr></thead>
               <tbody data-target-body></tbody>
             </table>
@@ -846,6 +872,12 @@
       if (targetMore) targetMore.hidden = targetVisible.length >= matches.length;
       targetBody.innerHTML = targetVisible.map(r => `
           <tr>
+            <td class="tgt-cell"><input type="checkbox" data-targeting-key="${esc(targetingKey(product, r))}"${
+              isTargeting(state, product, r) ? ' checked' : ''
+            } aria-label="Targeting ${esc(r.accountName)}" /></td>
+            <td class="am-comment-cell"><input class="am-comment" data-comment-key="${esc(commentKey(product, r))}" data-provider="${esc(r.providerId)}" value="${
+              esc(readComment(state, product, r))
+            }" placeholder="AM comment…" aria-label="AM comment for ${esc(r.accountName)}" autocomplete="off" /></td>
             <td><strong>${esc(r.accountName)}</strong></td>
             <td class="num">${esc(r.providerId)}</td>
             <td>${r.everHadOn
@@ -853,10 +885,7 @@
               : '<span class="status muted">Never tried</span>'}</td>
             <td class="num">${esc(formatDate(r.firstStart))}</td>
             <td class="num">${esc(formatDate(r.lastEnd))}</td>
-            <td class="tgt-cell"><input type="checkbox" data-targeting-key="${esc(targetingKey(product, r))}"${
-              isTargeting(state, product, r) ? ' checked' : ''
-            } aria-label="Targeting ${esc(r.accountName)}" /></td>
-          </tr>`).join('') || '<tr><td colspan="6" style="color:var(--muted)">No matching accounts</td></tr>';
+          </tr>`).join('') || '<tr><td colspan="7" style="color:var(--muted)">No matching accounts</td></tr>';
     };
 
     const resetLimits = () => { limits = { enrolled: TARGETABLE_PAGE, target: TARGETABLE_PAGE }; };
@@ -876,15 +905,26 @@
     });
     targetBody.addEventListener('change', e => {
       const box = e.target.closest('input[data-targeting-key]');
-      if (!box) return;
+      if (box) {
+        const state = loadState();
+        if (box.checked) state[box.dataset.targetingKey] = true;
+        else delete state[box.dataset.targetingKey];
+        saveState(state);
+        showToast(box.checked ? 'Marked as targeting' : 'Targeting cleared');
+        // A tick can drop the row out of the current view, so only repaint when it filters.
+        if (targetingMode !== 'all') paint();
+        else targetingCountOnly(state);
+        return;
+      }
+      if (e.target.closest('input[data-comment-key]')) showToast('AM comment saved');
+    });
+    // Saving on input keeps the comment even when the row is repainted before blur.
+    targetBody.addEventListener('input', e => {
+      const input = e.target.closest('input[data-comment-key]');
+      if (!input) return;
       const state = loadState();
-      if (box.checked) state[box.dataset.targetingKey] = true;
-      else delete state[box.dataset.targetingKey];
+      writeComment(state, product, input);
       saveState(state);
-      showToast(box.checked ? 'Marked as targeting' : 'Targeting cleared');
-      // A tick can drop the row out of the current view, so only repaint when it filters.
-      if (targetingMode !== 'all') paint();
-      else targetingCountOnly(state);
     });
 
     // Keeping the "N targeting" count live without rebuilding rows, so a tick never steals focus.
