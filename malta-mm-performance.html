@@ -139,8 +139,11 @@
       border: 1px solid var(--border); border-radius: 10px;
     }
     [hidden] { display: none !important; }
-    .am-comment { min-width: 180px; width: 100%; padding: .4rem .5rem; font-size: .85rem; }
+    .am-comment { min-width: 160px; width: 100%; padding: .4rem .5rem; font-size: .85rem; }
+    .am-comment-cell { min-width: 12rem; width: 16rem; }
     .tgt-cell { width: 5.5rem; text-align: center; }
+    .account-list { margin-top: 1.15rem; }
+    .account-list:first-of-type { margin-top: .35rem; }
     input[type="checkbox"] {
       width: 1.05rem; height: 1.05rem; min-width: 0; padding: 0; margin: 0;
       accent-color: var(--accent); cursor: pointer; vertical-align: middle;
@@ -246,8 +249,8 @@
   const TARGETABLE_KPIS = ['Sponsored Listings', 'Smart Promotions'];
   const ACCOUNT_VIEW_KPIS = TARGETABLE_KPIS;
   const TARGETABLE_PAGE = 250;
-  const TARGETABLE_FILTERS = [
-    { key: 'current', label: 'Already in', test: r => r.currentlyOn },
+  const TARGET_LIST_FILTERS = [
+    { key: 'all', label: 'All', test: r => !r.currentlyOn },
     { key: 'tried', label: 'Tried before', test: r => r.everHadOn && !r.currentlyOn },
     { key: 'never', label: 'Never tried', test: r => !r.everHadOn },
   ];
@@ -352,25 +355,30 @@
     saveState(state);
   }
 
-  // AM comments were shipped as "next step" and stored under `next||<product>||<providerId>`.
-  // Reads still accept the old prefixes so nothing an AM typed disappears; the next save
-  // rewrites the value under the amComment key and drops the legacy one.
-  const LEGACY_COMMENT_PREFIXES = ['nextStep', 'next'];
-  function commentKey(product, providerId) { return `amComment||${product}||${providerId}`; }
+  // Per-account AM comments live on the Target list only. They are keyed like Targeting
+  // (product + AM + provider) so two AMs never share a box. Older localStorage keys
+  // (no AM, or the original "next step" prefixes) are still read and rewritten on save.
+  const LEGACY_COMMENT_PREFIXES = ['amComment', 'nextStep', 'next'];
+  function commentKey(product, row) {
+    return `amComment||${product}||${canonicalOwner(row.owner) || 'unassigned'}||${row.providerId}`;
+  }
   function legacyCommentKeys(product, providerId) {
     return LEGACY_COMMENT_PREFIXES.map(p => `${p}||${product}||${providerId}`);
   }
-  function readComment(state, product, providerId) {
-    for (const key of [commentKey(product, providerId), ...legacyCommentKeys(product, providerId)]) {
+  function readComment(state, product, row) {
+    const keyed = commentKey(product, row);
+    if (state[keyed]) return state[keyed];
+    for (const key of legacyCommentKeys(product, row.providerId)) {
       if (state[key]) return state[key];
     }
     return '';
   }
-  function writeComment(state, product, providerId, value) {
-    const key = commentKey(product, providerId);
+  function writeComment(state, product, input) {
+    const key = input.dataset.commentKey;
+    const value = input.value.trim();
     if (value) state[key] = value;
     else delete state[key];
-    legacyCommentKeys(product, providerId).forEach(k => delete state[k]);
+    legacyCommentKeys(product, input.dataset.provider).forEach(k => delete state[k]);
   }
 
   // Targeting ticks are keyed on provider + product + the account's AM, so a tick made on the
@@ -425,9 +433,17 @@
     };
   }
 
-  function filterCount(rows, key) {
-    const f = TARGETABLE_FILTERS.find(x => x.key === key);
-    return f ? rows.filter(f.test).length : rows.length;
+  function yesNo(flag) {
+    return flag ? '<span class="status green">Yes</span>' : '<span class="status muted">No</span>';
+  }
+  function accountFieldCells(r) {
+    return `
+      <td><strong>${esc(r.accountName)}</strong></td>
+      <td class="num">${esc(r.providerId)}</td>
+      <td>${yesNo(r.currentlyOn)}</td>
+      <td>${yesNo(r.everHadOn)}</td>
+      <td class="num">${esc(formatDate(r.firstStart))}</td>
+      <td class="num">${esc(formatDate(r.lastEnd))}</td>`;
   }
 
   function bucketByOwner(rows, people) {
@@ -695,6 +711,7 @@
           ${Object.keys(OWNER_ALIASES).map(name => `<option value="${esc(name)}">${esc(name)}</option>`).join('')}
         </select>`
       : '';
+    const accountHead = '<th>Account</th><th>Provider ID</th><th>Currently on</th><th>Ever had on</th><th>First start</th><th>Last end</th>';
     return `
       <div class="targetable" data-product="${esc(product)}" data-scope="${esc(scope)}">
         <div class="subhead">
@@ -703,26 +720,47 @@
         <p class="sub" style="margin:.15rem 0 .75rem">${opts.ownerFilter
           ? 'Use the owner filter to focus the account list.'
           : `Filtered to ${esc(first)}'s accounts using the existing owner alias map.`}</p>
-        <div class="chip-row" data-target-chips>
-          ${TARGETABLE_FILTERS.map((f, i) => `<button type="button" class="chip${i === 0 ? ' active' : ''}" data-filter="${f.key}">${esc(f.label)} <span class="n">${fmtNum(filterCount(rows, f.key))}</span></button>`).join('')}
+        ${opts.ownerFilter ? `<div class="toolbar">${ownerOptions}</div>` : ''}
+
+        <div class="account-list" data-account-list="enrolled">
+          <div class="subhead"><h4>Already enrolled</h4></div>
+          <p class="sub" style="margin:.15rem 0 .75rem">Currently on ${esc(product)}. View only — no targeting or per-account comments.</p>
+          <div class="toolbar">
+            <input type="search" data-target-search placeholder="Search account name…" />
+            <span class="pill" data-target-shown>Showing 0</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr>${accountHead}</tr></thead>
+              <tbody data-target-body></tbody>
+            </table>
+          </div>
+          <button type="button" class="btn secondary small load-more" data-action="load-more">Show next ${fmtNum(TARGETABLE_PAGE)}</button>
         </div>
-        <div class="chip-row" data-targeting-filters aria-label="Targeting filter">
-          ${TARGETING_MODES.map((m, i) => `<button type="button" class="chip${i === 0 ? ' active' : ''}" data-targeting-mode="${m.key}">${esc(m.label)}</button>`).join('')}
+
+        <div class="account-list" data-account-list="target">
+          <div class="subhead"><h4>Target list</h4></div>
+          <p class="sub" style="margin:.15rem 0 .75rem">Not currently on. Tick Targeting and add an AM comment per account.</p>
+          <div class="chip-row" data-target-chips>
+            ${TARGET_LIST_FILTERS.map((f, i) => `<button type="button" class="chip${i === 0 ? ' active' : ''}" data-filter="${f.key}">${esc(f.label)} <span class="n">0</span></button>`).join('')}
+          </div>
+          <div class="chip-row" data-targeting-filters aria-label="Targeting filter">
+            ${TARGETING_MODES.map((m, i) => `<button type="button" class="chip${i === 0 ? ' active' : ''}" data-targeting-mode="${m.key}">${esc(m.label)}</button>`).join('')}
+          </div>
+          <div class="toolbar">
+            <input type="search" data-target-search placeholder="Search account name…" />
+            <span class="pill" data-target-shown>Showing 0</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th>Targeting</th><th>AM comment</th>${accountHead}
+              </tr></thead>
+              <tbody data-target-body></tbody>
+            </table>
+          </div>
+          <button type="button" class="btn secondary small load-more" data-action="load-more">Show next ${fmtNum(TARGETABLE_PAGE)}</button>
         </div>
-        <div class="toolbar">
-          <input type="search" data-target-search placeholder="Search account name…" />
-          ${ownerOptions}
-          <span class="pill" data-target-shown>Showing 0</span>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr>
-              <th>Account</th><th>Provider ID</th><th>Currently on</th><th>Ever had on</th><th>First start</th><th>Last end</th><th>Targeting</th><th>AM comment</th>
-            </tr></thead>
-            <tbody data-target-body></tbody>
-          </table>
-        </div>
-        <button type="button" class="btn secondary small load-more" data-action="load-more">Show next ${fmtNum(TARGETABLE_PAGE)}</button>
       </div>`;
   }
 
@@ -780,68 +818,75 @@
       ${ordered.map(w => kpiBlockHtml(person, w, slRows, spRows)).join('')}`;
   }
 
-  function wireTargetable(widget, rows) {
+  function wireAccountList(widget, listEl, rows, kind) {
     const product = widget.dataset.product;
-    const chips = widget.querySelector('[data-target-chips]');
-    const targetingFilters = widget.querySelector('[data-targeting-filters]');
-    const search = widget.querySelector('[data-target-search]');
     const ownerSel = widget.querySelector('[data-target-owner]');
-    const shown = widget.querySelector('[data-target-shown]');
-    const body = widget.querySelector('[data-target-body]');
-    const loadMore = widget.querySelector('[data-action="load-more"]');
-    let filterKey = 'current';
+    const chips = listEl.querySelector('[data-target-chips]');
+    const targetingFilters = listEl.querySelector('[data-targeting-filters]');
+    const search = listEl.querySelector('[data-target-search]');
+    const shown = listEl.querySelector('[data-target-shown]');
+    const body = listEl.querySelector('[data-target-body]');
+    const loadMore = listEl.querySelector('[data-action="load-more"]');
+    let filterKey = 'all';
     let targetingMode = 'all';
     let renderLimit = TARGETABLE_PAGE;
+
+    const scopedRows = () => {
+      const owner = ownerSel?.value || '';
+      return rows.filter(r => !owner || canonicalOwner(r.owner) === owner);
+    };
+    const nameMatch = (r, query) => !query || String(r.accountName || '').toLowerCase().includes(query);
 
     const paint = () => {
       const state = loadState();
       const query = (search.value || '').trim().toLowerCase();
-      const owner = ownerSel?.value || '';
-      const test = TARGETABLE_FILTERS.find(f => f.key === filterKey)?.test || (() => true);
-      const scoped = rows.filter(r => !owner || canonicalOwner(r.owner) === owner);
-      const stats = targetableStats(scoped);
-      widget.querySelectorAll('[data-stat]').forEach(el => {
-        el.textContent = fmtNum(stats[el.dataset.stat]);
+      const scoped = scopedRows();
+
+      if (kind === 'enrolled') {
+        const matches = scoped.filter(r => r.currentlyOn && nameMatch(r, query));
+        const visible = matches.slice(0, renderLimit);
+        shown.textContent = `Showing ${fmtNum(visible.length)} of ${fmtNum(matches.length)}`;
+        if (loadMore) loadMore.hidden = visible.length >= matches.length;
+        body.innerHTML = visible.map(r => `<tr>${accountFieldCells(r)}</tr>`).join('')
+          || '<tr><td colspan="6" style="color:var(--muted)">No matching accounts</td></tr>';
+        return;
+      }
+
+      TARGET_LIST_FILTERS.forEach(f => {
+        const n = chips?.querySelector(`[data-filter="${f.key}"] .n`);
+        if (n) n.textContent = fmtNum(scoped.filter(f.test).length);
       });
-      TARGETABLE_FILTERS.forEach(f => {
-        const n = chips.querySelector(`[data-filter="${f.key}"] .n`);
-        if (n) n.textContent = fmtNum(filterCount(scoped, f.key));
-      });
+      const test = TARGET_LIST_FILTERS.find(f => f.key === filterKey)?.test || (r => !r.currentlyOn);
       const matches = scoped.filter(r =>
         test(r) &&
         (targetingMode === 'all' || isTargeting(state, product, r) === (targetingMode === 'targeting')) &&
-        (!query || String(r.accountName || '').toLowerCase().includes(query)));
+        nameMatch(r, query));
       const visible = matches.slice(0, renderLimit);
-      const targetingCount = scoped.filter(r => isTargeting(state, product, r)).length;
+      const targetingCount = scoped.filter(r => !r.currentlyOn && isTargeting(state, product, r)).length;
       shown.textContent =
         `Showing ${fmtNum(visible.length)} of ${fmtNum(matches.length)} · ${fmtNum(targetingCount)} targeting`;
       if (loadMore) loadMore.hidden = visible.length >= matches.length;
       body.innerHTML = visible.map(r => `
           <tr>
-            <td><strong>${esc(r.accountName)}</strong></td>
-            <td class="num">${esc(r.providerId)}</td>
-            <td>${r.currentlyOn ? '<span class="status green">Yes</span>' : '<span class="status muted">No</span>'}</td>
-            <td>${r.everHadOn ? '<span class="status green">Yes</span>' : '<span class="status muted">No</span>'}</td>
-            <td class="num">${esc(formatDate(r.firstStart))}</td>
-            <td class="num">${esc(formatDate(r.lastEnd))}</td>
             <td class="tgt-cell"><input type="checkbox" data-targeting-key="${esc(targetingKey(product, r))}"${
               isTargeting(state, product, r) ? ' checked' : ''
             } aria-label="Targeting ${esc(r.accountName)}" /></td>
-            <td><input class="am-comment" data-comment-key data-provider="${esc(r.providerId)}" value="${
-              esc(readComment(state, product, r.providerId))
-            }" placeholder="Add AM comment…" /></td>
+            <td class="am-comment-cell"><input class="am-comment" data-comment-key="${esc(commentKey(product, r))}" data-provider="${esc(r.providerId)}" value="${
+              esc(readComment(state, product, r))
+            }" placeholder="AM comment…" aria-label="AM comment for ${esc(r.accountName)}" autocomplete="off" /></td>
+            ${accountFieldCells(r)}
           </tr>`).join('') || '<tr><td colspan="8" style="color:var(--muted)">No matching accounts</td></tr>';
     };
 
-    chips.addEventListener('click', e => {
-      const chip = e.target.closest('.chip');
+    chips?.addEventListener('click', e => {
+      const chip = e.target.closest('[data-filter]');
       if (!chip) return;
       filterKey = chip.dataset.filter;
       renderLimit = TARGETABLE_PAGE;
       chips.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c === chip));
       paint();
     });
-    targetingFilters.addEventListener('click', e => {
+    targetingFilters?.addEventListener('click', e => {
       const chip = e.target.closest('[data-targeting-mode]');
       if (!chip) return;
       targetingMode = chip.dataset.targetingMode;
@@ -850,38 +895,47 @@
       paint();
     });
     search.addEventListener('input', () => { renderLimit = TARGETABLE_PAGE; paint(); });
-    ownerSel?.addEventListener('change', () => { renderLimit = TARGETABLE_PAGE; paint(); });
     loadMore?.addEventListener('click', () => { renderLimit += TARGETABLE_PAGE; paint(); });
-    body.addEventListener('change', e => {
-      const box = e.target.closest('input[data-targeting-key]');
-      if (box) {
-        const state = loadState();
-        if (box.checked) state[box.dataset.targetingKey] = true;
-        else delete state[box.dataset.targetingKey];
-        saveState(state);
-        showToast(box.checked ? 'Marked as targeting' : 'Targeting cleared');
-        // A tick can drop the row out of the current view, so only repaint when it filters.
-        if (targetingMode !== 'all') paint();
-        else shownCountOnly(state);
-        return;
-      }
-      const input = e.target.closest('input[data-comment-key]');
-      if (!input) return;
-      const state = loadState();
-      writeComment(state, product, input.dataset.provider, input.value.trim());
-      saveState(state);
-      showToast('AM comment saved');
-    });
 
-    // Keeping the "N targeting" count live without rebuilding rows, so a tick never steals focus.
-    function shownCountOnly(state) {
-      const owner = ownerSel?.value || '';
-      const scoped = rows.filter(r => !owner || canonicalOwner(r.owner) === owner);
-      const targetingCount = scoped.filter(r => isTargeting(state, product, r)).length;
-      shown.textContent = shown.textContent.replace(/[\d,]+ targeting$/, `${fmtNum(targetingCount)} targeting`);
+    if (kind === 'target') {
+      body.addEventListener('change', e => {
+        const box = e.target.closest('input[data-targeting-key]');
+        if (box) {
+          const state = loadState();
+          if (box.checked) state[box.dataset.targetingKey] = true;
+          else delete state[box.dataset.targetingKey];
+          saveState(state);
+          showToast(box.checked ? 'Marked as targeting' : 'Targeting cleared');
+          if (targetingMode !== 'all') paint();
+          else {
+            const targetingCount = scopedRows().filter(r => !r.currentlyOn && isTargeting(state, product, r)).length;
+            shown.textContent = shown.textContent.replace(/[\d,]+ targeting$/, `${fmtNum(targetingCount)} targeting`);
+          }
+          return;
+        }
+        const input = e.target.closest('input[data-comment-key]');
+        if (input) showToast('AM comment saved');
+      });
+      body.addEventListener('input', e => {
+        const input = e.target.closest('input[data-comment-key]');
+        if (!input) return;
+        const state = loadState();
+        writeComment(state, product, input);
+        saveState(state);
+      });
     }
 
+    listEl._paint = paint;
     paint();
+  }
+
+  function wireTargetable(widget, rows) {
+    widget.querySelectorAll('[data-account-list]').forEach(listEl => {
+      wireAccountList(widget, listEl, rows, listEl.dataset.accountList);
+    });
+    widget.querySelector('[data-target-owner]')?.addEventListener('change', () => {
+      widget.querySelectorAll('[data-account-list]').forEach(listEl => listEl._paint?.());
+    });
   }
 
   /* ------------------------------------------------------------- behaviour */
