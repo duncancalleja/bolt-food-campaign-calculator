@@ -247,8 +247,6 @@
   // (full active Malta universe in sl-targetable.json / sp-targetable.json).
   // No account lists are shown for Q3 Renegotiations, Bolt Plus or Marketing Campaigns.
   const TARGETABLE_KPIS = ['Sponsored Listings', 'Smart Promotions'];
-  // Country KPI targets belong to the Malta TL, not to any of the five AM pages.
-  const COUNTRY_OWNER = { name: 'Duncan Calleja', firstName: 'Duncan', role: 'TL' };
   const ACCOUNT_VIEW_KPIS = TARGETABLE_KPIS;
   const TARGETABLE_PAGE = 250;
   // Enrolled accounts (currentlyOn) and target accounts (everything else) are rendered as two
@@ -489,7 +487,7 @@
 
     const countryRow = `
       <tr>
-        <td><strong>${esc(COUNTRY_OWNER.name)}</strong><div class="hint">${esc(COUNTRY_OWNER.role)} · Country KPI target · roll-up of the 5 AMs</div></td>
+        <td><strong>Malta</strong><div class="hint">Country KPI target · roll-up of the 5 AMs</div></td>
         ${KPI_ORDER.map(k => {
           const c = kpis.find(x => x.kpi === k);
           if (!c) return '<td>—</td>';
@@ -557,23 +555,15 @@
       </div>
 
       <div class="card" style="margin-bottom:1rem">
-        <div class="brand-row">
-          <div>
-            <h2 style="margin:0 0 .25rem">Country KPI target</h2>
-            <p class="sub" style="margin:0">The five Malta MM KPI targets at country level. Owned by ${esc(COUNTRY_OWNER.name)}, not by an individual AM.</p>
-          </div>
-          <div class="meta-pills">
-            <span class="pill">Owner <strong>${esc(COUNTRY_OWNER.name)}</strong></span>
-            <span class="pill">${esc(COUNTRY_OWNER.role)} · Malta</span>
-          </div>
-        </div>
+        <h2 style="margin:0 0 .25rem">Country KPI target</h2>
+        <p class="sub" style="margin:0">The five Malta MM KPI targets at country level — the roll-up of the five AMs, not a sixth owner.</p>
       </div>
 
       <div class="grid grid-5" style="margin-bottom:1rem">${kpiCards}</div>
 
       <div class="card" style="margin-bottom:1rem">
         <h2>Team scorecard roll-up</h2>
-        <p class="sub">The five RAM sheet KPIs across the five AMs, with ${esc(COUNTRY_OWNER.firstName)}'s country KPI target as the bottom row. Overall is the average attainment, capped at 100% per KPI.</p>
+        <p class="sub">The five RAM sheet KPIs across the five AMs, with the country KPI target as the bottom row. Overall is the average attainment, capped at 100% per KPI.</p>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Owner</th>${KPI_ORDER.map(k => `<th>${esc(k)}</th>`).join('')}<th>Overall</th></tr></thead>
@@ -584,7 +574,7 @@
 
       <div class="card" style="margin-bottom:1rem">
         <h2>Weekly country gaps · week of ${esc(hub.weekOf || '')}</h2>
-        <p class="sub">${esc(COUNTRY_OWNER.firstName)}'s country KPI target versus the AMs carrying each gap. Open an AM page for the root cause, pipeline and forecast.</p>
+        <p class="sub">Country KPI target versus the AMs carrying each gap. Open an AM page for the root cause, pipeline and forecast.</p>
         <div class="table-wrap">
           <table>
             <thead><tr><th>KPI</th><th>%</th><th>Ach. / target</th><th>Gap</th><th>AMs behind target</th></tr></thead>
@@ -1073,7 +1063,7 @@
         <span class="pill">Month <strong>${esc(hub.month || '')}</strong></span>
         <span class="pill">Week of <strong>${esc(hub.weekOf || '')}</strong></span>
         <span class="pill">AMs <strong>${people.length}</strong></span>
-        <span class="pill">Country KPI target <strong>${esc(COUNTRY_OWNER.name)}</strong> ${esc(COUNTRY_OWNER.role)}</span>
+        <span class="pill">Country KPI target</span>
         <span class="pill">SL enrolled <strong>${fmtNum(slCountryStats.current)}</strong> · target <strong>${fmtNum(slCountryStats.pipeline)}</strong></span>
         <span class="pill">SP enrolled <strong>${fmtNum(spCountryStats.current)}</strong> · target <strong>${fmtNum(spCountryStats.pipeline)}</strong></span>
         <span class="pill">Data as of <strong>${esc(asOf)}</strong></span>`;
