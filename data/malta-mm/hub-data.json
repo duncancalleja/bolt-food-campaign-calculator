@@ -2,7 +2,7 @@
   "title": "Malta Performance Hub",
   "month": "Sep 2026",
   "weekOf": "2026-09-22",
-  "audience": "Advay + Malta MM AMs",
+  "audience": "Malta MM AMs",
   "scope": "Malta MM AM views only. KPIs are the five Malta MM scorecard columns from the shared RAM/KPI sheet: Q3 Renegotiations, Sponsored Listings, Bolt Plus, Marketing Campaigns, Smart Promotions. Country figures are the roll-up of the five AMs; the TL is not an AM page.",
   "kpis": [
     "Q3 Renegotiations",
@@ -43,9 +43,7 @@
       "jun": null,
       "jul": null,
       "aug": null,
-      "sep": 0.85,
-      "advayDetail": [],
-      "note": "Advay pack: 46/54 = 85% on the Q3 list, no concerns raised. RAM Sep tracker is the roll-up below."
+      "sep": 0.85
     },
     {
       "kpi": "Sponsored Listings",
@@ -56,24 +54,7 @@
       "jun": null,
       "jul": null,
       "aug": null,
-      "sep": null,
-      "advayDetail": [
-        {
-          "label": "Advay SL L1",
-          "jun": 0.39,
-          "jul": 0.87,
-          "aug": 0.64,
-          "sep": 0.35
-        },
-        {
-          "label": "Advay SL L2",
-          "jun": 1.13,
-          "jul": 1.15,
-          "aug": 0.97,
-          "sep": 0.56
-        }
-      ],
-      "note": "Advay tracks SL as L1/L2 splits; the RAM sheet has a single Sponsored Listings column. Sep is red on both."
+      "sep": null
     },
     {
       "kpi": "Bolt Plus",
@@ -84,9 +65,7 @@
       "jun": null,
       "jul": null,
       "aug": null,
-      "sep": null,
-      "advayDetail": [],
-      "note": "Not in the Advay country pack — RAM sheet roll-up only."
+      "sep": null
     },
     {
       "kpi": "Marketing Campaigns",
@@ -97,9 +76,7 @@
       "jun": 9.0,
       "jul": 4.83,
       "aug": 0.96,
-      "sep": 0.64,
-      "advayDetail": [],
-      "note": "Red in Sep on both the Advay pack and the RAM sheet."
+      "sep": 0.64
     },
     {
       "kpi": "Smart Promotions",
@@ -110,9 +87,7 @@
       "jun": 1.1,
       "jul": 1.0,
       "aug": 0.93,
-      "sep": 0.88,
-      "advayDetail": [],
-      "note": "Trending down in the Advay pack but the RAM sheet roll-up is on target."
+      "sep": 0.88
     }
   ],
   "scorecard": [
@@ -819,7 +794,7 @@
       "hasEnrolmentData": false
     }
   ],
-  "advayRequirements": [
+  "kpiRequirements": [
     "Root cause: specific execution reason for the gap (not target debate).",
     "Pipeline: named providers this week, pipeline size, conversion confidence (gap ≠ pipeline).",
     "Forecast: honest EOW/EOM landing from pipeline × confidence."
