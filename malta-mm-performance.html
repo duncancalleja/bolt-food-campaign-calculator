@@ -209,7 +209,6 @@
     .loading, .error { padding: 2rem; text-align: center; color: var(--muted); }
     .error { color: #fca5a5; }
     .legend { display: flex; flex-wrap: wrap; gap: .5rem; margin: .5rem 0 1rem; }
-    .trend { color: var(--muted); font-size: .8rem; margin-top: .3rem; }
   </style>
 </head>
 <body>
@@ -463,24 +462,12 @@
     const kpis = hub.countryKpis || [];
     const scorecard = hub.scorecard || [];
 
-    const kpiCards = kpis.map(k => {
-      const trend = ['jun', 'jul', 'aug', 'sep']
-        .filter(m => k[m] != null)
-        .map(m => `${m[0].toUpperCase() + m.slice(1)} ${fmtPct(k[m])}`)
-        .join(' · ');
-      const detail = (k.advayDetail || []).map(d =>
-        `<div class="trend">${esc(d.label)}: Jun ${fmtPct(d.jun)} · Jul ${fmtPct(d.jul)} · Aug ${fmtPct(d.aug)} · Sep ${fmtPct(d.sep)}</div>`
-      ).join('');
-      return `
+    const kpiCards = kpis.map(k => `
         <div class="card stat">
           <div class="label">${esc(k.kpi)}</div>
           <div class="value">${statusPill(k.pct)}</div>
           <div class="hint">${fmtNum(k.achievement)} / ${fmtNum(k.target)} · gap ${fmtNum(k.gap)}</div>
-          ${trend ? `<div class="trend">Advay pack: ${esc(trend)}</div>` : ''}
-          ${detail}
-          <div class="hint" style="margin-top:.45rem">${esc(k.note || '')}</div>
-        </div>`;
-    }).join('');
+        </div>`).join('');
 
     const rowFor = (person, kpi) => scorecard.find(r => r.person === person && r.kpi === kpi);
     const overallFor = person => {
@@ -555,7 +542,7 @@
     };
     const slStats = targetableStats(slAll);
     const spStats = targetableStats(spAll);
-    const reqs = hub.advayRequirements || [];
+    const reqs = hub.kpiRequirements || [];
 
     return `
       <div class="card" style="margin-bottom:1rem">
@@ -646,7 +633,7 @@
       </div>
 
       <div class="card">
-        <h2>What Advay expects per KPI</h2>
+        <h2>What each AM page needs per KPI</h2>
         <p class="sub">Each AM page carries these three boxes for every KPI above. SL and SP also show the enrolled list and the target list.</p>
         <ol class="list">${reqs.map(r => `<li>${esc(r)}</li>`).join('')}</ol>
       </div>`;
