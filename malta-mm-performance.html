@@ -453,6 +453,10 @@
     return map;
   }
 
+  function teamRows(byOwner, people) {
+    return people.flatMap(p => byOwner.get(p.name) || []);
+  }
+
   /* ---------------------------------------------------------------- overview */
 
   function renderOverview(hub, people, slByOwner, spByOwner, mcByOwner, slAll, spAll, mcAll) {
@@ -513,26 +517,33 @@
         </tr>`;
     }).join('');
 
-    const ownerSummary = (byOwner, showHistory = true) => {
+    const ownerSummary = (byOwner, product, showHistory = true) => {
+      const state = loadState();
       const rows = people.map(p => {
-        const stats = targetableStats(byOwner.get(p.name) || []);
+        const ownerRows = byOwner.get(p.name) || [];
+        const stats = targetableStats(ownerRows);
+        TARGETED_ROWS.set(targetedRowsKey(p.name, product), ownerRows);
         return `
           <tr>
             <td><strong>${esc(p.name)}</strong></td>
             <td class="num">${fmtNum(stats.all)}</td>
             <td class="num">${fmtNum(stats.current)}</td>
             <td class="num">${fmtNum(stats.pipeline)}</td>
+            <td class="num" data-targeted-cell data-person="${esc(p.name)}" data-product="${esc(product)}">${fmtNum(countTargeting(state, product, ownerRows))}</td>
             ${showHistory ? `<td class="num">${fmtNum(stats.never)}</td>
             <td class="num">${fmtNum(stats.tried)}</td>` : ''}
           </tr>`;
       }).join('');
-      const totals = targetableStats(people.flatMap(p => byOwner.get(p.name) || []));
+      const allRows = teamRows(byOwner, people);
+      const totals = targetableStats(allRows);
+      TARGETED_ROWS.set(targetedRowsKey('Overview', product), allRows);
       return `${rows}
         <tr>
           <td><strong>Five AMs</strong></td>
           <td class="num">${fmtNum(totals.all)}</td>
           <td class="num">${fmtNum(totals.current)}</td>
           <td class="num">${fmtNum(totals.pipeline)}</td>
+          <td class="num" data-targeted-cell data-person="Overview" data-product="${esc(product)}">${fmtNum(countTargeting(state, product, allRows))}</td>
           ${showHistory ? `<td class="num">${fmtNum(totals.never)}</td>
           <td class="num">${fmtNum(totals.tried)}</td>` : ''}
         </tr>`;
@@ -597,19 +608,19 @@
         <p class="sub">Active Malta providers split with the owner alias map. Enrolled accounts have nothing left to target; the target list is everything not on SL today.</p>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>AM</th><th>Accounts</th><th>Already enrolled</th><th>Target list</th><th>Never tried</th><th>Tried before</th></tr></thead>
-            <tbody>${ownerSummary(slByOwner)}</tbody>
+            <thead><tr><th>AM</th><th>Accounts</th><th>Already enrolled</th><th>Target list</th><th>Targeted</th><th>Never tried</th><th>Tried before</th></tr></thead>
+            <tbody>${ownerSummary(slByOwner, 'Sponsored Listings')}</tbody>
           </table>
         </div>
       </div>
 
       <div class="card" style="margin-bottom:1rem">
         <h2>Smart Promotions by AM</h2>
-        <p class="sub">Same 1,785 active Malta providers, filtered with the owner alias map.</p>
+        <p class="sub">The five AMs' active Malta providers, split with the owner alias map.</p>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>AM</th><th>Accounts</th><th>Already enrolled</th><th>Target list</th><th>Never tried</th><th>Tried before</th></tr></thead>
-            <tbody>${ownerSummary(spByOwner)}</tbody>
+            <thead><tr><th>AM</th><th>Accounts</th><th>Already enrolled</th><th>Target list</th><th>Targeted</th><th>Never tried</th><th>Tried before</th></tr></thead>
+            <tbody>${ownerSummary(spByOwner, 'Smart Promotions')}</tbody>
           </table>
         </div>
       </div>
@@ -619,25 +630,25 @@
         <p class="sub">Marketing Campaigns accounts split with the owner alias map.</p>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>AM</th><th>Accounts</th><th>Already enrolled</th><th>Target list</th></tr></thead>
-            <tbody>${ownerSummary(mcByOwner, false)}</tbody>
+            <thead><tr><th>AM</th><th>Accounts</th><th>Already enrolled</th><th>Target list</th><th>Targeted</th></tr></thead>
+            <tbody>${ownerSummary(mcByOwner, 'Marketing Campaigns', false)}</tbody>
           </table>
         </div>
       </div>
 
       <div class="card" style="margin-bottom:1rem">
         <h2>Sponsored Listings · enrolled and target lists</h2>
-        ${targetableHtml('Overview', 'Sponsored Listings', slAll, { ownerFilter: true })}
+        ${targetableHtml('Overview', 'Sponsored Listings', slAll, { ownerFilter: true, ownerColumn: true })}
       </div>
 
       <div class="card" style="margin-bottom:1rem">
         <h2>Smart Promotions · enrolled and target lists</h2>
-        ${targetableHtml('Overview', 'Smart Promotions', spAll, { ownerFilter: true })}
+        ${targetableHtml('Overview', 'Smart Promotions', spAll, { ownerFilter: true, ownerColumn: true })}
       </div>
 
       <div class="card" style="margin-bottom:1rem">
         <h2>Marketing Campaigns · enrolled and target lists</h2>
-        ${targetableHtml('Overview', 'Marketing Campaigns', mcAll, { ownerFilter: true })}
+        ${targetableHtml('Overview', 'Marketing Campaigns', mcAll, { ownerFilter: true, ownerColumn: true })}
       </div>
 
       <div class="card">
@@ -725,7 +736,7 @@
         </select>`
       : '';
     return `
-      <div class="targetable" data-product="${esc(product)}" data-scope="${esc(scope)}">
+      <div class="targetable" data-product="${esc(product)}" data-scope="${esc(scope)}" data-show-owner="${opts.ownerColumn ? 'true' : 'false'}">
         <div class="subhead">
           <h4>${esc(product)} accounts</h4>
         </div>
@@ -747,7 +758,7 @@
           <div class="table-wrap">
             <table>
               <thead><tr>
-                <th>Account</th><th>Provider ID</th>${showHistory ? '<th>First start</th><th>Current end</th>' : ''}
+                <th>Account</th>${opts.ownerColumn ? '<th>AM</th>' : ''}<th>Provider ID</th>${showHistory ? '<th>First start</th><th>Current end</th>' : ''}
               </tr></thead>
               <tbody data-enrolled-body></tbody>
             </table>
@@ -771,7 +782,7 @@
           <div class="table-wrap">
             <table>
               <thead><tr>
-                <th>Targeting</th><th>AM comment</th><th>Account</th><th>Provider ID</th>${showHistory ? '<th>History</th><th>First start</th><th>Last end</th>' : ''}
+                <th>Targeting</th><th>AM comment</th><th>Account</th>${opts.ownerColumn ? '<th>AM</th>' : ''}<th>Provider ID</th>${showHistory ? '<th>History</th><th>First start</th><th>Last end</th>' : ''}
               </tr></thead>
               <tbody data-target-body></tbody>
             </table>
@@ -854,6 +865,7 @@
 
   function wireTargetable(widget, rows) {
     const product = widget.dataset.product;
+    const showOwner = widget.dataset.showOwner === 'true';
     const targetingFilters = widget.querySelector('[data-targeting-filters]');
     const search = widget.querySelector('[data-target-search]');
     const ownerSel = widget.querySelector('[data-target-owner]');
@@ -889,10 +901,11 @@
       enrolledBody.innerHTML = enrolledVisible.map(r => `
           <tr>
             <td><strong>${esc(r.accountName)}</strong></td>
+            ${showOwner ? `<td>${esc(canonicalOwner(r.owner) || r.owner || '—')}</td>` : ''}
             <td class="num">${esc(r.providerId)}</td>
             ${product !== 'Marketing Campaigns' ? `<td class="num">${esc(formatDate(r.firstStart))}</td>
             <td class="num">${esc(formatDate(r.lastEnd))}</td>` : ''}
-          </tr>`).join('') || `<tr><td colspan="${product === 'Marketing Campaigns' ? 2 : 4}" style="color:var(--muted)">No enrolled accounts</td></tr>`;
+          </tr>`).join('') || `<tr><td colspan="${(product === 'Marketing Campaigns' ? 2 : 4) + (showOwner ? 1 : 0)}" style="color:var(--muted)">No enrolled accounts</td></tr>`;
 
       const targets = scoped.filter(r => !r.currentlyOn);
       const matches = targets.filter(r =>
@@ -911,13 +924,14 @@
               esc(readComment(state, product, r))
             }" placeholder="AM comment…" aria-label="AM comment for ${esc(r.accountName)}" autocomplete="off" /></td>
             <td><strong>${esc(r.accountName)}</strong></td>
+            ${showOwner ? `<td>${esc(canonicalOwner(r.owner) || r.owner || '—')}</td>` : ''}
             <td class="num">${esc(r.providerId)}</td>
             ${product !== 'Marketing Campaigns' ? `<td>${r.everHadOn
               ? '<span class="status yellow">Tried before</span>'
               : '<span class="status muted">Never tried</span>'}</td>
             <td class="num">${esc(formatDate(r.firstStart))}</td>
             <td class="num">${esc(formatDate(r.lastEnd))}</td>` : ''}
-          </tr>`).join('') || `<tr><td colspan="${product === 'Marketing Campaigns' ? 4 : 7}" style="color:var(--muted)">No matching accounts</td></tr>`;
+          </tr>`).join('') || `<tr><td colspan="${(product === 'Marketing Campaigns' ? 4 : 7) + (showOwner ? 1 : 0)}" style="color:var(--muted)">No matching accounts</td></tr>`;
     };
 
     const resetLimits = () => { limits = { enrolled: TARGETABLE_PAGE, target: TARGETABLE_PAGE }; };
@@ -944,6 +958,9 @@
         saveState(state);
         refreshTargetedCounts();
         showToast(box.checked ? 'Marked as targeting' : 'Targeting cleared');
+        document.querySelectorAll('.targetable').forEach(other => {
+          if (other !== widget && other.dataset.product === product) other._paint?.();
+        });
         // A tick can drop the row out of the current view, so only repaint when it filters.
         if (targetingMode !== 'all') paint();
         else targetingCountOnly(state);
@@ -966,6 +983,7 @@
       targetShown.textContent = targetShown.textContent.replace(/[\d,]+ targeting$/, `${fmtNum(count)} targeting`);
     }
 
+    widget._paint = paint;
     paint();
   }
 
@@ -1087,9 +1105,12 @@
       const slByOwner = bucketByOwner(slTargetable, people);
       const spByOwner = bucketByOwner(spTargetable, people);
       const mcByOwner = bucketByOwner(mcTargetable, people);
-      const slCountryStats = targetableStats(slTargetable);
-      const spCountryStats = targetableStats(spTargetable);
-      const mcCountryStats = targetableStats(mcTargetable);
+      const slTeamRows = teamRows(slByOwner, people);
+      const spTeamRows = teamRows(spByOwner, people);
+      const mcTeamRows = teamRows(mcByOwner, people);
+      const slCountryStats = targetableStats(slTeamRows);
+      const spCountryStats = targetableStats(spTeamRows);
+      const mcCountryStats = targetableStats(mcTeamRows);
 
       document.getElementById('boot').remove();
 
@@ -1116,12 +1137,12 @@
       panels.innerHTML = tabDefs.map(t => `<section class="panel" id="panel-${esc(t.id)}"></section>`).join('');
 
       document.getElementById('panel-overview').innerHTML = renderOverview(
-        hub, people, slByOwner, spByOwner, mcByOwner, slTargetable, spTargetable, mcTargetable
+        hub, people, slByOwner, spByOwner, mcByOwner, slTeamRows, spTeamRows, mcTeamRows
       );
       document.querySelectorAll('#panel-overview .targetable').forEach(widget => {
-        const source = widget.dataset.product === 'Sponsored Listings' ? slTargetable
-          : widget.dataset.product === 'Smart Promotions' ? spTargetable
-          : mcTargetable;
+        const source = widget.dataset.product === 'Sponsored Listings' ? slTeamRows
+          : widget.dataset.product === 'Smart Promotions' ? spTeamRows
+          : mcTeamRows;
         wireTargetable(widget, source);
       });
       tabDefs.filter(t => t.person).forEach(t => {
