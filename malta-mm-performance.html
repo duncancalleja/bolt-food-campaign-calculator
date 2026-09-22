@@ -243,10 +243,9 @@
   // Nothing outside this list is shown anywhere in the hub.
   const KPI_ORDER = ['Q3 Renegotiations', 'Sponsored Listings', 'Bolt Plus', 'Marketing Campaigns', 'Smart Promotions'];
 
-  // Account-level targetable lists exist for Sponsored Listings and Smart Promotions
-  // (full active Malta universe in sl-targetable.json / sp-targetable.json).
-  // No account lists are shown for Q3 Renegotiations, Bolt Plus or Marketing Campaigns.
-  const TARGETABLE_KPIS = ['Sponsored Listings', 'Smart Promotions'];
+  // Account-level targetable lists exist for Sponsored Listings, Marketing Campaigns and
+  // Smart Promotions. Marketing Campaigns has no tried-before/history UI.
+  const TARGETABLE_KPIS = ['Sponsored Listings', 'Marketing Campaigns', 'Smart Promotions'];
   const ACCOUNT_VIEW_KPIS = TARGETABLE_KPIS;
   const TARGETABLE_PAGE = 250;
   // Enrolled accounts (currentlyOn) and target accounts (everything else) are rendered as two
@@ -456,7 +455,7 @@
 
   /* ---------------------------------------------------------------- overview */
 
-  function renderOverview(hub, people, slByOwner, spByOwner, slAll, spAll) {
+  function renderOverview(hub, people, slByOwner, spByOwner, mcByOwner, slAll, spAll, mcAll) {
     const kpis = hub.countryKpis || [];
     const scorecard = hub.scorecard || [];
 
@@ -514,7 +513,7 @@
         </tr>`;
     }).join('');
 
-    const ownerSummary = (byOwner) => {
+    const ownerSummary = (byOwner, showHistory = true) => {
       const rows = people.map(p => {
         const stats = targetableStats(byOwner.get(p.name) || []);
         return `
@@ -523,8 +522,8 @@
             <td class="num">${fmtNum(stats.all)}</td>
             <td class="num">${fmtNum(stats.current)}</td>
             <td class="num">${fmtNum(stats.pipeline)}</td>
-            <td class="num">${fmtNum(stats.never)}</td>
-            <td class="num">${fmtNum(stats.tried)}</td>
+            ${showHistory ? `<td class="num">${fmtNum(stats.never)}</td>
+            <td class="num">${fmtNum(stats.tried)}</td>` : ''}
           </tr>`;
       }).join('');
       const totals = targetableStats(people.flatMap(p => byOwner.get(p.name) || []));
@@ -534,12 +533,13 @@
           <td class="num">${fmtNum(totals.all)}</td>
           <td class="num">${fmtNum(totals.current)}</td>
           <td class="num">${fmtNum(totals.pipeline)}</td>
-          <td class="num">${fmtNum(totals.never)}</td>
-          <td class="num">${fmtNum(totals.tried)}</td>
+          ${showHistory ? `<td class="num">${fmtNum(totals.never)}</td>
+          <td class="num">${fmtNum(totals.tried)}</td>` : ''}
         </tr>`;
     };
     const slStats = targetableStats(slAll);
     const spStats = targetableStats(spAll);
+    const mcStats = targetableStats(mcAll);
     const reqs = hub.kpiRequirements || [];
 
     return `
@@ -583,11 +583,13 @@
         </div>
       </div>
 
-      <div class="grid grid-4" style="margin-bottom:1rem">
+      <div class="grid grid-3" style="margin-bottom:1rem">
         <div class="card stat"><div class="label">SL already enrolled</div><div class="value">${fmtNum(slStats.current)}</div><div class="hint">Of ${fmtNum(slStats.all)} active Malta providers</div></div>
         <div class="card stat"><div class="label">SL target list</div><div class="value">${fmtNum(slStats.pipeline)}</div><div class="hint">${fmtNum(slStats.never)} never tried · ${fmtNum(slStats.tried)} tried before</div></div>
         <div class="card stat"><div class="label">SP already enrolled</div><div class="value">${fmtNum(spStats.current)}</div><div class="hint">Of ${fmtNum(spStats.all)} active Malta providers</div></div>
         <div class="card stat"><div class="label">SP target list</div><div class="value">${fmtNum(spStats.pipeline)}</div><div class="hint">${fmtNum(spStats.never)} never tried · ${fmtNum(spStats.tried)} tried before</div></div>
+        <div class="card stat"><div class="label">MC already enrolled</div><div class="value">${fmtNum(mcStats.current)}</div><div class="hint">Of ${fmtNum(mcStats.all)} Malta accounts</div></div>
+        <div class="card stat"><div class="label">MC target list</div><div class="value">${fmtNum(mcStats.pipeline)}</div><div class="hint">Not enrolled today</div></div>
       </div>
 
       <div class="card" style="margin-bottom:1rem">
@@ -613,6 +615,17 @@
       </div>
 
       <div class="card" style="margin-bottom:1rem">
+        <h2>Marketing Campaigns by AM</h2>
+        <p class="sub">Marketing Campaigns accounts split with the owner alias map.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>AM</th><th>Accounts</th><th>Already enrolled</th><th>Target list</th></tr></thead>
+            <tbody>${ownerSummary(mcByOwner, false)}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:1rem">
         <h2>Sponsored Listings · enrolled and target lists</h2>
         ${targetableHtml('Overview', 'Sponsored Listings', slAll, { ownerFilter: true })}
       </div>
@@ -622,16 +635,21 @@
         ${targetableHtml('Overview', 'Smart Promotions', spAll, { ownerFilter: true })}
       </div>
 
+      <div class="card" style="margin-bottom:1rem">
+        <h2>Marketing Campaigns · enrolled and target lists</h2>
+        ${targetableHtml('Overview', 'Marketing Campaigns', mcAll, { ownerFilter: true })}
+      </div>
+
       <div class="card">
         <h2>What each AM page needs per KPI</h2>
-        <p class="sub">Each AM page carries these three boxes for every KPI above. SL and SP also show the enrolled list and the target list.</p>
+        <p class="sub">Each AM page carries these three boxes for every KPI above. SL, MC and SP also show the enrolled list and the target list.</p>
         <ol class="list">${reqs.map(r => `<li>${esc(r)}</li>`).join('')}</ol>
       </div>`;
   }
 
   /* --------------------------------------------------------------- AM pages */
 
-  function kpiBlockHtml(person, w, slRows, spRows) {
+  function kpiBlockHtml(person, w, slRows, spRows, mcRows) {
     const entry = getEntry(person, w.kpi);
     const rootCause = entry.rootCause ?? w.rootCause ?? '';
     const pipelineText = kpiPipelineCopy(entry.pipeline ?? w.pipeline ?? '', w.kpi);
@@ -642,7 +660,10 @@
     const amComment = entry.amComment ?? entry.nextStep ?? legacyRow?.amComment ?? legacyRow?.nextStep ?? '';
     const confidenceOptions = ['', 'High', 'Medium', 'Low']
       .map(c => `<option value="${c}"${c === confidence ? ' selected' : ''}>${c || '—'}</option>`).join('');
-    const targetableRows = w.kpi === 'Sponsored Listings' ? slRows : w.kpi === 'Smart Promotions' ? spRows : [];
+    const targetableRows = w.kpi === 'Sponsored Listings' ? slRows
+      : w.kpi === 'Smart Promotions' ? spRows
+      : w.kpi === 'Marketing Campaigns' ? mcRows
+      : [];
     const hasAccountView = ACCOUNT_VIEW_KPIS.includes(w.kpi);
     const targetable = hasAccountView
       ? `<div class="account-drilldown" id="${esc(accountViewId(person, w.kpi))}" data-account-view hidden>
@@ -685,7 +706,7 @@
             <textarea id="${esc(accountViewId(person, w.kpi))}-comment" data-field="amComment" placeholder="AM comment for this KPI…">${esc(amComment)}</textarea>
           </div>
         </div>
-        ${hasAccountView ? '' : '<p class="sub" style="margin:.75rem 0 0">Enrolled and target lists are on Sponsored Listings and Smart Promotions.</p>'}
+        ${hasAccountView ? '' : '<p class="sub" style="margin:.75rem 0 0">Enrolled and target lists are on Sponsored Listings, Marketing Campaigns and Smart Promotions.</p>'}
         <div class="notes-row">
           <label>Notes</label>
           <textarea data-field="notes" placeholder="Optional notes…">${esc(notes)}</textarea>
@@ -696,6 +717,7 @@
 
   function targetableHtml(scope, product, rows, opts = {}) {
     const first = String(scope || 'Overview').split(' ')[0];
+    const showHistory = product !== 'Marketing Campaigns';
     const ownerOptions = opts.ownerFilter
       ? `<select data-target-owner>
           <option value="">All owners</option>
@@ -725,7 +747,7 @@
           <div class="table-wrap">
             <table>
               <thead><tr>
-                <th>Account</th><th>Provider ID</th><th>First start</th><th>Current end</th>
+                <th>Account</th><th>Provider ID</th>${showHistory ? '<th>First start</th><th>Current end</th>' : ''}
               </tr></thead>
               <tbody data-enrolled-body></tbody>
             </table>
@@ -739,17 +761,17 @@
             <span class="pill" data-target-shown>Showing 0</span>
           </div>
           <p class="sub" style="margin:.15rem 0 .75rem">Not on ${esc(product)} today — the only accounts that can be targeted. Tick Targeting and add an AM comment per account.</p>
-          <div class="count-pills">
+          ${showHistory ? `<div class="count-pills">
             <span class="pill">Never tried <strong data-stat="never">0</strong></span>
             <span class="pill">Tried before <strong data-stat="tried">0</strong></span>
-          </div>
+          </div>` : ''}
           <div class="chip-row" data-targeting-filters aria-label="Targeting filter">
             ${TARGETING_MODES.map((m, i) => `<button type="button" class="chip${i === 0 ? ' active' : ''}" data-targeting-mode="${m.key}">${esc(m.label)}</button>`).join('')}
           </div>
           <div class="table-wrap">
             <table>
               <thead><tr>
-                <th>Targeting</th><th>AM comment</th><th>Account</th><th>Provider ID</th><th>History</th><th>First start</th><th>Last end</th>
+                <th>Targeting</th><th>AM comment</th><th>Account</th><th>Provider ID</th>${showHistory ? '<th>History</th><th>First start</th><th>Last end</th>' : ''}
               </tr></thead>
               <tbody data-target-body></tbody>
             </table>
@@ -759,7 +781,7 @@
       </div>`;
   }
 
-  function renderPerson(hub, person, role, slRows, spRows) {
+  function renderPerson(hub, person, role, slRows, spRows, mcRows) {
     const weekly = (hub.weeklyPerformance || []).filter(w => w.person === person);
     const ordered = KPI_ORDER.map(k => weekly.find(w => w.kpi === k)).filter(Boolean);
     const scorecard = (hub.scorecard || []).filter(r => r.person === person);
@@ -768,8 +790,10 @@
       : null;
     const slStats = targetableStats(slRows);
     const spStats = targetableStats(spRows);
+    const mcStats = targetableStats(mcRows);
     TARGETED_ROWS.set(targetedRowsKey(person, 'Sponsored Listings'), slRows);
     TARGETED_ROWS.set(targetedRowsKey(person, 'Smart Promotions'), spRows);
+    TARGETED_ROWS.set(targetedRowsKey(person, 'Marketing Campaigns'), mcRows);
 
     const state = loadState();
     const scoreRows = KPI_ORDER.map(k => {
@@ -780,7 +804,10 @@
         ? `<button type="button" class="kpi-link" data-action="open-account-view" data-kpi="${esc(r.kpi)}" aria-controls="${esc(accountViewId(person, r.kpi))}" aria-expanded="false">${esc(r.kpi)}</button>`
         : `<strong>${esc(r.kpi)}</strong>`;
       // A KPI without a target list has no targeting UI at all, so it shows a dash rather than a 0.
-      const targetRows = r.kpi === 'Sponsored Listings' ? slRows : r.kpi === 'Smart Promotions' ? spRows : null;
+      const targetRows = r.kpi === 'Sponsored Listings' ? slRows
+        : r.kpi === 'Smart Promotions' ? spRows
+        : r.kpi === 'Marketing Campaigns' ? mcRows
+        : null;
       const targetedCell = targetRows
         ? `<td class="num" data-targeted-cell data-person="${esc(person)}" data-product="${esc(r.kpi)}" title="Accounts ticked as Targeting on the ${esc(r.kpi)} target list">${fmtNum(countTargeting(state, r.kpi, targetRows))}</td>`
         : '<td class="num muted-cell" title="No target list for this KPI">—</td>';
@@ -807,6 +834,7 @@
             ${statusPill(overall)}
             <span class="pill">SL enrolled <strong>${fmtNum(slStats.current)}</strong> · target <strong>${fmtNum(slStats.pipeline)}</strong></span>
             <span class="pill">SP enrolled <strong>${fmtNum(spStats.current)}</strong> · target <strong>${fmtNum(spStats.pipeline)}</strong></span>
+            <span class="pill">MC enrolled <strong>${fmtNum(mcStats.current)}</strong> · target <strong>${fmtNum(mcStats.pipeline)}</strong></span>
           </div>
         </div>
         <div class="table-wrap" style="margin-top:.85rem">
@@ -821,7 +849,7 @@
           <span class="pill">KPI notes, confidence, comments and targeting save to this browser</span>
         </div>
       </div>
-      ${ordered.map(w => kpiBlockHtml(person, w, slRows, spRows)).join('')}`;
+      ${ordered.map(w => kpiBlockHtml(person, w, slRows, spRows, mcRows)).join('')}`;
   }
 
   function wireTargetable(widget, rows) {
@@ -862,9 +890,9 @@
           <tr>
             <td><strong>${esc(r.accountName)}</strong></td>
             <td class="num">${esc(r.providerId)}</td>
-            <td class="num">${esc(formatDate(r.firstStart))}</td>
-            <td class="num">${esc(formatDate(r.lastEnd))}</td>
-          </tr>`).join('') || '<tr><td colspan="4" style="color:var(--muted)">No enrolled accounts</td></tr>';
+            ${product !== 'Marketing Campaigns' ? `<td class="num">${esc(formatDate(r.firstStart))}</td>
+            <td class="num">${esc(formatDate(r.lastEnd))}</td>` : ''}
+          </tr>`).join('') || `<tr><td colspan="${product === 'Marketing Campaigns' ? 2 : 4}" style="color:var(--muted)">No enrolled accounts</td></tr>`;
 
       const targets = scoped.filter(r => !r.currentlyOn);
       const matches = targets.filter(r =>
@@ -884,12 +912,12 @@
             }" placeholder="AM comment…" aria-label="AM comment for ${esc(r.accountName)}" autocomplete="off" /></td>
             <td><strong>${esc(r.accountName)}</strong></td>
             <td class="num">${esc(r.providerId)}</td>
-            <td>${r.everHadOn
+            ${product !== 'Marketing Campaigns' ? `<td>${r.everHadOn
               ? '<span class="status yellow">Tried before</span>'
               : '<span class="status muted">Never tried</span>'}</td>
             <td class="num">${esc(formatDate(r.firstStart))}</td>
-            <td class="num">${esc(formatDate(r.lastEnd))}</td>
-          </tr>`).join('') || '<tr><td colspan="7" style="color:var(--muted)">No matching accounts</td></tr>';
+            <td class="num">${esc(formatDate(r.lastEnd))}</td>` : ''}
+          </tr>`).join('') || `<tr><td colspan="${product === 'Marketing Campaigns' ? 4 : 7}" style="color:var(--muted)">No matching accounts</td></tr>`;
     };
 
     const resetLimits = () => { limits = { enrolled: TARGETABLE_PAGE, target: TARGETABLE_PAGE }; };
@@ -943,7 +971,7 @@
 
   /* ------------------------------------------------------------- behaviour */
 
-  function wirePerson(panel, hub, person, slRows, spRows) {
+  function wirePerson(panel, hub, person, slRows, spRows, mcRows) {
     // A reset re-renders the panel in place, so drop the previous listeners first.
     panel._listeners?.abort();
     const { signal } = (panel._listeners = new AbortController());
@@ -990,7 +1018,7 @@
 
       if (btn.dataset.action === 'reset-person') {
         clearPerson(person);
-        renderPersonPanel(panel, hub, person, panel.dataset.role, slRows, spRows);
+        renderPersonPanel(panel, hub, person, panel.dataset.role, slRows, spRows, mcRows);
         showToast('Reset to pack defaults');
         return;
       }
@@ -1003,10 +1031,13 @@
       }
     }, { signal });
 
-    // Account views only exist for Sponsored Listings and Smart Promotions.
+    // Account views exist for Sponsored Listings, Marketing Campaigns and Smart Promotions.
     panel.querySelectorAll('.targetable').forEach(widget => {
       const product = widget.dataset.product;
-      const source = product === 'Sponsored Listings' ? slRows : product === 'Smart Promotions' ? spRows : [];
+      const source = product === 'Sponsored Listings' ? slRows
+        : product === 'Smart Promotions' ? spRows
+        : product === 'Marketing Campaigns' ? mcRows
+        : [];
       wireTargetable(widget, source);
     });
   }
@@ -1030,9 +1061,9 @@
     return lines.join('\n');
   }
 
-  function renderPersonPanel(panel, hub, person, role, slRows, spRows) {
-    panel.innerHTML = renderPerson(hub, person, role, slRows, spRows);
-    wirePerson(panel, hub, person, slRows, spRows);
+  function renderPersonPanel(panel, hub, person, role, slRows, spRows, mcRows) {
+    panel.innerHTML = renderPerson(hub, person, role, slRows, spRows, mcRows);
+    wirePerson(panel, hub, person, slRows, spRows, mcRows);
   }
 
   function activateTab(name) {
@@ -1044,17 +1075,21 @@
 
   async function main() {
     try {
-      const [hub, slTargetable, spTargetable] = await Promise.all([
+      const [hub, slTargetable, spTargetable, mcData] = await Promise.all([
         loadJSON('data/malta-mm/hub-data.json'),
         loadJSON('data/malta-mm/sl-targetable.json'),
         loadJSON('data/malta-mm/sp-targetable.json'),
+        loadJSON('data/malta-mm/mc-targetable.json'),
       ]);
+      const mcTargetable = mcData.rows || [];
 
       const people = (hub.team || []).filter(t => OWNER_ALIASES[t.name]);
       const slByOwner = bucketByOwner(slTargetable, people);
       const spByOwner = bucketByOwner(spTargetable, people);
+      const mcByOwner = bucketByOwner(mcTargetable, people);
       const slCountryStats = targetableStats(slTargetable);
       const spCountryStats = targetableStats(spTargetable);
+      const mcCountryStats = targetableStats(mcTargetable);
 
       document.getElementById('boot').remove();
 
@@ -1066,6 +1101,7 @@
         <span class="pill">Country KPI target</span>
         <span class="pill">SL enrolled <strong>${fmtNum(slCountryStats.current)}</strong> · target <strong>${fmtNum(slCountryStats.pipeline)}</strong></span>
         <span class="pill">SP enrolled <strong>${fmtNum(spCountryStats.current)}</strong> · target <strong>${fmtNum(spCountryStats.pipeline)}</strong></span>
+        <span class="pill">MC enrolled <strong>${fmtNum(mcCountryStats.current)}</strong> · target <strong>${fmtNum(mcCountryStats.pipeline)}</strong></span>
         <span class="pill">Data as of <strong>${esc(asOf)}</strong></span>`;
       document.getElementById('footerText').textContent =
         `Boltable static · mt-mm-performance · unlisted · data as of ${asOf} · opened ${TODAY} Asia/Baku`;
@@ -1079,9 +1115,13 @@
         `<button type="button" data-tab="${esc(t.id)}">${esc(t.label)}${t.role ? `<span class="tab-role">${esc(t.role)}</span>` : ''}</button>`).join('');
       panels.innerHTML = tabDefs.map(t => `<section class="panel" id="panel-${esc(t.id)}"></section>`).join('');
 
-      document.getElementById('panel-overview').innerHTML = renderOverview(hub, people, slByOwner, spByOwner, slTargetable, spTargetable);
+      document.getElementById('panel-overview').innerHTML = renderOverview(
+        hub, people, slByOwner, spByOwner, mcByOwner, slTargetable, spTargetable, mcTargetable
+      );
       document.querySelectorAll('#panel-overview .targetable').forEach(widget => {
-        const source = widget.dataset.product === 'Sponsored Listings' ? slTargetable : spTargetable;
+        const source = widget.dataset.product === 'Sponsored Listings' ? slTargetable
+          : widget.dataset.product === 'Smart Promotions' ? spTargetable
+          : mcTargetable;
         wireTargetable(widget, source);
       });
       tabDefs.filter(t => t.person).forEach(t => {
@@ -1093,7 +1133,8 @@
           t.person.name,
           t.person.role,
           slByOwner.get(t.person.name) || [],
-          spByOwner.get(t.person.name) || []
+          spByOwner.get(t.person.name) || [],
+          mcByOwner.get(t.person.name) || []
         );
       });
 
