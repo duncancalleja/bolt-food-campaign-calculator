@@ -108,6 +108,7 @@
     th, td { text-align: left; padding: .55rem .5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
     th { color: var(--muted); font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .03em; position: sticky; top: 0; background: var(--card); z-index: 1; }
     tr:hover td { background: rgba(255,255,255,.02); }
+    tr.rollup-row td { background: rgba(255,255,255,.04); border-bottom: 2px solid var(--border); }
     tfoot td { color: var(--muted); font-size: .82rem; border-bottom: 0; }
     .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
     td.muted-cell { color: var(--muted); }
@@ -489,7 +490,7 @@
       </tr>`).join('');
 
     const countryRow = `
-      <tr>
+      <tr class="rollup-row">
         <td><strong>Malta</strong><div class="hint">Country KPI target · roll-up of the 5 AMs</div></td>
         ${KPI_ORDER.map(k => {
           const c = kpis.find(x => x.kpi === k);
@@ -574,11 +575,11 @@
 
       <div class="card" style="margin-bottom:1rem">
         <h2>Team scorecard roll-up</h2>
-        <p class="sub">The five RAM sheet KPIs across the five AMs, with the country KPI target as the bottom row. Overall is the average attainment, capped at 100% per KPI.</p>
+        <p class="sub">The five RAM sheet KPIs with the country KPI target as the top row and the five AMs underneath it. Overall is the average attainment, capped at 100% per KPI.</p>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Owner</th>${KPI_ORDER.map(k => `<th>${esc(k)}</th>`).join('')}<th>Overall</th></tr></thead>
-            <tbody>${matrixRows}${countryRow}</tbody>
+            <tbody>${countryRow}${matrixRows}</tbody>
           </table>
         </div>
       </div>
