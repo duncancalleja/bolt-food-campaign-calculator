@@ -93,6 +93,8 @@
     .stat .label { color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
     .stat .value { font-size: 1.55rem; font-weight: 700; margin-top: .25rem; }
     .stat .hint { color: var(--muted); font-size: .8rem; margin-top: .2rem; }
+    .stat .targeted-hint { margin-top: .45rem; padding-top: .4rem; border-top: 1px solid var(--border); }
+    .stat .targeted-hint strong { color: var(--text); font-weight: 700; margin-left: .15rem; }
 
     .status {
       display: inline-flex; align-items: center; gap: .35rem;
@@ -108,7 +110,6 @@
     th, td { text-align: left; padding: .55rem .5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
     th { color: var(--muted); font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .03em; position: sticky; top: 0; background: var(--card); z-index: 1; }
     tr:hover td { background: rgba(255,255,255,.02); }
-    tr.rollup-row td { background: rgba(255,255,255,.04); border-bottom: 2px solid var(--border); }
     tfoot td { color: var(--muted); font-size: .82rem; border-bottom: 0; }
     .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
     td.muted-cell { color: var(--muted); }
@@ -464,13 +465,6 @@
     const kpis = hub.countryKpis || [];
     const scorecard = hub.scorecard || [];
 
-    const kpiCards = kpis.map(k => `
-        <div class="card stat">
-          <div class="label">${esc(k.kpi)}</div>
-          <div class="value">${statusPill(k.pct)}</div>
-          <div class="hint">${fmtNum(k.achievement)} / ${fmtNum(k.target)} · gap ${fmtNum(k.gap)}</div>
-        </div>`).join('');
-
     const rowFor = (person, kpi) => scorecard.find(r => r.person === person && r.kpi === kpi);
     const overallFor = person => {
       const rows = KPI_ORDER.map(k => rowFor(person, k)).filter(Boolean);
@@ -479,7 +473,8 @@
     };
 
     // Same Targeting store as AM pages: ticks keyed by AM + account. Malta is the five-AM
-    // union of those rows, so its Targeted cell is the sum of the AM cells with no extra store.
+    // union of those rows, so the country card's Targeted is the sum of the AM cells with no
+    // extra store.
     const byOwnerForKpi = kpi => {
       if (kpi === 'Sponsored Listings') return slByOwner;
       if (kpi === 'Smart Promotions') return spByOwner;
@@ -491,6 +486,20 @@
       people.forEach(p => TARGETED_ROWS.set(targetedRowsKey(p.name, kpi), byOwner.get(p.name) || []));
       TARGETED_ROWS.set(targetedRowsKey('Malta', kpi), teamRows(byOwner, people));
     });
+
+    const kpiCards = kpis.map(k => {
+      const targeted = TARGETABLE_KPIS.includes(k.kpi)
+        ? `<div class="hint targeted-hint">Targeted <strong class="num" data-targeted-cell data-person="Malta" data-product="${esc(k.kpi)}" title="Accounts ticked as Targeting on the ${esc(k.kpi)} target list, summed across the five AMs">${fmtNum(countTargeting(loadState(), k.kpi, TARGETED_ROWS.get(targetedRowsKey('Malta', k.kpi)) || []))}</strong></div>`
+        : '<div class="hint targeted-hint" title="No target list for this KPI">Targeted —</div>';
+      return `
+        <div class="card stat">
+          <div class="label">${esc(k.kpi)}</div>
+          <div class="value">${statusPill(k.pct)}</div>
+          <div class="hint">${fmtNum(k.achievement)} / ${fmtNum(k.target)} · gap ${fmtNum(k.gap)}</div>
+          ${targeted}
+        </div>`;
+    }).join('');
+
     const targetedTd = (person, kpi) => {
       if (!TARGETABLE_KPIS.includes(kpi)) {
         return '<td class="num muted-cell" title="No target list for this KPI">—</td>';
@@ -512,19 +521,6 @@
         }).join('')}
         <td>${statusPill(overallFor(p.name))}</td>
       </tr>`).join('');
-
-    const countryRow = `
-      <tr class="rollup-row">
-        <td><strong>Malta</strong><div class="hint">Country KPI target · roll-up of the 5 AMs</div></td>
-        ${KPI_ORDER.map(k => {
-          const c = kpis.find(x => x.kpi === k);
-          const metric = !c
-            ? '<td>—</td>'
-            : `<td>${statusPill(c.pct)}<div class="hint num">${fmtNum(c.achievement)} / ${fmtNum(c.target)}</div></td>`;
-          return kpiPair(metric, 'Malta', k);
-        }).join('')}
-        <td>${statusPill(kpis.reduce((s, c) => s + Math.min(Number(c.pct || 0), 1), 0) / (kpis.length || 1))}</td>
-      </tr>`;
 
     const gapRows = kpis.map(k => {
       const contributors = people
@@ -594,18 +590,18 @@
 
       <div class="card" style="margin-bottom:1rem">
         <h2 style="margin:0 0 .25rem">Country KPI target</h2>
-        <p class="sub" style="margin:0">The five Malta MM KPI targets at country level — the roll-up of the five AMs, not a sixth owner.</p>
+        <p class="sub" style="margin:0">The five Malta MM KPI targets at country level — the roll-up of the five AMs, not a sixth owner. Targeted is the number of accounts ticked as Targeting on that KPI's target list, summed across the five AMs; KPIs without a target list show a dash.</p>
       </div>
 
       <div class="grid grid-5" style="margin-bottom:1rem">${kpiCards}</div>
 
       <div class="card" style="margin-bottom:1rem">
         <h2>Team scorecard roll-up</h2>
-        <p class="sub">The five RAM sheet KPIs with the country KPI target as the top row and the five AMs underneath it. Overall is the average attainment, capped at 100% per KPI. Targeted sits after each KPI (same as after Gap on AM pages) and counts ticks on that KPI's target list; Malta is the sum of the five AMs.</p>
+        <p class="sub">The five RAM sheet KPIs for each of the five AMs. Overall is the average attainment, capped at 100% per KPI. Targeted sits after each KPI (same as after Gap on AM pages) and counts ticks on that KPI's target list. The country totals are the cards above.</p>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Owner</th>${KPI_ORDER.map(k => `<th>${esc(k)}</th><th title="Accounts ticked as Targeting on that KPI's target list">Targeted</th>`).join('')}<th>Overall</th></tr></thead>
-            <tbody>${countryRow}${matrixRows}</tbody>
+            <tbody>${matrixRows}</tbody>
           </table>
         </div>
       </div>
