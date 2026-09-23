@@ -108,6 +108,7 @@
     th, td { text-align: left; padding: .55rem .5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
     th { color: var(--muted); font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .03em; position: sticky; top: 0; background: var(--card); z-index: 1; }
     tr:hover td { background: rgba(255,255,255,.02); }
+    tr.rollup-row td { background: rgba(255,255,255,.04); border-bottom: 2px solid var(--border); }
     tfoot td { color: var(--muted); font-size: .82rem; border-bottom: 0; }
     .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
     td.muted-cell { color: var(--muted); }
@@ -477,24 +478,50 @@
       return rows.reduce((s, r) => s + Math.min(Number(r.pct || 0), 1), 0) / rows.length;
     };
 
+    // Same Targeting store as AM pages: ticks keyed by AM + account. Malta is the five-AM
+    // union of those rows, so its Targeted cell is the sum of the AM cells with no extra store.
+    const byOwnerForKpi = kpi => {
+      if (kpi === 'Sponsored Listings') return slByOwner;
+      if (kpi === 'Smart Promotions') return spByOwner;
+      if (kpi === 'Marketing Campaigns') return mcByOwner;
+      return null;
+    };
+    TARGETABLE_KPIS.forEach(kpi => {
+      const byOwner = byOwnerForKpi(kpi);
+      people.forEach(p => TARGETED_ROWS.set(targetedRowsKey(p.name, kpi), byOwner.get(p.name) || []));
+      TARGETED_ROWS.set(targetedRowsKey('Malta', kpi), teamRows(byOwner, people));
+    });
+    const targetedTd = (person, kpi) => {
+      if (!TARGETABLE_KPIS.includes(kpi)) {
+        return '<td class="num muted-cell" title="No target list for this KPI">—</td>';
+      }
+      const rows = TARGETED_ROWS.get(targetedRowsKey(person, kpi)) || [];
+      return `<td class="num" data-targeted-cell data-person="${esc(person)}" data-product="${esc(kpi)}" title="Accounts ticked as Targeting on the ${esc(kpi)} target list">${fmtNum(countTargeting(loadState(), kpi, rows))}</td>`;
+    };
+    const kpiPair = (metricTd, person, kpi) => `${metricTd}${targetedTd(person, kpi)}`;
+
     const matrixRows = people.map(p => `
       <tr>
         <td><strong>${esc(p.name)}</strong><div class="hint">${esc(p.role)}</div></td>
         ${KPI_ORDER.map(k => {
           const r = rowFor(p.name, k);
-          if (!r) return '<td>—</td>';
-          return `<td>${statusPill(r.pct)}<div class="hint num">${fmtNum(r.achievement)} / ${fmtNum(r.target)}</div></td>`;
+          const metric = !r
+            ? '<td>—</td>'
+            : `<td>${statusPill(r.pct)}<div class="hint num">${fmtNum(r.achievement)} / ${fmtNum(r.target)}</div></td>`;
+          return kpiPair(metric, p.name, k);
         }).join('')}
         <td>${statusPill(overallFor(p.name))}</td>
       </tr>`).join('');
 
     const countryRow = `
-      <tr>
+      <tr class="rollup-row">
         <td><strong>Malta</strong><div class="hint">Country KPI target · roll-up of the 5 AMs</div></td>
         ${KPI_ORDER.map(k => {
           const c = kpis.find(x => x.kpi === k);
-          if (!c) return '<td>—</td>';
-          return `<td>${statusPill(c.pct)}<div class="hint num">${fmtNum(c.achievement)} / ${fmtNum(c.target)}</div></td>`;
+          const metric = !c
+            ? '<td>—</td>'
+            : `<td>${statusPill(c.pct)}<div class="hint num">${fmtNum(c.achievement)} / ${fmtNum(c.target)}</div></td>`;
+          return kpiPair(metric, 'Malta', k);
         }).join('')}
         <td>${statusPill(kpis.reduce((s, c) => s + Math.min(Number(c.pct || 0), 1), 0) / (kpis.length || 1))}</td>
       </tr>`;
@@ -574,11 +601,11 @@
 
       <div class="card" style="margin-bottom:1rem">
         <h2>Team scorecard roll-up</h2>
-        <p class="sub">The five RAM sheet KPIs across the five AMs, with the country KPI target as the bottom row. Overall is the average attainment, capped at 100% per KPI.</p>
+        <p class="sub">The five RAM sheet KPIs with the country KPI target as the top row and the five AMs underneath it. Overall is the average attainment, capped at 100% per KPI. Targeted sits after each KPI (same as after Gap on AM pages) and counts ticks on that KPI's target list; Malta is the sum of the five AMs.</p>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Owner</th>${KPI_ORDER.map(k => `<th>${esc(k)}</th>`).join('')}<th>Overall</th></tr></thead>
-            <tbody>${matrixRows}${countryRow}</tbody>
+            <thead><tr><th>Owner</th>${KPI_ORDER.map(k => `<th>${esc(k)}</th><th title="Accounts ticked as Targeting on that KPI's target list">Targeted</th>`).join('')}<th>Overall</th></tr></thead>
+            <tbody>${countryRow}${matrixRows}</tbody>
           </table>
         </div>
       </div>
