@@ -1,24 +1,24 @@
 {
-  "asOf": "2026-09-21",
-  "asOfLabel": "2026-09-21 16:41 Asia/Baku (UTC+4)",
+  "asOf": "2026-09-24",
+  "asOfLabel": "2026-09-24 08:17 Asia/Baku (UTC+4)",
   "product": "Sponsored Listings",
-  "sprintWeek": "2026-09-22",
-  "source": "Databricks dim_provider_v2 ⟕ fact_provider_sponsored_listing_signup (country_code=mt, active)",
+  "sprintWeek": "2026-09-24",
+  "source": "Databricks dim_provider_v2 ⋈ fact_provider_sponsored_listing_signup (country_code=mt, active)",
   "universe": {
-    "totalActive": 1797,
-    "neverEnrolled": 1386,
-    "churnedEnded": 215,
-    "currentlyEnrolled": 131,
-    "enrolledInPeriod": 65
+    "totalActive": 1814,
+    "neverEnrolled": 1402,
+    "churnedEnded": 287,
+    "currentlyEnrolled": 125,
+    "enrolledInPeriod": 4
   },
   "loadedInApp": {
-    "Never enrolled": 300,
-    "Enrolled in period": 65,
-    "Churned / ended": 100,
-    "Currently enrolled": 50,
-    "total": 515
+    "Never enrolled": 1402,
+    "Enrolled in period": 4,
+    "Churned / ended": 287,
+    "Currently enrolled": 125,
+    "total": 1814
   },
-  "notes": "515-row prioritized sample from Databricks pull. Universe = full active Malta population.",
+  "notes": "1814-row full active Malta SL pull from Databricks. Universe = full active Malta population.",
   "amScope": {
     "owners": [
       "Alena Tokareva",
@@ -28,43 +28,43 @@
       "Fiona Borg"
     ],
     "note": "sl-pipeline.json keeps the full Databricks pull; the hub filters it to these five AM owners in JS. Rows owned by anyone else (TL, unassigned, ex-AMs) are never shown.",
-    "rowsOwnedByAms": 242,
-    "rowsOtherOwners": 273,
+    "rowsOwnedByAms": 738,
+    "rowsOtherOwners": 1076,
     "byOwner": {
       "Alena Tokareva": {
-        "total": 41,
-        "Never enrolled": 2,
-        "Enrolled in period": 7,
-        "Currently enrolled": 6,
-        "Churned / ended": 26
+        "total": 105,
+        "Never enrolled": 40,
+        "Enrolled in period": 0,
+        "Currently enrolled": 8,
+        "Churned / ended": 57
       },
       "Rico Spagnol": {
-        "total": 46,
-        "Never enrolled": 18,
-        "Enrolled in period": 6,
-        "Currently enrolled": 11,
-        "Churned / ended": 11
+        "total": 151,
+        "Never enrolled": 85,
+        "Enrolled in period": 1,
+        "Currently enrolled": 22,
+        "Churned / ended": 43
       },
       "Yousef Moungad": {
-        "total": 43,
-        "Never enrolled": 24,
-        "Enrolled in period": 3,
-        "Currently enrolled": 3,
-        "Churned / ended": 13
+        "total": 168,
+        "Never enrolled": 126,
+        "Enrolled in period": 0,
+        "Currently enrolled": 16,
+        "Churned / ended": 26
       },
       "Gulcin Erguven": {
-        "total": 74,
-        "Never enrolled": 38,
-        "Enrolled in period": 14,
-        "Currently enrolled": 10,
-        "Churned / ended": 12
+        "total": 173,
+        "Never enrolled": 102,
+        "Enrolled in period": 0,
+        "Currently enrolled": 30,
+        "Churned / ended": 41
       },
       "Fiona Borg": {
-        "total": 38,
-        "Never enrolled": 22,
-        "Enrolled in period": 10,
-        "Currently enrolled": 0,
-        "Churned / ended": 6
+        "total": 141,
+        "Never enrolled": 114,
+        "Enrolled in period": 0,
+        "Currently enrolled": 4,
+        "Churned / ended": 23
       }
     }
   }
