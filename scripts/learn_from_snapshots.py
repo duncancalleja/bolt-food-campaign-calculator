@@ -107,12 +107,22 @@ def aggregate_snapshot_by_provider(campaigns: list) -> dict[str, dict]:
             continue
         cat = camp_type_to_cat(c.get("type", ""))
         entry = by_pid.setdefault(pid, {
-            "est_total": 0.0, "est_bolt": 0.0, "est_prov": 0.0, "cats": set(),
+            "est_total": 0.0, "est_bolt": 0.0, "est_prov": 0.0,
+            "cats": set(), "by_cat": {},
         })
-        entry["est_total"] += float(c.get("estTotal") or 0)
-        entry["est_bolt"] += float(c.get("estBolt") or 0)
-        entry["est_prov"] += float(c.get("estProv") or 0)
+        est_total = float(c.get("estTotal") or 0)
+        est_bolt = float(c.get("estBolt") or 0)
+        est_prov = float(c.get("estProv") or 0)
+        entry["est_total"] += est_total
+        entry["est_bolt"] += est_bolt
+        entry["est_prov"] += est_prov
         entry["cats"].add(cat)
+        cat_est = entry["by_cat"].setdefault(
+            cat, {"est_total": 0.0, "est_bolt": 0.0, "est_prov": 0.0}
+        )
+        cat_est["est_total"] += est_total
+        cat_est["est_bolt"] += est_bolt
+        cat_est["est_prov"] += est_prov
     return by_pid
 
 
@@ -158,8 +168,10 @@ def compare_snapshot_to_actuals(snap: dict, dbx_actuals: dict) -> dict | None:
     week_data = dbx_actuals[wk_str]
     by_pid = aggregate_snapshot_by_provider(snap.get("campaigns") or [])
 
-    provider_ratios: dict[str, list[float]] = defaultdict(list)
-    cat_pairs: dict[str, list[tuple[float, float]]] = defaultdict(list)
+    provider_ratios: dict[str, dict[str, float]] = {}
+    cat_pairs: dict[str, dict[str, list[tuple[float, float]]]] = defaultdict(
+        lambda: {"bolt": [], "total": []}
+    )
     total_est = total_act = 0.0
     bolt_est = bolt_act = 0.0
     matched = 0
@@ -169,19 +181,38 @@ def compare_snapshot_to_actuals(snap: dict, dbx_actuals: dict) -> dict | None:
         if not act or act["total"] <= 0 or est["est_total"] <= 0:
             continue
         matched += 1
-        # Prefer Bolt share for AM budget calibration when available
+        ratios = {
+            "total_ratio": max(
+                PROVIDER_RATIO_MIN,
+                min(PROVIDER_RATIO_MAX, act["total"] / est["est_total"]),
+            )
+        }
         if est["est_bolt"] > 0 and act["bolt"] > 0:
-            ratio = act["bolt"] / est["est_bolt"]
+            ratios["bolt_ratio"] = max(
+                PROVIDER_RATIO_MIN,
+                min(PROVIDER_RATIO_MAX, act["bolt"] / est["est_bolt"]),
+            )
             bolt_est += est["est_bolt"]
             bolt_act += act["bolt"]
-        else:
-            ratio = act["total"] / est["est_total"]
-        ratio = max(PROVIDER_RATIO_MIN, min(PROVIDER_RATIO_MAX, ratio))
-        provider_ratios[pid].append(ratio)
+        provider_ratios[pid] = ratios
         total_est += est["est_total"]
         total_act += act["total"]
-        for cat in est["cats"]:
-            cat_pairs[cat].append((est["est_total"], act["total"]))
+        pid_actuals = week_data.get(pid)
+        if isinstance(pid_actuals, dict):
+            for cat, cat_est in est["by_cat"].items():
+                values = pid_actuals.get(cat)
+                if not isinstance(values, list) or len(values) < 3:
+                    continue
+                actual_bolt = float(values[0] or 0)
+                actual_total = float(values[2] or 0)
+                if cat_est["est_total"] > 0 and actual_total > 0:
+                    cat_pairs[cat]["total"].append(
+                        (cat_est["est_total"], actual_total)
+                    )
+                if cat_est["est_bolt"] > 0 and actual_bolt > 0:
+                    cat_pairs[cat]["bolt"].append(
+                        (cat_est["est_bolt"], actual_bolt)
+                    )
 
     if matched == 0:
         return None
@@ -199,8 +230,11 @@ def compare_snapshot_to_actuals(snap: dict, dbx_actuals: dict) -> dict | None:
         "total_act": round(total_act, 2),
         "bolt_est": round(bolt_est, 2),
         "bolt_act": round(bolt_act, 2),
-        "provider_ratios": {pid: statistics.median(r) for pid, r in provider_ratios.items()},
-        "cat_est_act": {cat: list(v) for cat, v in cat_pairs.items()},
+        "provider_ratios": provider_ratios,
+        "cat_est_act": {
+            cat: {leg: list(pairs) for leg, pairs in legs.items()}
+            for cat, legs in cat_pairs.items()
+        },
     }
 
 
@@ -222,42 +256,73 @@ def build_corrections(cc: str, snapshots: list, dbx_actuals: dict) -> dict | Non
     rolling = week_results[:ROLLING_WEEKS]
 
     # Rolling provider correction: median ratio across evaluated weeks.
-    prov_accum: dict[str, list[float]] = defaultdict(list)
-    cat_accum: dict[str, list[tuple[float, float]]] = defaultdict(list)
-    port_ratios = []
+    prov_accum: dict[str, dict[str, list[float]]] = defaultdict(
+        lambda: {"bolt": [], "total": []}
+    )
+    cat_accum: dict[str, dict[str, list[tuple[float, float]]]] = defaultdict(
+        lambda: {"bolt": [], "total": []}
+    )
+    port_bolt_ratios = []
+    port_total_ratios = []
 
     for wr in rolling:
-        port_ratios.append(wr["portfolio_ratio"])
-        for pid, ratio in wr["provider_ratios"].items():
-            prov_accum[pid].append(ratio)
-        for cat, pairs in wr["cat_est_act"].items():
-            cat_accum[cat].extend(pairs)
+        port_bolt_ratios.append(wr["portfolio_ratio"])
+        if wr["total_est"] > 0:
+            port_total_ratios.append(wr["total_act"] / wr["total_est"])
+        for pid, ratios in wr["provider_ratios"].items():
+            if ratios.get("bolt_ratio"):
+                prov_accum[pid]["bolt"].append(ratios["bolt_ratio"])
+            prov_accum[pid]["total"].append(ratios["total_ratio"])
+        for cat, legs in wr["cat_est_act"].items():
+            for leg, pairs in legs.items():
+                cat_accum[cat][leg].extend(pairs)
 
     # Still accumulate providers from all matched weeks (more stable per-PID)
     for wr in week_results:
-        for pid, ratio in wr["provider_ratios"].items():
+        for pid, ratios in wr["provider_ratios"].items():
             if pid not in prov_accum:
-                prov_accum[pid].append(ratio)
+                if ratios.get("bolt_ratio"):
+                    prov_accum[pid]["bolt"].append(ratios["bolt_ratio"])
+                prov_accum[pid]["total"].append(ratios["total_ratio"])
 
     by_provider = {}
-    for pid, ratios in prov_accum.items():
-        if len(ratios) >= 1:
-            r = statistics.median(ratios)
-            by_provider[pid] = {
-                "ratio": round(max(RATIO_MIN, min(RATIO_MAX, r)), 4),
-                "weeks": len(ratios),
-            }
+    for pid, legs in prov_accum.items():
+        entry = {"weeks": len(legs["total"])}
+        if legs["bolt"]:
+            r = statistics.median(legs["bolt"])
+            entry["bolt_ratio"] = round(max(RATIO_MIN, min(RATIO_MAX, r)), 4)
+            # Keep ratio during the transition for older deployed dashboards.
+            entry["ratio"] = entry["bolt_ratio"]
+        if legs["total"]:
+            r = statistics.median(legs["total"])
+            entry["total_ratio"] = round(max(RATIO_MIN, min(RATIO_MAX, r)), 4)
+        by_provider[pid] = entry
 
     by_category = {}
-    for cat, pairs in cat_accum.items():
-        est = sum(e for e, _ in pairs)
-        act = sum(a for _, a in pairs)
-        if est > 0:
-            r = max(RATIO_MIN, min(RATIO_MAX, act / est))
-            by_category[cat] = round(r, 4)
+    for cat, legs in cat_accum.items():
+        entry = {}
+        for leg, pairs in legs.items():
+            est = sum(e for e, _ in pairs)
+            act = sum(a for _, a in pairs)
+            if est > 0 and act > 0:
+                entry[f"{leg}_ratio"] = round(
+                    max(RATIO_MIN, min(RATIO_MAX, act / est)), 4
+                )
+        if entry:
+            by_category[cat] = entry
 
-    portfolio_ratio = statistics.median(port_ratios) if port_ratios else 1.0
-    portfolio_ratio = max(RATIO_MIN, min(RATIO_MAX, portfolio_ratio))
+    portfolio_bolt_ratio = (
+        statistics.median(port_bolt_ratios) if port_bolt_ratios else 1.0
+    )
+    portfolio_bolt_ratio = max(
+        RATIO_MIN, min(RATIO_MAX, portfolio_bolt_ratio)
+    )
+    portfolio_total_ratio = (
+        statistics.median(port_total_ratios) if port_total_ratios else 1.0
+    )
+    portfolio_total_ratio = max(
+        RATIO_MIN, min(RATIO_MAX, portfolio_total_ratio)
+    )
 
     return {
         "country": cc,
@@ -267,8 +332,10 @@ def build_corrections(cc: str, snapshots: list, dbx_actuals: dict) -> dict | Non
         "latest_week": week_results[0]["week"],
         "latest_snap_date": week_results[0]["snap_date"],
         "portfolio": {
-            "ratio": round(portfolio_ratio, 4),
-            "bias_pct": round((portfolio_ratio - 1) * 100, 1),
+            "ratio": round(portfolio_bolt_ratio, 4),
+            "bolt_ratio": round(portfolio_bolt_ratio, 4),
+            "total_ratio": round(portfolio_total_ratio, 4),
+            "bias_pct": round((portfolio_bolt_ratio - 1) * 100, 1),
             "method": f"median_bolt_act_over_est_last_{len(rolling)}_weeks",
         },
         "by_category": by_category,
@@ -279,6 +346,9 @@ def build_corrections(cc: str, snapshots: list, dbx_actuals: dict) -> dict | Non
                 "snap_date": w["snap_date"],
                 "matched": w["matched_providers"],
                 "ratio": w["portfolio_ratio"],
+                "total_ratio": round(
+                    w["total_act"] / w["total_est"], 4
+                ) if w["total_est"] > 0 else 1.0,
                 "est": w["total_est"],
                 "act": w["total_act"],
                 "bolt_est": w.get("bolt_est"),
