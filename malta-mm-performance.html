@@ -198,8 +198,13 @@
     .toast {
       position: fixed; bottom: 1.25rem; right: 1.25rem; background: #12301f; color: #86efac;
       border: 1px solid #166534; padding: .65rem 1rem; border-radius: 10px; display: none; z-index: 50;
+      max-width: min(28rem, calc(100% - 2.5rem));
     }
     .toast.show { display: block; animation: fade .2s ease; }
+    .toast.err { background: #3f1212; color: #fecaca; border-color: #7f1d1d; }
+    .pill.sync-ok { border-color: #166534; color: #86efac; }
+    .pill.sync-bad { border-color: #7f1d1d; color: #fca5a5; }
+    .pill.sync-wait { border-color: #854d0e; color: #fde68a; }
 
     .list { margin: 0; padding-left: 1.1rem; color: var(--text); line-height: 1.55; }
     .list li { margin: .35rem 0; }
@@ -235,8 +240,9 @@
   <footer class="app-footer">
     <div class="wrap" id="footerText">Boltable static · unlisted</div>
   </footer>
-  <div class="toast" id="toast">Saved to this browser</div>
+  <div class="toast" id="toast" role="status"></div>
 
+  <script src="malta-hub-sync.js"></script>
   <script>
   const LS_KEY = 'mt-mm-performance-hub-v2';
   const TODAY = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Baku' });
@@ -322,22 +328,123 @@
   function accountViewId(person, kpi) {
     return `account-view-${normaliseName(person).replace(/\s+/g, '-')}-${normaliseName(kpi).replace(/\s+/g, '-')}`;
   }
-  function showToast(msg) {
+  function showToast(msg, kind) {
     const t = document.getElementById('toast');
-    t.textContent = msg || 'Saved to this browser';
+    const fallback = hubSync.configured() ? 'Saved for the team' : 'Saved on this device';
+    t.textContent = msg || fallback;
+    t.classList.toggle('err', kind === 'error');
     t.classList.add('show');
     clearTimeout(showToast._t);
-    showToast._t = setTimeout(() => t.classList.remove('show'), 1600);
+    showToast._t = setTimeout(() => t.classList.remove('show'), kind === 'error' ? 4200 : 1800);
   }
+
+  function updateSyncHints() {
+    const info = hubSync.statusInfo();
+    document.querySelectorAll('[data-sync-hint]').forEach(el => {
+      el.textContent = el.dataset.syncHint === 'short' ? info.shortHint : info.hint;
+      el.classList.toggle('sync-ok', info.status === 'saved');
+      el.classList.toggle('sync-bad', info.status === 'error');
+      el.classList.toggle('sync-wait', info.status === 'off' || info.status === 'loading' || info.status === 'saving');
+      el.title = info.lastError || info.hint;
+    });
+  }
+
+  // Shared sheet sync. The blob shape is unchanged: person||KPI objects, targeting||… ticks,
+  // and amComment||… strings. malta-hub-sync.js pushes that blob to the Hub shared state tab.
+  // Docs: docs/malta-hub-shared-state.md
+  const hubSync = (window.MaltaHubSync && MaltaHubSync.createHubSync)
+    ? MaltaHubSync.createHubSync({
+        storage: localStorage,
+        fetch: (url, init) => fetch(url, init),
+        onStatus: () => updateSyncHints(),
+        onState: () => refreshFromState(),
+        onToast: (toast) => showToast(toast.message, toast.kind),
+      })
+    : {
+        loadState() {
+          try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); }
+          catch { return {}; }
+        },
+        saveState(state) { localStorage.setItem(LS_KEY, JSON.stringify(state)); },
+        async boot() {},
+        async pull() {},
+        configured() { return false; },
+        statusInfo() {
+          return {
+            status: 'off',
+            lastError: '',
+            shortHint: 'Team sync not connected',
+            hint: 'Team sync is not connected. Notes, comments and targeting stay on this device until setup is finished.',
+          };
+        },
+      };
 
   // Weekly notes and pipeline rows are stored per person + KPI, so two AMs working the same
   // KPI never overwrite each other and a page reset only clears that person's KPI blocks.
   function stateKey(person, kpi) { return `${person}||${kpi}`; }
-  function loadState() {
-    try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); }
-    catch { return {}; }
+  function loadState() { return hubSync.loadState(); }
+  function saveState(state) { hubSync.saveState(state); }
+
+  function productSyncStamp(product) {
+    const state = loadState();
+    const stable = window.MaltaHubSync && MaltaHubSync.stableStringify;
+    const keys = Object.keys(state).filter(k =>
+      k.startsWith('targeting||' + product + '||') ||
+      k.startsWith('amComment||' + product + '||') ||
+      k.startsWith('nextStep||' + product + '||') ||
+      k.startsWith('next||' + product + '||')
+    ).sort();
+    return keys.map(k => k + '\u0000' + (stable ? stable(state[k]) : JSON.stringify(state[k]))).join('\n');
   }
-  function saveState(state) { localStorage.setItem(LS_KEY, JSON.stringify(state)); }
+
+  // Remote edits repaint lists that are not being typed in, and fill KPI fields that are not dirty.
+  function refreshFromState() {
+    if (typeof refreshTargetedCounts === 'function') refreshTargetedCounts();
+    const active = document.activeElement;
+    document.querySelectorAll('.targetable').forEach(widget => {
+      if (active && widget.contains(active)) {
+        widget._syncStamp = '';
+        return;
+      }
+      const part = productSyncStamp(widget.dataset.product);
+      if (widget._syncStamp === part) return;
+      widget._paint?.();
+    });
+    document.querySelectorAll('.kpi-block').forEach(block => {
+      const state = loadState();
+      const key = stateKey(block.dataset.person, block.dataset.kpi);
+      const entry = Object.prototype.hasOwnProperty.call(state, key) && state[key] && typeof state[key] === 'object'
+        ? state[key]
+        : null;
+      block.querySelectorAll('[data-field]').forEach(el => {
+        if (el === active || el.dataset.dirty === '1') return;
+        let val = el.dataset.pack ?? '';
+        if (entry && Object.prototype.hasOwnProperty.call(entry, el.dataset.field)) val = entry[el.dataset.field] ?? '';
+        if (el.value !== String(val)) el.value = val;
+      });
+    });
+  }
+
+  function installSyncWatchers() {
+    if (installSyncWatchers.done) return;
+    installSyncWatchers.done = true;
+    const kick = () => {
+      if (document.visibilityState === 'hidden') return;
+      hubSync.pull();
+    };
+    document.addEventListener('visibilitychange', kick);
+    window.addEventListener('focus', kick);
+    setInterval(kick, 20000);
+    document.addEventListener('focusout', e => {
+      const widget = e.target && e.target.closest && e.target.closest('.targetable');
+      if (!widget || widget._syncStamp) return;
+      setTimeout(() => {
+        const current = document.activeElement;
+        if (current && widget.contains(current)) return;
+        widget._paint?.();
+      }, 0);
+    });
+  }
   function getEntry(person, kpi) {
     const state = loadState();
     return state[stateKey(person, kpi)] || {};
@@ -694,6 +801,15 @@
     const amComment = entry.amComment ?? entry.nextStep ?? legacyRow?.amComment ?? legacyRow?.nextStep ?? '';
     const confidenceOptions = ['', 'High', 'Medium', 'Low']
       .map(c => `<option value="${c}"${c === confidence ? ' selected' : ''}>${c || '—'}</option>`).join('');
+    const pack = {
+      rootCause: w.rootCause ?? '',
+      pipeline: kpiPipelineCopy(w.pipeline ?? '', w.kpi),
+      forecast: w.forecast ?? '',
+      confidence: '',
+      amComment: '',
+      notes: w.notes ?? '',
+    };
+    const packAttr = name => `data-field="${name}" data-pack="${esc(pack[name]).replace(/\r?\n/g, '&#10;')}"`;
     const targetableRows = w.kpi === 'Sponsored Listings' ? slRows
       : w.kpi === 'Smart Promotions' ? spRows
       : w.kpi === 'Marketing Campaigns' ? mcRows
@@ -719,31 +835,31 @@
         <div class="boxes">
           <div class="box">
             <label>Root cause</label>
-            <textarea data-field="rootCause" placeholder="Specific execution reason…">${esc(rootCause)}</textarea>
+            <textarea ${packAttr('rootCause')} placeholder="Specific execution reason…">${esc(rootCause)}</textarea>
           </div>
           <div class="box">
             <label>Pipeline</label>
-            <textarea data-field="pipeline" placeholder="Full-KPI pipeline and plan against the gap…">${esc(pipelineText)}</textarea>
+            <textarea ${packAttr('pipeline')} placeholder="Full-KPI pipeline and plan against the gap…">${esc(pipelineText)}</textarea>
           </div>
           <div class="box">
             <label>Forecast</label>
-            <textarea data-field="forecast" placeholder="Honest EOW/EOM landing…">${esc(forecast)}</textarea>
+            <textarea ${packAttr('forecast')} placeholder="Honest EOW/EOM landing…">${esc(forecast)}</textarea>
           </div>
         </div>
         <div class="kpi-controls">
           <div>
             <label for="${esc(accountViewId(person, w.kpi))}-confidence">Confidence</label>
-            <select id="${esc(accountViewId(person, w.kpi))}-confidence" data-field="confidence">${confidenceOptions}</select>
+            <select id="${esc(accountViewId(person, w.kpi))}-confidence" ${packAttr('confidence')}>${confidenceOptions}</select>
           </div>
           <div>
             <label for="${esc(accountViewId(person, w.kpi))}-comment">AM comment</label>
-            <textarea id="${esc(accountViewId(person, w.kpi))}-comment" data-field="amComment" placeholder="AM comment for this KPI…">${esc(amComment)}</textarea>
+            <textarea id="${esc(accountViewId(person, w.kpi))}-comment" ${packAttr('amComment')} placeholder="AM comment for this KPI…">${esc(amComment)}</textarea>
           </div>
         </div>
         ${hasAccountView ? '' : '<p class="sub" style="margin:.75rem 0 0">Enrolled and target lists are on Sponsored Listings, Marketing Campaigns and Smart Promotions.</p>'}
         <div class="notes-row">
           <label>Notes</label>
-          <textarea data-field="notes" placeholder="Optional notes…">${esc(notes)}</textarea>
+          <textarea ${packAttr('notes')} placeholder="Optional notes…">${esc(notes)}</textarea>
         </div>
         ${targetable}
       </div>`;
@@ -880,7 +996,7 @@
         <div class="toolbar" style="margin:.85rem 0 0">
           <button type="button" class="btn" data-action="copy-update">Copy weekly update</button>
           <button type="button" class="btn secondary" data-action="reset-person">Reset this page to pack defaults</button>
-          <span class="pill">KPI notes, confidence, comments and targeting save to this browser</span>
+          <span class="pill" data-sync-hint="long"></span>
         </div>
       </div>
       ${ordered.map(w => kpiBlockHtml(person, w, slRows, spRows, mcRows)).join('')}`;
@@ -955,6 +1071,7 @@
             <td class="num">${esc(formatDate(r.firstStart))}</td>
             <td class="num">${esc(formatDate(r.lastEnd))}</td>` : ''}
           </tr>`).join('') || `<tr><td colspan="${(product === 'Marketing Campaigns' ? 4 : 7) + (showOwner ? 1 : 0)}" style="color:var(--muted)">No matching accounts</td></tr>`;
+      widget._syncStamp = productSyncStamp(product);
     };
 
     const resetLimits = () => { limits = { enrolled: TARGETABLE_PAGE, target: TARGETABLE_PAGE }; };
@@ -1022,12 +1139,14 @@
       const patch = {};
       block.querySelectorAll('[data-field]').forEach(el => { patch[el.dataset.field] = el.value; });
       patchEntry(person, kpi, patch);
+      block.querySelectorAll('[data-field]').forEach(el => { delete el.dataset.dirty; });
     };
 
     let saveTimer;
     panel.addEventListener('input', e => {
       const block = e.target.closest('.kpi-block');
       if (!block) return;
+      if (e.target.matches('[data-field]')) e.target.dataset.dirty = '1';
       clearTimeout(saveTimer);
       saveTimer = setTimeout(() => persistBlock(block), 400);
     }, { signal });
@@ -1105,6 +1224,7 @@
   function renderPersonPanel(panel, hub, person, role, slRows, spRows, mcRows) {
     panel.innerHTML = renderPerson(hub, person, role, slRows, spRows, mcRows);
     wirePerson(panel, hub, person, slRows, spRows, mcRows);
+    updateSyncHints();
   }
 
   function activateTab(name) {
@@ -1116,12 +1236,23 @@
 
   async function main() {
     try {
+      const syncBoot = (async () => {
+        try {
+          let cfg = {};
+          try { cfg = await loadJSON('data/malta-mm/hub-sync.json'); }
+          catch (err) { cfg = {}; }
+          await hubSync.boot(cfg);
+        } catch (err) {
+          // KPI JSON still renders. The sync pill shows when boot itself reported a failure.
+        }
+      })();
       const [hub, slTargetable, spTargetable, mcData] = await Promise.all([
         loadJSON('data/malta-mm/hub-data.json'),
         loadJSON('data/malta-mm/sl-targetable.json'),
         loadJSON('data/malta-mm/sp-targetable.json'),
         loadJSON('data/malta-mm/mc-targetable.json'),
       ]);
+      await Promise.race([syncBoot, new Promise(resolve => setTimeout(resolve, 4000))]);
       const mcTargetable = mcData.rows || [];
 
       const people = (hub.team || []).filter(t => OWNER_ALIASES[t.name]);
@@ -1146,7 +1277,8 @@
         <span class="pill">SL enrolled <strong>${fmtNum(slCountryStats.current)}</strong> · target <strong>${fmtNum(slCountryStats.pipeline)}</strong></span>
         <span class="pill">SP enrolled <strong>${fmtNum(spCountryStats.current)}</strong> · target <strong>${fmtNum(spCountryStats.pipeline)}</strong></span>
         <span class="pill">MC enrolled <strong>${fmtNum(mcCountryStats.current)}</strong> · target <strong>${fmtNum(mcCountryStats.pipeline)}</strong></span>
-        <span class="pill">Data as of <strong>${esc(asOf)}</strong></span>`;
+        <span class="pill">Data as of <strong>${esc(asOf)}</strong></span>
+        <span class="pill" data-sync-hint="short"></span>`;
       document.getElementById('footerText').textContent =
         `Boltable static · mt-mm-performance · unlisted · data as of ${asOf} · opened ${TODAY} Asia/Baku`;
 
@@ -1188,6 +1320,10 @@
       });
       const initial = (location.hash || '#overview').slice(1);
       activateTab(tabDefs.some(t => t.id === initial) ? initial : 'overview');
+      updateSyncHints();
+      refreshFromState();
+      installSyncWatchers();
+      syncBoot.then(() => refreshFromState());
     } catch (err) {
       const boot = document.getElementById('boot');
       if (boot) { boot.className = 'error'; boot.textContent = String(err.message || err); }

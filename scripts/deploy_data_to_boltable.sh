@@ -21,7 +21,7 @@ cp -R "$SRC/investment-data/." "$DEST/public/investment-data/"
 rm -f "$DEST/public/data/SHEETS_AND_SNAPSHOTS.md" "$DEST/public/data/WEBHOOK_SETUP.md" 2>/dev/null || true
 
 # Keep both apps + related pages in sync
-for f in am-spend-dashboard.html campaign-cost-calculator.html am-portfolio.html investment-dashboard.html malta-mm-performance.html; do
+for f in am-spend-dashboard.html campaign-cost-calculator.html am-portfolio.html investment-dashboard.html malta-mm-performance.html malta-hub-sync.js; do
   if [ -f "$SRC/$f" ]; then
     cp "$SRC/$f" "$DEST/public/$f"
   fi
@@ -31,7 +31,7 @@ cd "$DEST"
 git add public/data public/investment-data \
   public/am-spend-dashboard.html public/campaign-cost-calculator.html \
   public/am-portfolio.html public/investment-dashboard.html \
-  public/malta-mm-performance.html 2>/dev/null || true
+  public/malta-mm-performance.html public/malta-hub-sync.js 2>/dev/null || true
 
 if git diff --cached --quiet; then
   echo "No Boltable data changes to push."

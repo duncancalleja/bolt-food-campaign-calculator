@@ -6,7 +6,7 @@ Source repo for the Food campaign calculator. After merging, run `bash scripts/d
 
 `malta-mm-performance.html` plus `data/malta-mm/` (hub-data, sl-pipeline, summary). It is **not** linked from the calculator home or other nav — open it by URL only.
 
-Structure: an Overview tab plus one tab per AM (Alena Tokareva, Rico Spagnol, Yousef Moungad, Gulcin Erguven, Fiona Borg). Only the five Malta MM columns of the shared RAM/KPI sheet are tracked — Q3 Renegotiations, Sponsored Listings, Bolt Plus, Marketing Campaigns, Smart Promotions — and each AM page carries a root cause / pipeline / forecast block plus a named-account pipeline table per KPI. Account-level enrolment lists exist only for Sponsored Listings, which is the one product in the Databricks pull (`sl-pipeline.json`); the page filters that pull to each AM by owner name. Notes and pipeline rows are saved per person + KPI in browser localStorage, not in the repo.
+Structure: an Overview tab plus one tab per AM (Alena Tokareva, Rico Spagnol, Yousef Moungad, Gulcin Erguven, Fiona Borg). Only the five Malta MM columns of the shared RAM/KPI sheet are tracked — Q3 Renegotiations, Sponsored Listings, Bolt Plus, Marketing Campaigns, Smart Promotions — and each AM page carries a root cause / pipeline / forecast block per KPI, plus enrolled and target lists for Sponsored Listings, Marketing Campaigns and Smart Promotions. KPI notes, confidence, AM comments and Targeting ticks are shared for the Malta MM team through the `Hub shared state` tab on `RAM | Performance Tracker - Sept 2026`. Until `data/malta-mm/hub-sync.json` has the web app URL and token, those fields stay on this device. Setup: `docs/malta-hub-shared-state.md`.
 
 After merge, run the deploy script. Live at:
 

@@ -1,0 +1,8 @@
+{
+  "_readme": "Shared notes, AM comments and Targeting for the Malta Performance Hub. Paste the Apps Script web app URL (/exec) and the same token as the script property HUB_SYNC_TOKEN. Leave both empty until that deploy exists — the hub then keeps edits on this device. Setup: docs/malta-hub-shared-state.md",
+  "webAppUrl": "",
+  "token": "",
+  "spreadsheetId": "12YkQowNT23C1i9D9SYuPuiYA_HazgSkEZUHRZnNi9kA",
+  "spreadsheetTitle": "RAM | Performance Tracker - Sept 2026",
+  "tabName": "Hub shared state"
+}
