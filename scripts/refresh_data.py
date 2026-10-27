@@ -274,7 +274,22 @@ def build_provider_lookup(providers, orders):
     return lookup
 
 
-def build_camp_history(hist_df):
+def build_camp_history(hist_df, provider_orders=None):
+    """Build the dashboard's nine-field provider/tier history records.
+
+    provider_orders is the recent provider-order frame from pull_order_stats.  It is
+    used only to estimate redemption; campaign orders and spend come directly from
+    campaign-order metrics.
+    """
+    provider_orders_wk = {}
+    if provider_orders is not None:
+        for _, r in provider_orders.iterrows():
+            active_weeks = int(r['active_weeks']) if pd.notna(r['active_weeks']) else 0
+            if active_weeks > 0:
+                provider_orders_wk[str(int(r['provider_id']))] = (
+                    float(r['total_orders']) / active_weeks
+                )
+
     history = {}
     for _, r in hist_df.iterrows():
         pid = str(int(r['provider_id']))
@@ -309,6 +324,13 @@ def build_camp_history(hist_df):
             cost_share = next(iter(weeks.values()))['cost_share']
 
             avg_disc_per_order = round(total_disc_sum / total_orders, 2) if total_orders else 0
+            campaign_orders_wk = round(total_orders / n_weeks, 2) if n_weeks else 0
+            weekly_provider_orders = provider_orders_wk.get(pid, 0)
+            redemption = (
+                min(1.0, campaign_orders_wk / weekly_provider_orders)
+                if weekly_provider_orders > 0
+                else 0
+            )
             result[pid][tier_key] = [
                 round(total_total / n_weeks, 2),
                 round(total_bolt / n_weeks, 2),
@@ -316,7 +338,9 @@ def build_camp_history(hist_df):
                 n_weeks,
                 avg_disc_per_order,
                 disc_pct,
-                cost_share
+                cost_share,
+                campaign_orders_wk,
+                round(redemption, 4),
             ]
     return result
 
@@ -343,7 +367,7 @@ def process_country(dbx, cc):
     calc_data = build_calc_data(providers, orders, camp_spend)
     actuals_data = build_actuals_data(weekly_actuals)
     lookup_data = build_provider_lookup(providers, orders)
-    camp_history = build_camp_history(camp_hist_raw)
+    camp_history = build_camp_history(camp_hist_raw, orders)
 
     calc_json = {
         'country': cc,
