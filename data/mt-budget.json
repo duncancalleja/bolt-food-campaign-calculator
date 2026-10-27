@@ -2,16 +2,16 @@
   "country": "mt",
   "country_name": "Malta",
   "month": "2026-08",
-  "as_of": "2026-08-14",
-  "refreshed": "2026-08-14T08:28:19Z",
+  "as_of": "2026-08-31",
+  "refreshed": "2026-10-27T13:57:14Z",
   "gmv_target": 12726789.0,
-  "gmv_mtd": 4866705.52,
-  "gmv_run_rate_eom": 10776276.51,
-  "gmv_pace_pct": 0.8467,
-  "elapsed_days": 14,
+  "gmv_mtd": 11731559.2,
+  "gmv_run_rate_eom": 11731559.2,
+  "gmv_pace_pct": 0.9218,
+  "elapsed_days": 31,
   "days_in_month": 31,
-  "days_left": 18,
-  "weeks_left": 2.57,
+  "days_left": 1,
+  "weeks_left": 0.14,
   "di_pct": {
     "new_city": 0.0,
     "elc": 0.0003,
@@ -31,185 +31,201 @@
   "am_di_pct": 0.0063,
   "budget_eur": {
     "total_bolt_monthly": 1037233.3,
-    "total_bolt_rr_paced": 878266.54,
+    "total_bolt_rr_paced": 956122.07,
     "am_monthly": 80178.77,
-    "am_rr_paced": 67890.54,
-    "remaining_total_bolt": 500725.97,
-    "remaining_am": 32573.29,
-    "weekly_am_envelope": 12667.39,
-    "daily_am_envelope": 1809.63
+    "am_rr_paced": 73908.82,
+    "remaining_total_bolt": 90272.73,
+    "remaining_am": -2525.19,
+    "weekly_am_envelope": -17676.31,
+    "daily_am_envelope": -2525.19
   },
   "mtd_actual": {
-    "bolt_spend": 377540.57,
-    "am_spend": 35317.25,
+    "bolt_spend": 865849.34,
+    "am_spend": 76434.01,
     "by_objective": {
-      "provider_campaign_profit_generator": {
-        "bolt": 5102.34,
-        "provider": 6581.22
+      "provider_campaign_ELC_merchant": {
+        "bolt": 8228.76,
+        "provider": 0.0
       },
-      "reactivation": {
-        "bolt": 38181.79,
-        "provider": 8681.6
+      "sp_engagement": {
+        "bolt": 35741.24,
+        "provider": 38210.77
       },
       "fully_funded": {
-        "bolt": 0.0,
-        "provider": 402.25
+        "bolt": 6.0,
+        "provider": 698.97
+      },
+      "engagement": {
+        "bolt": 115783.81,
+        "provider": 14397.71
+      },
+      "provider_campaign_sales_benefit": {
+        "bolt": 7521.07,
+        "provider": 158.13
+      },
+      "provider_campaign_obligations_commitments": {
+        "bolt": 32473.31,
+        "provider": 0.0
       },
       "provider_campaign_locations": {
         "bolt": 0.0,
-        "provider": 11136.89
+        "provider": 39459.83
+      },
+      "provider_campaign_commission_increase": {
+        "bolt": 254.19,
+        "provider": 0.0
+      },
+      "provider_campaign_portal": {
+        "bolt": 0.0,
+        "provider": 126818.16
+      },
+      "sp_fully_funded": {
+        "bolt": 0.0,
+        "provider": 60204.86
+      },
+      "provider_campaign_exclusivity_gain": {
+        "bolt": 10558.77,
+        "provider": 17955.51
+      },
+      "reactivation": {
+        "bolt": 99395.21,
+        "provider": 19522.12
+      },
+      "sp_reactivation": {
+        "bolt": 70511.42,
+        "provider": 70544.24
+      },
+      "sp_activation": {
+        "bolt": 27478.84,
+        "provider": 27478.84
+      },
+      "provider_marketing_calendar_global_event": {
+        "bolt": 0.0,
+        "provider": 45539.34
+      },
+      "provider_campaign_profit_generator": {
+        "bolt": 12359.41,
+        "provider": 16828.59
+      },
+      "provider_campaign_marketing": {
+        "bolt": 13067.62,
+        "provider": 326475.63
       },
       "provider_campaign_exclusivity_prevention": {
-        "bolt": 36.15,
+        "bolt": 158.45,
+        "provider": 0.0
+      },
+      "activation": {
+        "bolt": 158868.12,
+        "provider": 4342.87
+      },
+      "other": {
+        "bolt": 5911.7,
+        "provider": 0.0
+      },
+      "bolt_plus_campaign": {
+        "bolt": 266640.48,
+        "provider": 59308.48
+      },
+      "marketing": {
+        "bolt": 199.64,
+        "provider": 0.0
+      },
+      "provider_campaign_retail_growth": {
+        "bolt": 313.45,
         "provider": 0.0
       },
       "bolt_business": {
         "bolt": 21.45,
         "provider": 0.0
       },
-      "provider_campaign_obligations_commitments": {
-        "bolt": 13752.32,
-        "provider": 0.0
-      },
-      "provider_campaign_commission_increase": {
-        "bolt": 80.59,
-        "provider": 0.0
-      },
-      "other": {
-        "bolt": 2254.55,
-        "provider": 0.0
-      },
-      "engagement": {
-        "bolt": 52601.62,
-        "provider": 5860.97
-      },
-      "bolt_plus_campaign": {
-        "bolt": 113131.92,
-        "provider": 16716.26
-      },
-      "provider_campaign_ELC_merchant": {
-        "bolt": 4240.61,
-        "provider": 0.0
-      },
-      "sp_reactivation": {
-        "bolt": 31558.51,
-        "provider": 31551.03
-      },
-      "provider_campaign_retail_growth": {
-        "bolt": 232.09,
-        "provider": 0.0
-      },
-      "sp_engagement": {
-        "bolt": 16266.16,
-        "provider": 17456.15
-      },
-      "provider_campaign_marketing": {
-        "bolt": 6328.66,
-        "provider": 97306.47
-      },
-      "activation": {
-        "bolt": 71817.59,
-        "provider": 1760.96
-      },
-      "provider_marketing_calendar_global_event": {
-        "bolt": 0.0,
-        "provider": 12743.23
-      },
-      "provider_campaign_exclusivity_gain": {
-        "bolt": 6392.74,
-        "provider": 12001.16
-      },
-      "sp_activation": {
-        "bolt": 11757.75,
-        "provider": 11757.75
-      },
       "marketing_3rd_party_partnership": {
         "bolt": 28.25,
         "provider": 0.0
-      },
-      "sp_fully_funded": {
-        "bolt": 0.0,
-        "provider": 29063.38
-      },
-      "provider_campaign_portal": {
-        "bolt": 0.0,
-        "provider": 53300.94
-      },
-      "provider_campaign_sales_benefit": {
-        "bolt": 3660.6,
-        "provider": 66.07
       },
       "provider_campaign_exclusivity_retention": {
         "bolt": 94.88,
         "provider": 94.88
+      },
+      "acquisition": {
+        "bolt": 232.18,
+        "provider": 0.0
+      },
+      "bolt_market_churn": {
+        "bolt": 1.09,
+        "provider": 0.0
       }
     },
     "by_bucket": {
-      "am_food": {
-        "bolt": 28988.59,
-        "provider": 18648.45
-      },
-      "churned": {
-        "bolt": 69740.3,
-        "provider": 40232.63
-      },
-      "occasional": {
-        "bolt": 68867.78,
-        "provider": 23317.12
-      },
-      "bolt_plus": {
-        "bolt": 113131.92,
-        "provider": 16716.26
-      },
       "bdm_3p": {
-        "bolt": 4472.7,
+        "bolt": 8542.21,
         "provider": 0.0
       },
-      "marketing_food": {
-        "bolt": 6328.66,
-        "provider": 97306.47
+      "occasional": {
+        "bolt": 151525.05,
+        "provider": 52608.48
+      },
+      "am_food": {
+        "bolt": 63166.75,
+        "provider": 34942.23
+      },
+      "churned": {
+        "bolt": 169906.63,
+        "provider": 90066.36
       },
       "activation": {
-        "bolt": 83575.34,
-        "provider": 13518.71
+        "bolt": 186579.14,
+        "provider": 31821.71
+      },
+      "marketing_food": {
+        "bolt": 13267.26,
+        "provider": 326475.63
+      },
+      "bolt_plus": {
+        "bolt": 266640.48,
+        "provider": 59308.48
+      },
+      "store_1p": {
+        "bolt": 1.09,
+        "provider": 0.0
       }
     },
     "unmapped_objectives": {
       "fully_funded": {
-        "bolt": 0.0,
-        "provider": 402.25
+        "bolt": 6.0,
+        "provider": 698.97
       },
       "provider_campaign_locations": {
         "bolt": 0.0,
-        "provider": 11136.89
+        "provider": 39459.83
+      },
+      "provider_campaign_portal": {
+        "bolt": 0.0,
+        "provider": 126818.16
+      },
+      "sp_fully_funded": {
+        "bolt": 0.0,
+        "provider": 60204.86
+      },
+      "provider_marketing_calendar_global_event": {
+        "bolt": 0.0,
+        "provider": 45539.34
       },
       "provider_campaign_exclusivity_prevention": {
-        "bolt": 36.15,
+        "bolt": 158.45,
+        "provider": 0.0
+      },
+      "other": {
+        "bolt": 5911.7,
         "provider": 0.0
       },
       "bolt_business": {
         "bolt": 21.45,
         "provider": 0.0
       },
-      "other": {
-        "bolt": 2254.55,
-        "provider": 0.0
-      },
-      "provider_marketing_calendar_global_event": {
-        "bolt": 0.0,
-        "provider": 12743.23
-      },
       "marketing_3rd_party_partnership": {
         "bolt": 28.25,
         "provider": 0.0
-      },
-      "sp_fully_funded": {
-        "bolt": 0.0,
-        "provider": 29063.38
-      },
-      "provider_campaign_portal": {
-        "bolt": 0.0,
-        "provider": 53300.94
       },
       "provider_campaign_exclusivity_retention": {
         "bolt": 94.88,
