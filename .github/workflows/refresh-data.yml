@@ -44,34 +44,56 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
-        run: pip install databricks-sql-connector pandas
+      - name: Set up Python 3.12 for Databricks Connect
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies + Connect worker venv
+        env:
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: |
+          python3.11 -m pip install databricks-sql-connector pandas pyarrow
+          # Warehouse cannot autostart for this PAT — use serverless Spark Connect.
+          python3.12 -m venv "$HOME/.venvs/dbx-connect"
+          "$HOME/.venvs/dbx-connect/bin/pip" install -U pip
+          "$HOME/.venvs/dbx-connect/bin/pip" install databricks-connect pandas pyarrow
+          mkdir -p "$HOME/.databricks"
+          printf '%s\n' '[DEFAULT]' \
+            'host = https://bolt-incentives.cloud.databricks.com' \
+            "token = ${DATABRICKS_TOKEN}" > "$HOME/.databrickscfg"
+          echo "DBX_CONNECT_PYTHON=$HOME/.venvs/dbx-connect/bin/python" >> "$GITHUB_ENV"
 
       - name: Refresh calculator and AM dashboard JSON (data/)
         env:
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          DBX_BACKEND: connect
         run: |
           ARGS=""
           if [ -n "${{ github.event.inputs.countries }}" ]; then
             ARGS=$(echo "${{ github.event.inputs.countries }}" | tr ',' ' ')
           fi
-          DBX_BACKEND=connect python3 scripts/refresh_data.py $ARGS
+          python3.11 scripts/refresh_data.py $ARGS
 
       - name: Refresh investment dashboard CSVs
         env:
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-        run: python3 scripts/refresh_investment_data.py
+          DBX_BACKEND: connect
+        run: |
+          # Non-fatal: must not block learn + Boltable deploy for AM spend tracker
+          python3.11 scripts/refresh_investment_data.py || echo "investment refresh failed (non-fatal)"
 
       - name: Refresh CA budget envelopes (V2)
         env:
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          DBX_BACKEND: connect
         run: |
           if [ -f scripts/refresh_budget_data.py ]; then
             ARGS=""
             if [ -n "${{ github.event.inputs.countries }}" ]; then
               ARGS=$(echo "${{ github.event.inputs.countries }}" | tr ',' ' ')
             fi
-            python3 scripts/refresh_budget_data.py $ARGS
+            python3.11 scripts/refresh_budget_data.py $ARGS || echo "budget refresh failed (non-fatal)"
           else
             echo "No refresh_budget_data.py — skip"
           fi
@@ -79,19 +101,18 @@ jobs:
       - name: Rebuild peer cost benchmarks (V2)
         env:
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          DBX_BACKEND: connect
         run: |
           if [ -f scripts/build_cost_benchmarks.py ]; then
-            python3 scripts/build_cost_benchmarks.py || echo "benchmarks rebuild failed (non-fatal)"
+            python3.11 scripts/build_cost_benchmarks.py || echo "benchmarks rebuild failed (non-fatal)"
           else
             echo "No build_cost_benchmarks.py — skip"
           fi
 
       - name: Learn from snapshots (V2)
-        env:
-          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
         run: |
           if [ -f scripts/learn_from_snapshots.py ]; then
-            python3 scripts/learn_from_snapshots.py || echo "learn_from_snapshots failed (non-fatal)"
+            python3.11 scripts/learn_from_snapshots.py || echo "learn_from_snapshots failed (non-fatal)"
           else
             echo "No learn_from_snapshots.py — skip"
           fi
@@ -109,7 +130,7 @@ jobs:
             git push
           fi
 
-      # Optional: also push data to Boltable (team URL). Needs secret BOLTABLE_DEPLOY_TOKEN
+      # Live URL reads from boltable org repo. Needs secret BOLTABLE_DEPLOY_TOKEN
       # = classic PAT with repo scope, SSO-authorized for boltable org.
       - name: Deploy data to Boltable
         env:
