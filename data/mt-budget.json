@@ -3,7 +3,7 @@
   "country_name": "Malta",
   "month": "2026-08",
   "as_of": "2026-08-31",
-  "refreshed": "2026-10-27T13:57:14Z",
+  "refreshed": "2026-10-27T14:02:34Z",
   "gmv_target": 12726789.0,
   "gmv_mtd": 11731559.2,
   "gmv_run_rate_eom": 11731559.2,
@@ -45,6 +45,10 @@
     "by_objective": {
       "provider_campaign_ELC_merchant": {
         "bolt": 8228.76,
+        "provider": 0.0
+      },
+      "provider_campaign_retail_growth": {
+        "bolt": 313.45,
         "provider": 0.0
       },
       "sp_engagement": {
@@ -131,14 +135,6 @@
         "bolt": 199.64,
         "provider": 0.0
       },
-      "provider_campaign_retail_growth": {
-        "bolt": 313.45,
-        "provider": 0.0
-      },
-      "bolt_business": {
-        "bolt": 21.45,
-        "provider": 0.0
-      },
       "marketing_3rd_party_partnership": {
         "bolt": 28.25,
         "provider": 0.0
@@ -147,12 +143,16 @@
         "bolt": 94.88,
         "provider": 94.88
       },
+      "bolt_market_churn": {
+        "bolt": 1.09,
+        "provider": 0.0
+      },
       "acquisition": {
         "bolt": 232.18,
         "provider": 0.0
       },
-      "bolt_market_churn": {
-        "bolt": 1.09,
+      "bolt_business": {
+        "bolt": 21.45,
         "provider": 0.0
       }
     },
@@ -219,10 +219,6 @@
         "bolt": 5911.7,
         "provider": 0.0
       },
-      "bolt_business": {
-        "bolt": 21.45,
-        "provider": 0.0
-      },
       "marketing_3rd_party_partnership": {
         "bolt": 28.25,
         "provider": 0.0
@@ -230,6 +226,10 @@
       "provider_campaign_exclusivity_retention": {
         "bolt": 94.88,
         "provider": 94.88
+      },
+      "bolt_business": {
+        "bolt": 21.45,
+        "provider": 0.0
       }
     }
   },
