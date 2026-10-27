@@ -55,7 +55,7 @@ jobs:
           if [ -n "${{ github.event.inputs.countries }}" ]; then
             ARGS=$(echo "${{ github.event.inputs.countries }}" | tr ',' ' ')
           fi
-          python3 scripts/refresh_data.py $ARGS
+          DBX_BACKEND=connect python3 scripts/refresh_data.py $ARGS
 
       - name: Refresh investment dashboard CSVs
         env:
