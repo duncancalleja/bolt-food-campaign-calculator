@@ -68,34 +68,33 @@ def infer_target_week(snap: dict, dbx_actuals: dict | None = None) -> tuple[int,
     learning to miss most recent snaps (only 1 week evaluated).
     """
     year = int(str(snap.get("date", ""))[:4] or date.today().year)
-    candidates: list[int] = []
+    # Prefer snapshot ISO week (from snap date). Traitless column "week" is an
+    # ops week and often ≠ ISO — never use it as a fallback when isoWeek is set,
+    # or a snap whose ISO week fell out of the rolling actuals window can latch
+    # onto the wrong week (e.g. W35 snap → W36 actuals via camp week mode).
     iso = int(snap.get("isoWeek") or 0)
+    ordered: list[int] = []
     if iso > 0:
-        candidates.append(iso)
-    camps = snap.get("campaigns") or []
-    camp_weeks = [int(c.get("week")) for c in camps if c.get("week")]
-    if camp_weeks:
-        try:
-            candidates.append(int(statistics.mode(camp_weeks)))
-        except statistics.StatisticsError:
-            candidates.append(int(statistics.median(camp_weeks)))
-    # Unique preserve order
-    seen = set()
-    ordered = []
-    for w in candidates:
-        if w > 0 and w not in seen:
-            seen.add(w)
-            ordered.append(w)
+        ordered = [iso]
+    else:
+        camps = snap.get("campaigns") or []
+        camp_weeks = [int(c.get("week")) for c in camps if c.get("week")]
+        if camp_weeks:
+            try:
+                ordered = [int(statistics.mode(camp_weeks))]
+            except statistics.StatisticsError:
+                ordered = [int(statistics.median(camp_weeks))]
     if not ordered:
         return None
     if dbx_actuals:
         for w in ordered:
             if week_key(year, w) in dbx_actuals:
                 return year, w
-        # try previous calendar year for early-Jan edge cases
         for w in ordered:
             if week_key(year - 1, w) in dbx_actuals:
                 return year - 1, w
+        # ISO week known but no actuals yet / aged out of window — skip snap
+        return None
     return year, ordered[0]
 
 

@@ -47,3 +47,30 @@ jobs:
             git commit -m "Weekly team snapshots ($(date +%Y-%m-%d) UTC)"
             git push
           fi
+
+      # Live AM spend dashboard reads snapshots from boltable/food-campaign-calculator,
+      # not this repo — copy after every successful Sunday collect or the Accuracy Tracker
+      # stays stuck on last manual deploy.
+      - name: Deploy team-snapshots to Boltable
+        env:
+          TOKEN: ${{ secrets.BOLTABLE_DEPLOY_TOKEN }}
+        run: |
+          if [ -z "${TOKEN:-}" ]; then
+            echo "Skipping Boltable deploy — add repo secret BOLTABLE_DEPLOY_TOKEN."
+            exit 0
+          fi
+          STAGE=$(mktemp -d)
+          git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/boltable/food-campaign-calculator.git" "$STAGE"
+          mkdir -p "$STAGE/public/data"
+          cp data/team-snapshots.json "$STAGE/public/data/team-snapshots.json"
+          cd "$STAGE"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/data/team-snapshots.json
+          if git diff --cached --quiet; then
+            echo "Boltable team-snapshots already up to date."
+          else
+            git commit -m "Weekly team snapshots ($(date +%Y-%m-%d) UTC)"
+            git push origin main
+            echo "Boltable updated: https://food-campaign-calculator.boltable.eu/am-spend-dashboard.html"
+          fi
