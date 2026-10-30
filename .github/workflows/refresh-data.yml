@@ -118,6 +118,8 @@ jobs:
           fi
 
       - name: Commit and push updated data (calc + dash + budget)
+        id: commit_data
+        continue-on-error: true
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -127,12 +129,16 @@ jobs:
             echo "No data changes to commit."
           else
             git commit -m "Auto-refresh V2 calculator + spend + budget ($(date -u +%Y-%m-%d) UTC)"
+            # Snapshot CI / other jobs may land on main while this run works
+            git pull --rebase origin main
             git push
           fi
 
       # Live URL reads from boltable org repo. Needs secret BOLTABLE_DEPLOY_TOKEN
       # = classic PAT with repo scope, SSO-authorized for boltable org.
+      # Always attempt when the job wasn't cancelled — even if calculator-repo push raced.
       - name: Deploy data to Boltable
+        if: ${{ !cancelled() }}
         env:
           TOKEN: ${{ secrets.BOLTABLE_DEPLOY_TOKEN }}
         run: |
