@@ -3,7 +3,7 @@
   "country_name": "Malta",
   "month": "2026-08",
   "as_of": "2026-08-31",
-  "refreshed": "2026-10-30T07:46:26Z",
+  "refreshed": "2026-10-30T07:53:34Z",
   "gmv_target": 12726789.0,
   "gmv_mtd": 11731559.2,
   "gmv_run_rate_eom": 11731559.2,
@@ -43,12 +43,12 @@
     "bolt_spend": 865849.34,
     "am_spend": 76434.01,
     "by_objective": {
-      "bolt_market_churn": {
-        "bolt": 1.09,
-        "provider": 0.0
-      },
       "provider_campaign_ELC_merchant": {
         "bolt": 8228.76,
+        "provider": 0.0
+      },
+      "provider_campaign_retail_growth": {
+        "bolt": 313.45,
         "provider": 0.0
       },
       "sp_engagement": {
@@ -77,6 +77,10 @@
       },
       "provider_campaign_commission_increase": {
         "bolt": 254.19,
+        "provider": 0.0
+      },
+      "marketing": {
+        "bolt": 199.64,
         "provider": 0.0
       },
       "provider_campaign_portal": {
@@ -115,6 +119,10 @@
         "bolt": 13067.62,
         "provider": 326475.63
       },
+      "provider_campaign_exclusivity_prevention": {
+        "bolt": 158.45,
+        "provider": 0.0
+      },
       "activation": {
         "bolt": 158868.12,
         "provider": 4342.87
@@ -127,22 +135,6 @@
         "bolt": 266640.48,
         "provider": 59308.48
       },
-      "provider_campaign_retail_growth": {
-        "bolt": 313.45,
-        "provider": 0.0
-      },
-      "provider_campaign_exclusivity_retention": {
-        "bolt": 94.88,
-        "provider": 94.88
-      },
-      "provider_campaign_exclusivity_prevention": {
-        "bolt": 158.45,
-        "provider": 0.0
-      },
-      "marketing": {
-        "bolt": 199.64,
-        "provider": 0.0
-      },
       "bolt_business": {
         "bolt": 21.45,
         "provider": 0.0
@@ -151,16 +143,20 @@
         "bolt": 28.25,
         "provider": 0.0
       },
-      "acquisition": {
-        "bolt": 232.18,
-        "provider": 0.0
-      }
-    },
-    "by_bucket": {
-      "store_1p": {
+      "bolt_market_churn": {
         "bolt": 1.09,
         "provider": 0.0
       },
+      "acquisition": {
+        "bolt": 232.18,
+        "provider": 0.0
+      },
+      "provider_campaign_exclusivity_retention": {
+        "bolt": 94.88,
+        "provider": 94.88
+      }
+    },
+    "by_bucket": {
       "bdm_3p": {
         "bolt": 8542.21,
         "provider": 0.0
@@ -173,6 +169,10 @@
         "bolt": 63166.75,
         "provider": 34942.23
       },
+      "marketing_food": {
+        "bolt": 13267.26,
+        "provider": 326475.63
+      },
       "churned": {
         "bolt": 169906.63,
         "provider": 90066.36
@@ -181,13 +181,13 @@
         "bolt": 186579.14,
         "provider": 31821.71
       },
-      "marketing_food": {
-        "bolt": 13267.26,
-        "provider": 326475.63
-      },
       "bolt_plus": {
         "bolt": 266640.48,
         "provider": 59308.48
+      },
+      "store_1p": {
+        "bolt": 1.09,
+        "provider": 0.0
       }
     },
     "unmapped_objectives": {
@@ -211,16 +211,12 @@
         "bolt": 0.0,
         "provider": 45539.34
       },
-      "other": {
-        "bolt": 5911.7,
-        "provider": 0.0
-      },
-      "provider_campaign_exclusivity_retention": {
-        "bolt": 94.88,
-        "provider": 94.88
-      },
       "provider_campaign_exclusivity_prevention": {
         "bolt": 158.45,
+        "provider": 0.0
+      },
+      "other": {
+        "bolt": 5911.7,
         "provider": 0.0
       },
       "bolt_business": {
@@ -230,6 +226,10 @@
       "marketing_3rd_party_partnership": {
         "bolt": 28.25,
         "provider": 0.0
+      },
+      "provider_campaign_exclusivity_retention": {
+        "bolt": 94.88,
+        "provider": 94.88
       }
     }
   },
