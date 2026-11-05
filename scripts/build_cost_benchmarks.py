@@ -3,7 +3,7 @@
 Build empirical peer cost-rate benchmarks for the cold-start (no-history) path.
 
 Problem: when a provider has NEVER run a given campaign tier, we cannot use its own
-history. The old fallback used flat redemption constants (MD 92% / ID 35% / FD 92%),
+history. The fallback uses calibrated redemption defaults (MD 78.1% / ID 45.7% / FD 92%),
 which backtests at ~256% MAPE — basically guessing.
 
 Approach: from every provider+tier that DOES have history, compute the AOV-normalised
