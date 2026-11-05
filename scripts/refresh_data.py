@@ -367,17 +367,49 @@ def process_country(dbx, cc):
     calc_path = os.path.join(DATA_DIR, f'{cc}-calc.json')
     dash_path = os.path.join(DATA_DIR, f'{cc}-dash.json')
 
-    with open(calc_path, 'w') as f:
-        json.dump(calc_json, f, separators=(',', ':'))
+    # Spark Connect / UC dim_provider_v2 is RLS'd to Malta for some PATs —
+    # never wipe a previous full calculator file with a 0-provider pull.
+    keep_prev_calc = False
+    if not calc_data and os.path.exists(calc_path):
+        try:
+            with open(calc_path) as f:
+                prev = json.load(f)
+            prev_n = len(prev.get('embedded_data') or [])
+            if prev_n > 0:
+                keep_prev_calc = True
+                print(
+                    f"  [{cc}] WARNING: 0 providers from dim_provider_v2 — "
+                    f"keeping previous calculator ({prev_n} providers, "
+                    f"refreshed {prev.get('refreshed')})"
+                )
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    if not keep_prev_calc:
+        with open(calc_path, 'w') as f:
+            json.dump(calc_json, f, separators=(',', ':'))
     with open(dash_path, 'w') as f:
         json.dump(dash_json, f, separators=(',', ':'))
 
     calc_size = os.path.getsize(calc_path) / 1024
     dash_size = os.path.getsize(dash_path) / 1024
+    n_calc = len(calc_data)
+    if keep_prev_calc:
+        try:
+            with open(calc_path) as f:
+                n_calc = len(json.load(f).get('embedded_data') or [])
+        except (OSError, json.JSONDecodeError):
+            pass
 
-    print(f"  [{cc}] Calculator: {len(calc_data)} providers ({calc_size:.0f} KB)")
-    print(f"  [{cc}] Dashboard: {len(lookup_data)} providers, {len(actuals_data)} weeks actuals ({dash_size:.0f} KB)")
-    return len(calc_data), len(lookup_data)
+    print(
+        f"  [{cc}] Calculator: {n_calc} providers ({calc_size:.0f} KB)"
+        + (" [preserved]" if keep_prev_calc else "")
+    )
+    print(
+        f"  [{cc}] Dashboard: {len(lookup_data)} providers, "
+        f"{len(actuals_data)} weeks actuals ({dash_size:.0f} KB)"
+    )
+    return n_calc, len(lookup_data)
 
 
 def generate_country_index():
