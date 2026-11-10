@@ -1626,8 +1626,8 @@ function calculate() {
   if (incGMVwk > 0) {
     roiPanel.style.display = 'block';
 
-    function roiColor(net) { return net >= 3 ? 'var(--accent)' : net >= 1 ? 'var(--provider)' : net >= 0 ? '#f59e0b' : 'var(--danger)'; }
-    function roiVerdict(net) { return net >= 5 ? 'Excellent' : net >= 3 ? 'Strong' : net >= 1 ? 'Good' : net >= 0 ? 'Break-even' : 'Loss'; }
+    function roiColor(net) { return net >= 3 ? 'var(--accent)' : net >= 1 ? 'var(--provider)' : 'var(--danger)'; }
+    function roiVerdict(net) { return net >= 5 ? 'Excellent' : net >= 3 ? 'Strong' : net >= 1 ? 'Good' : net >= 0 ? 'Not enough' : 'Loss'; }
 
     const provColor = roiColor(provNetROI);
     const provVerdict = pw <= 0 ? 'No cost to provider' : roiVerdict(provNetROI);
